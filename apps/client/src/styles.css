@@ -1,0 +1,42 @@
+html,
+body {
+  margin: 0;
+  overflow-x: hidden;
+}
+
+.page {
+  padding: 24px;
+}
+
+.page-title {
+  margin-bottom: 16px;
+}
+
+.panel {
+  margin-bottom: 24px;
+}
+
+.chart {
+  width: 100%;
+  min-height: 280px;
+}
+
+.filters-row,
+.upload-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.date-range-input {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  font-size: 14px;
+}
+
+.react-datepicker-wrapper,
+.react-datepicker__input-container {
+  width: 100%;
+}

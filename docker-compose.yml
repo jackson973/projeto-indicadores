@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: projeto-indicadores-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: indicadores
+      POSTGRES_USER: indicadores_user
+      POSTGRES_PASSWORD: indicadores_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./apps/server/src/db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U indicadores_user -d indicadores"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+    driver: local

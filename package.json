@@ -1,0 +1,18 @@
+{
+  "name": "projeto-indicadores",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "docker-compose up -d && concurrently \"npm run dev -w apps/server\" \"npm run dev -w apps/client\"",
+    "dev:no-db": "concurrently \"npm run dev -w apps/server\" \"npm run dev -w apps/client\"",
+    "test": "npm run test -w apps/server",
+    "db:start": "docker-compose up -d",
+    "db:stop": "docker-compose stop",
+    "db:logs": "docker-compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

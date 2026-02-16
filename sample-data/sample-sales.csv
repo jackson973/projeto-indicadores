@@ -1,0 +1,10 @@
+date,store,product,quantity,total
+2026-01-02,Loja Centro,Produto A,3,150
+2026-01-02,Loja Centro,Produto B,1,80
+2026-01-03,Loja Shopping,Produto A,2,100
+2026-01-04,Loja Shopping,Produto C,5,300
+2026-01-05,Loja Centro,Produto C,2,120
+2026-01-05,Loja Norte,Produto A,1,50
+2026-02-01,Loja Norte,Produto D,4,400
+2026-02-01,Loja Centro,Produto E,2,220
+2026-02-02,Loja Shopping,Produto B,3,240
