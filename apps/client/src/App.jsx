@@ -8,13 +8,15 @@ import {
   Center,
   Divider,
   Drawer,
-  DrawerBody,
   DrawerCloseButton,
   DrawerContent,
-  DrawerHeader,
   DrawerOverlay,
   Flex,
+  FormControl,
+  FormLabel,
+  HStack,
   IconButton,
+  Select,
   Spinner,
   Tooltip,
   Text,
@@ -37,7 +39,6 @@ import {
   SmallCloseIcon
 } from "@chakra-ui/icons";
 import UploadForm from "./components/UploadForm";
-import Filters from "./components/Filters";
 import SummaryCards from "./components/SummaryCards";
 import SalesByPeriodChart from "./components/SalesByPeriodChart";
 import SalesByStoreChart from "./components/SalesByStoreChart";
@@ -70,29 +71,53 @@ import {
 const SIDEBAR_EXPANDED = "220px";
 const SIDEBAR_COLLAPSED = "60px";
 
+const MONTH_NAMES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
+const generateMonthOptions = () => {
+  const now = new Date();
+  const options = [];
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+    const maxM = y === now.getFullYear() ? now.getMonth() + 1 : 12;
+    for (let m = maxM; m >= 1; m--) {
+      const value = `${y}-${String(m).padStart(2, "0")}`;
+      const label = `${MONTH_NAMES[m - 1]} / ${y}`;
+      options.push({ value, label });
+    }
+  }
+  return options;
+};
+
+const MONTH_OPTIONS = generateMonthOptions();
+
+const now = new Date();
 const defaultFilters = {
-  start: "",
-  end: "",
+  startMonth: `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+  endMonth: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
   store: "",
   state: "",
   period: "month"
 };
 
+const monthToStartDate = (v) => v ? `${v}-01` : "";
+const monthToEndDate = (v) => {
+  if (!v) return "";
+  const [y, m] = v.split("-").map(Number);
+  const lastDay = new Date(y, m, 0).getDate();
+  return `${y}-${String(m).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+};
+
 const buildParams = (filters) => {
   const params = new URLSearchParams();
-  if (filters.start) params.set("start", filters.start);
-  if (filters.end) params.set("end", filters.end);
+  params.set("start", monthToStartDate(filters.startMonth));
+  params.set("end", monthToEndDate(filters.endMonth));
   if (filters.store) params.set("store", filters.store);
   if (filters.state) params.set("state", filters.state);
   if (filters.period) params.set("period", filters.period);
   return params.toString();
 };
-
-const FilterIcon = (props) => (
-  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
-    <path d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z" />
-  </svg>
-);
 
 const WalletIcon = (props) => (
   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
@@ -126,7 +151,6 @@ const App = () => {
   const [activeView, setActiveView] = useState("upload");
   const isMobile = useBreakpointValue({ base: true, md: false });
   const mobileMenu = useDisclosure();
-  const filtersDrawer = useDisclosure();
   const canceledDrawer = useDisclosure();
   const forgotModal = useDisclosure();
   const { colorMode, toggleColorMode } = useColorMode();
@@ -278,7 +302,7 @@ const App = () => {
       show: true
     },
     {
-      label: "Dashboard",
+      label: "Dashboard Vendas",
       icon: <ViewIcon />,
       view: "dashboard",
       show: true,
@@ -569,57 +593,105 @@ const App = () => {
 
         {hasData && activeView === "dashboard" && (
           <>
-            {/* Filter button - top right (hidden when drawer is open) */}
-            {!filtersDrawer.isOpen && (
-              <Tooltip label="Filtros">
-                <IconButton
-                  icon={<FilterIcon />}
-                  aria-label="Abrir filtros"
-                  position="fixed"
-                  top={4}
-                  right={4}
-                  zIndex="popover"
-                  colorScheme="blue"
-                  borderRadius="full"
-                  boxShadow="md"
-                  onClick={filtersDrawer.onOpen}
-                />
-              </Tooltip>
+            {/* Top bar: period selectors + filters */}
+            {isMobile ? (
+              <VStack align="stretch" spacing={3} mb={6}>
+                <SimpleGrid columns={2} spacing={2}>
+                  <FormControl>
+                    <FormLabel fontSize="xs" mb={1}>De</FormLabel>
+                    <Select size="sm" value={filters.startMonth} onChange={(e) => setFilters(f => ({ ...f, startMonth: e.target.value }))}>
+                      {MONTH_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </Select>
+                  </FormControl>
+                  <FormControl>
+                    <FormLabel fontSize="xs" mb={1}>Até</FormLabel>
+                    <Select size="sm" value={filters.endMonth} onChange={(e) => setFilters(f => ({ ...f, endMonth: e.target.value }))}>
+                      {MONTH_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </Select>
+                  </FormControl>
+                </SimpleGrid>
+                <SimpleGrid columns={2} spacing={2}>
+                  <Select
+                    size="sm"
+                    value={filters.store}
+                    onChange={(e) => setFilters(f => ({ ...f, store: e.target.value }))}
+                  >
+                    <option value="">Todas as lojas</option>
+                    {stores.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </Select>
+                  <Select
+                    size="sm"
+                    value={filters.state}
+                    onChange={(e) => setFilters(f => ({ ...f, state: e.target.value }))}
+                  >
+                    <option value="">Todos estados</option>
+                    {states.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </Select>
+                </SimpleGrid>
+                <Select
+                  size="sm"
+                  value={filters.period}
+                  onChange={(e) => setFilters(f => ({ ...f, period: e.target.value }))}
+                >
+                  <option value="month">Agrupamento: Mensal</option>
+                  <option value="week">Agrupamento: Semanal</option>
+                  <option value="day">Agrupamento: Diário</option>
+                </Select>
+              </VStack>
+            ) : (
+              <Flex justify="space-between" align="flex-end" mb={6} wrap="wrap" gap={3}>
+                <HStack spacing={3} wrap="wrap">
+                  <FormControl w="180px">
+                    <FormLabel fontSize="xs" mb={1}>De</FormLabel>
+                    <Select size="sm" value={filters.startMonth} onChange={(e) => setFilters(f => ({ ...f, startMonth: e.target.value }))}>
+                      {MONTH_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </Select>
+                  </FormControl>
+                  <FormControl w="180px">
+                    <FormLabel fontSize="xs" mb={1}>Até</FormLabel>
+                    <Select size="sm" value={filters.endMonth} onChange={(e) => setFilters(f => ({ ...f, endMonth: e.target.value }))}>
+                      {MONTH_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                    </Select>
+                  </FormControl>
+                  <FormControl w="180px">
+                    <FormLabel fontSize="xs" mb={1}>Loja</FormLabel>
+                    <Select size="sm" value={filters.store} onChange={(e) => setFilters(f => ({ ...f, store: e.target.value }))}>
+                      <option value="">Todas as lojas</option>
+                      {stores.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </Select>
+                  </FormControl>
+                  <FormControl w="180px">
+                    <FormLabel fontSize="xs" mb={1}>Estado</FormLabel>
+                    <Select size="sm" value={filters.state} onChange={(e) => setFilters(f => ({ ...f, state: e.target.value }))}>
+                      <option value="">Todos estados</option>
+                      {states.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </Select>
+                  </FormControl>
+                </HStack>
+                <FormControl w="180px">
+                  <FormLabel fontSize="xs" mb={1}>Agrupamento</FormLabel>
+                  <Select size="sm" value={filters.period} onChange={(e) => setFilters(f => ({ ...f, period: e.target.value }))}>
+                    <option value="month">Mensal</option>
+                    <option value="week">Semanal</option>
+                    <option value="day">Diário</option>
+                  </Select>
+                </FormControl>
+              </Flex>
             )}
 
-            <Drawer placement="right" size="sm" isOpen={filtersDrawer.isOpen} onClose={filtersDrawer.onClose}>
-              <DrawerOverlay />
-              <DrawerContent>
-                <DrawerCloseButton />
-                <DrawerHeader>Filtros</DrawerHeader>
-                <DrawerBody>
-                  <Filters
-                    filters={filters}
-                    stores={stores}
-                    states={states}
-                    onChange={setFilters}
-                    variant="drawer"
-                  />
-                </DrawerBody>
-              </DrawerContent>
-            </Drawer>
             <SummaryCards summary={summary} onCanceledClick={canceledDrawer.onOpen} />
             <CanceledReportDrawer
               isOpen={canceledDrawer.isOpen}
               onClose={canceledDrawer.onClose}
-              filters={filters}
+              filters={{ ...filters, start: monthToStartDate(filters.startMonth), end: monthToEndDate(filters.endMonth) }}
             />
-            <SalesByPeriodChart
-              data={salesByPeriod}
-              period={filters.period}
-              onPeriodChange={(period) => setFilters((current) => ({ ...current, period }))}
-            />
+            <SalesByPeriodChart data={salesByPeriod} />
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
               <SalesByStoreChart data={salesByStore} />
               <SalesByPlatformChart data={salesByPlatform} />
             </SimpleGrid>
             <SalesByStateChart data={salesByState} />
-            <AbcTable data={abc} filters={filters} />
+            <AbcTable data={abc} filters={{ ...filters, start: monthToStartDate(filters.startMonth), end: monthToEndDate(filters.endMonth) }} />
           </>
         )}
       </Box>
