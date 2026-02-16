@@ -165,7 +165,41 @@ async function deleteEntry(id) {
 // ── Balances ──
 
 async function getBalance(year, month, boxId) {
-  // Check if explicit balance exists for this month and box
+  // Always try to auto-calculate from the nearest PRIOR month's balance.
+  // This guarantees that closing balance of month M = opening balance of month M+1.
+  const prevBalance = await db.query(
+    `SELECT year, month, opening_balance FROM cashflow_balances
+     WHERE (year < $1 OR (year = $1 AND month < $2)) AND box_id = $3
+     ORDER BY year DESC, month DESC LIMIT 1`,
+    [year, month, boxId]
+  );
+
+  if (prevBalance.rows.length > 0) {
+    const baseBalance = parseFloat(prevBalance.rows[0].opening_balance);
+    const by = prevBalance.rows[0].year;
+    const bm = prevBalance.rows[0].month;
+    const sumFromDate = `${by}-${String(bm).padStart(2, '0')}-01`;
+
+    let endYear = year, endMonth = month - 1;
+    if (endMonth === 0) { endMonth = 12; endYear--; }
+    const lastDay = new Date(endYear, endMonth, 0).getDate();
+    const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+    const sums = await db.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS total_income,
+         COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expense
+       FROM cashflow_entries
+       WHERE date >= $1 AND date <= $2 AND box_id = $3`,
+      [sumFromDate, endDate, boxId]
+    );
+    const totalIncome = parseFloat(sums.rows[0].total_income);
+    const totalExpense = parseFloat(sums.rows[0].total_expense);
+
+    return Number((baseBalance + totalIncome - totalExpense).toFixed(2));
+  }
+
+  // No prior balance — use explicit balance for THIS month as seed (first month of the system)
   const result = await db.query(
     `SELECT opening_balance FROM cashflow_balances WHERE year = $1 AND month = $2 AND box_id = $3`,
     [year, month, boxId]
@@ -174,52 +208,24 @@ async function getBalance(year, month, boxId) {
     return parseFloat(result.rows[0].opening_balance);
   }
 
-  // Auto-calculate from previous month's closing balance
-  const prevBalance = await db.query(
-    `SELECT year, month, opening_balance FROM cashflow_balances
-     WHERE (year < $1 OR (year = $1 AND month < $2)) AND box_id = $3
-     ORDER BY year DESC, month DESC LIMIT 1`,
-    [year, month, boxId]
-  );
-
-  let baseBalance = 0;
-  let sumFromDate = null;
-
-  if (prevBalance.rows.length > 0) {
-    baseBalance = parseFloat(prevBalance.rows[0].opening_balance);
-    const by = prevBalance.rows[0].year;
-    const bm = prevBalance.rows[0].month;
-    sumFromDate = `${by}-${String(bm).padStart(2, '0')}-01`;
-  }
-
-  // End date: last day of the month before the target
+  // No balance at all — calculate from all entries before this month
   let endYear = year, endMonth = month - 1;
   if (endMonth === 0) { endMonth = 12; endYear--; }
   const lastDay = new Date(endYear, endMonth, 0).getDate();
   const endDate = `${endYear}-${String(endMonth).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
-  let query, params;
-  if (sumFromDate) {
-    query = `SELECT
+  const sums = await db.query(
+    `SELECT
        COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS total_income,
        COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expense
      FROM cashflow_entries
-     WHERE date >= $1 AND date <= $2 AND box_id = $3`;
-    params = [sumFromDate, endDate, boxId];
-  } else {
-    query = `SELECT
-       COALESCE(SUM(CASE WHEN type = 'income' THEN amount ELSE 0 END), 0) AS total_income,
-       COALESCE(SUM(CASE WHEN type = 'expense' THEN amount ELSE 0 END), 0) AS total_expense
-     FROM cashflow_entries
-     WHERE date <= $1 AND box_id = $2`;
-    params = [endDate, boxId];
-  }
-
-  const sums = await db.query(query, params);
+     WHERE date <= $1 AND box_id = $2`,
+    [endDate, boxId]
+  );
   const totalIncome = parseFloat(sums.rows[0].total_income);
   const totalExpense = parseFloat(sums.rows[0].total_expense);
 
-  return Number((baseBalance + totalIncome - totalExpense).toFixed(2));
+  return Number((totalIncome - totalExpense).toFixed(2));
 }
 
 async function getAllBoxesBalance(year, month) {
@@ -629,9 +635,15 @@ async function getAllBoxesAlerts() {
   const boxes = await getBoxes();
   const today = getTodayBrazil();
 
+  // Get current year and month in Brazil timezone
+  const now = new Date();
+  const brazilDate = new Date(now.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }));
+  const currentYear = brazilDate.getFullYear();
+  const currentMonth = brazilDate.getMonth() + 1; // getMonth() is 0-based
+
   const results = [];
   for (const box of boxes) {
-    const alerts = await getAlerts(box.id);
+    const alerts = await getAlerts(box.id, currentYear, currentMonth);
     if (alerts.overdueCount > 0 || alerts.upcomingCount > 0) {
       results.push({ box, ...alerts });
     }

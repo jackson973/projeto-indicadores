@@ -8,17 +8,18 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@chakra-ui/icons": "^2.1.1",
     "@chakra-ui/react": "^2.8.2",
     "@emotion/react": "^11.11.4",
     "@emotion/styled": "^11.11.5",
-    "@chakra-ui/icons": "^2.1.1",
+    "d3-scale": "^4.0.2",
     "framer-motion": "^11.0.6",
-  "react-datepicker": "^7.6.0",
-  "react-simple-maps": "^3.0.0",
-  "d3-scale": "^4.0.2",
     "react": "^18.2.0",
+    "react-datepicker": "^7.6.0",
     "react-dom": "^18.2.0",
-    "recharts": "^2.12.4"
+    "react-simple-maps": "^3.0.0",
+    "recharts": "^2.12.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",

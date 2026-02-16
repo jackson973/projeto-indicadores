@@ -392,6 +392,47 @@ function excelDateToISO(serial) {
   return `${y}-${m}-${d}`;
 }
 
+// ── Import Duplicate Check ──
+router.get('/import/check', async (req, res) => {
+  try {
+    const boxId = parseInt(req.query.boxId);
+    const year = parseInt(req.query.year);
+    const month = parseInt(req.query.month);
+
+    if (!boxId || !year || !month) {
+      return res.status(400).json({
+        message: 'boxId, year e month são obrigatórios.'
+      });
+    }
+
+    // Get existing entries for this period
+    const entries = await repo.getEntries(year, month, boxId);
+
+    if (entries.length === 0) {
+      return res.json({ hasEntries: false, count: 0 });
+    }
+
+    // Calculate date range of existing entries
+    const dates = entries.map(e => new Date(e.date));
+    const startDate = new Date(Math.min(...dates));
+    const endDate = new Date(Math.max(...dates));
+
+    return res.json({
+      hasEntries: true,
+      count: entries.length,
+      dateRange: {
+        start: startDate.toISOString().slice(0, 10),
+        end: endDate.toISOString().slice(0, 10)
+      }
+    });
+  } catch (error) {
+    console.error('Import check error:', error);
+    return res.status(500).json({
+      message: 'Erro ao verificar registros existentes.'
+    });
+  }
+});
+
 router.post('/import', upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {

@@ -3,8 +3,7 @@ import {
   Pie,
   Cell,
   Tooltip,
-  ResponsiveContainer,
-  Legend
+  ResponsiveContainer
 } from "recharts";
 import { Box, Button, Flex, Image, Text, HStack, useColorModeValue } from "@chakra-ui/react";
 import { AtSignIcon } from "@chakra-ui/icons";
@@ -24,16 +23,16 @@ const downloadCsv = (rows, filename) => {
 };
 
 const renderLegend = (payload, total, textColor) => (
-  <Flex wrap="wrap" gap={3} justify="center" mt={2}>
+  <Flex wrap="wrap" gap={2} justify="center" mt={2}>
     {payload.map((entry) => {
       const meta = getPlatformMeta(entry.value);
       const percent = total > 0 ? entry.payload?.total / total : 0;
       return (
-        <Flex key={entry.value} align="center" gap={2} fontSize="sm" color={textColor}>
+        <Flex key={entry.value} align="center" gap={1} fontSize="xs" color={textColor}>
           {meta.logo ? (
-            <Image src={meta.logo} boxSize="20px" borderRadius="full" alt={meta.label} />
+            <Image src={meta.logo} boxSize="16px" borderRadius="full" alt={meta.label} />
           ) : (
-            <Box w="10px" h="10px" borderRadius="full" bg={entry.color} />
+            <Box w="8px" h="8px" borderRadius="full" bg={entry.color} flexShrink={0} />
           )}
           <Text>
             {meta.label} • {formatPercent(percent, 1)}
@@ -90,7 +89,7 @@ const SalesByPlatformChart = ({ data }) => {
         </Button>
       </Flex>
       <div className="chart">
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={250}>
           <PieChart>
             <Pie data={data} dataKey="total" nameKey="platform" innerRadius={60} outerRadius={100}>
               {data.map((entry, index) => (
@@ -98,10 +97,18 @@ const SalesByPlatformChart = ({ data }) => {
               ))}
             </Pie>
             <Tooltip content={({ payload }) => renderTooltip(payload, total, tooltipBg, tooltipBorder, tooltipText, tooltipSubText)} />
-            <Legend content={({ payload }) => renderLegend(payload || [], total, legendText)} />
           </PieChart>
         </ResponsiveContainer>
       </div>
+      {renderLegend(
+        data.map((entry, index) => ({
+          value: entry.platform,
+          color: ["#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"][index % 5],
+          payload: entry
+        })),
+        total,
+        legendText
+      )}
     </Box>
   );
 };

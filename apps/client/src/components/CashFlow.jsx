@@ -26,16 +26,19 @@ import {
   Select,
   Spinner,
   Center,
+  VStack,
+  useBreakpointValue,
   useDisclosure,
   useToast,
   useColorModeValue
 } from "@chakra-ui/react";
-import { AddIcon, ChevronLeftIcon, ChevronRightIcon, EditIcon, DeleteIcon } from "@chakra-ui/icons";
+import { AddIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon } from "@chakra-ui/icons";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import CashFlowEntryModal from "./CashFlowEntryModal";
 import CashFlowCategoriesModal from "./CashFlowCategoriesModal";
 import CashFlowRecurrencesModal from "./CashFlowRecurrencesModal";
 import CashFlowBoxesModal from "./CashFlowBoxesModal";
+import CashFlowImportModal from "./CashFlowImportModal";
 import {
   fetchCashflowCategories,
   fetchCashflowEntries,
@@ -91,17 +94,19 @@ const CashFlow = () => {
     upcomingItems: []
   });
   const [activeFilter, setActiveFilter] = useState(null); // null, 'overdue', 'upcoming'
-  const fileInputRef = useRef(null);
 
   const entryModal = useDisclosure();
   const categoriesModal = useDisclosure();
   const recurrencesModal = useDisclosure();
   const boxesModal = useDisclosure();
+  const importModal = useDisclosure();
   const toast = useToast();
 
+  const isMobile = useBreakpointValue({ base: true, md: false });
   const cardBg = useColorModeValue("white", "gray.800");
   const tableBg = useColorModeValue("white", "gray.800");
   const headerBg = useColorModeValue("gray.50", "gray.700");
+  const cardBorder = useColorModeValue("gray.200", "gray.600");
   const pendingOpacity = 0.5;
 
   const loadBoxes = async () => {
@@ -218,12 +223,10 @@ const CashFlow = () => {
     }
   };
 
-  const handleImport = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleImportSubmit = async (file, boxId) => {
     setImporting(true);
     try {
-      const result = await importCashflow(file, selectedBoxId);
+      const result = await importCashflow(file, boxId);
       toast({
         title: result.message || "Importação concluída.",
         description: result.sheets?.join(", "),
@@ -236,7 +239,6 @@ const CashFlow = () => {
       toast({ title: err.message || "Erro na importação.", status: "error", duration: 4000 });
     } finally {
       setImporting(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -303,16 +305,17 @@ const CashFlow = () => {
   return (
     <Box>
       {/* Header: Month selector + box selector + action buttons */}
-      <Flex justify="space-between" align="center" mb={6} wrap="wrap" gap={3}>
-        <HStack spacing={3}>
-          <IconButton icon={<ChevronLeftIcon />} aria-label="Mês anterior" size="sm" variant="outline" onClick={prevMonth} />
-          <Heading size="md" minW="180px" textAlign="center">
-            {monthNames[month - 1]} / {year}
-          </Heading>
-          <IconButton icon={<ChevronRightIcon />} aria-label="Próximo mês" size="sm" variant="outline" onClick={nextMonth} />
+      {isMobile ? (
+        <VStack align="stretch" spacing={3} mb={6}>
+          <HStack justify="center" spacing={3}>
+            <IconButton icon={<ChevronLeftIcon />} aria-label="Mês anterior" size="sm" variant="outline" onClick={prevMonth} />
+            <Heading size="md" minW="150px" textAlign="center" fontSize="md">
+              {monthNames[month - 1]} / {year}
+            </Heading>
+            <IconButton icon={<ChevronRightIcon />} aria-label="Próximo mês" size="sm" variant="outline" onClick={nextMonth} />
+          </HStack>
           <Select
             size="sm"
-            w="180px"
             value={selectedBoxId || ""}
             onChange={(e) => {
               const id = parseInt(e.target.value);
@@ -324,29 +327,60 @@ const CashFlow = () => {
               <option key={box.id} value={box.id}>{box.name}</option>
             ))}
           </Select>
-        </HStack>
-        <HStack spacing={2}>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            isLoading={importing}
-            loadingText="Importando..."
-          >
-            Importar planilha
-          </Button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept=".xlsx,.xls"
-            style={{ display: "none" }}
-            onChange={handleImport}
-          />
-          <Button size="sm" variant="outline" onClick={recurrencesModal.onOpen}>Recorrências</Button>
-          <Button size="sm" variant="outline" onClick={categoriesModal.onOpen}>Categorias</Button>
-          <Button size="sm" variant="outline" onClick={boxesModal.onOpen}>Caixas</Button>
-        </HStack>
-      </Flex>
+          <SimpleGrid columns={2} spacing={2}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={importModal.onOpen}
+              isLoading={importing}
+              loadingText="Importando..."
+            >
+              Importar
+            </Button>
+            <Button size="sm" variant="outline" onClick={recurrencesModal.onOpen}>Recorrências</Button>
+            <Button size="sm" variant="outline" onClick={categoriesModal.onOpen}>Categorias</Button>
+            <Button size="sm" variant="outline" onClick={boxesModal.onOpen}>Caixas</Button>
+          </SimpleGrid>
+        </VStack>
+      ) : (
+        <Flex justify="space-between" align="center" mb={6} wrap="wrap" gap={3}>
+          <HStack spacing={3}>
+            <IconButton icon={<ChevronLeftIcon />} aria-label="Mês anterior" size="sm" variant="outline" onClick={prevMonth} />
+            <Heading size="md" minW="180px" textAlign="center">
+              {monthNames[month - 1]} / {year}
+            </Heading>
+            <IconButton icon={<ChevronRightIcon />} aria-label="Próximo mês" size="sm" variant="outline" onClick={nextMonth} />
+            <Select
+              size="sm"
+              w="180px"
+              value={selectedBoxId || ""}
+              onChange={(e) => {
+                const id = parseInt(e.target.value);
+                setSelectedBoxId(id);
+                localStorage.setItem("cashflow_selectedBoxId", id);
+              }}
+            >
+              {boxes.map((box) => (
+                <option key={box.id} value={box.id}>{box.name}</option>
+              ))}
+            </Select>
+          </HStack>
+          <HStack spacing={2}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={importModal.onOpen}
+              isLoading={importing}
+              loadingText="Importando..."
+            >
+              Importar planilha
+            </Button>
+            <Button size="sm" variant="outline" onClick={recurrencesModal.onOpen}>Recorrências</Button>
+            <Button size="sm" variant="outline" onClick={categoriesModal.onOpen}>Categorias</Button>
+            <Button size="sm" variant="outline" onClick={boxesModal.onOpen}>Caixas</Button>
+          </HStack>
+        </Flex>
+      )}
 
       {/* Summary cards */}
       <SimpleGrid columns={{ base: 2, md: 6 }} spacing={4} mb={6}>
@@ -471,104 +505,201 @@ const CashFlow = () => {
         </Box>
       )}
 
-      {/* Entries table */}
-      <Box bg={tableBg} borderRadius="lg" boxShadow="sm" borderWidth="1px" overflow="hidden">
-        <Flex justify="space-between" align="center" px={4} py={3}>
-          <HStack>
-            <Text fontWeight="bold" fontSize="sm">Lançamentos</Text>
-            {activeFilter && (
-              <Button size="xs" colorScheme="gray" variant="outline" onClick={clearFilter}>
-                Limpar filtro
-              </Button>
-            )}
-          </HStack>
-          <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openNewEntry}>
-            Novo lançamento
-          </Button>
-        </Flex>
-
-        <TableContainer>
-          <Table size="sm">
-            <Thead>
-              <Tr bg={headerBg}>
-                <Th w="50px" textAlign="center">Status</Th>
-                <Th w="80px">Data</Th>
-                <Th w="130px">Tipo</Th>
-                <Th>Histórico</Th>
-                <Th isNumeric w="110px">Despesa</Th>
-                <Th isNumeric w="110px">Receita</Th>
-                <Th isNumeric w="110px">Saldo</Th>
-                <Th w="80px" textAlign="right">Ações</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {entriesWithBalance.length === 0 && (
-                <Tr>
-                  <Td colSpan={8} textAlign="center" py={8} color="gray.500">
-                    Nenhum lançamento neste mês.
-                  </Td>
-                </Tr>
+      {/* Entries */}
+      {isMobile ? (
+        <>
+          <Flex justify="space-between" align="center" mb={3}>
+            <HStack>
+              <Text fontWeight="bold" fontSize="sm">Lançamentos</Text>
+              {activeFilter && (
+                <Button size="xs" colorScheme="gray" variant="outline" onClick={clearFilter}>
+                  Limpar filtro
+                </Button>
               )}
+            </HStack>
+          </Flex>
+
+          {entriesWithBalance.length === 0 ? (
+            <Box bg={tableBg} borderRadius="lg" borderWidth="1px" py={8} textAlign="center">
+              <Text color="gray.500" fontSize="sm">Nenhum lançamento neste mês.</Text>
+            </Box>
+          ) : (
+            <VStack align="stretch" spacing={2} mb="80px">
               {entriesWithBalance.map((entry) => (
-                <Tr
+                <Box
                   key={entry.id}
+                  bg={tableBg}
+                  borderRadius="lg"
+                  borderWidth="1px"
+                  borderColor={cardBorder}
+                  p={3}
                   opacity={entry.status === "pending" ? pendingOpacity : 1}
-                  _hover={{ bg: headerBg }}
                   cursor="pointer"
                   onClick={() => openEditEntry(entry)}
+                  _active={{ bg: headerBg }}
                 >
-                  <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
-                    <Checkbox
-                      isChecked={entry.status === "ok"}
-                      onChange={() => handleToggleStatus(entry.id)}
-                      colorScheme="green"
-                    />
-                  </Td>
-                  <Td fontSize="sm">{formatDateBR(entry.date)}</Td>
-                  <Td>
+                  {/* Row 1: Checkbox + Description + Amount */}
+                  <Flex align="center" gap={2}>
+                    <Box onClick={(e) => e.stopPropagation()} flexShrink={0}>
+                      <Checkbox
+                        isChecked={entry.status === "ok"}
+                        onChange={() => handleToggleStatus(entry.id)}
+                        colorScheme="green"
+                        size="lg"
+                      />
+                    </Box>
+                    <Text fontSize="sm" fontWeight="medium" flex={1} noOfLines={1}>
+                      {entry.description}
+                    </Text>
+                    <Text
+                      fontSize="sm"
+                      fontWeight="bold"
+                      flexShrink={0}
+                      color={entry.type === "income" ? "green.500" : "red.500"}
+                    >
+                      {entry.type === "expense" ? "-" : "+"}{formatCurrency(entry.amount)}
+                    </Text>
+                  </Flex>
+
+                  {/* Row 2: Date + Category + Balance + Delete */}
+                  <Flex align="center" mt={1} ml="32px" gap={2}>
+                    <Text fontSize="xs" color="gray.500">{formatDateBR(entry.date)}</Text>
                     <Badge
-                      fontSize="xs"
+                      fontSize="2xs"
                       colorScheme={entry.type === "income" ? "green" : "red"}
                       variant="subtle"
                     >
                       {entry.categoryName}
                     </Badge>
-                  </Td>
-                  <Td fontSize="sm">{entry.description}</Td>
-                  <Td isNumeric fontSize="sm" color="red.500" fontWeight="medium">
-                    {entry.type === "expense" ? formatCurrency(entry.amount) : ""}
-                  </Td>
-                  <Td isNumeric fontSize="sm" color="green.500" fontWeight="medium">
-                    {entry.type === "income" ? formatCurrency(entry.amount) : ""}
-                  </Td>
-                  <Td isNumeric fontSize="sm" fontWeight="bold" color={entry.runningBalance >= 0 ? "blue.500" : "red.500"}>
-                    {formatCurrency(entry.runningBalance)}
-                  </Td>
-                  <Td textAlign="right" onClick={(e) => e.stopPropagation()}>
-                    <HStack justify="flex-end" spacing={1}>
-                      <IconButton
-                        icon={<EditIcon />}
-                        size="xs"
-                        variant="ghost"
-                        aria-label="Editar"
-                        onClick={() => openEditEntry(entry)}
-                      />
-                      <IconButton
-                        icon={<DeleteIcon />}
-                        size="xs"
-                        variant="ghost"
-                        colorScheme="red"
-                        aria-label="Excluir"
-                        onClick={() => handleDeleteEntry(entry.id)}
-                      />
-                    </HStack>
-                  </Td>
-                </Tr>
+                    <Text
+                      fontSize="xs"
+                      fontWeight="semibold"
+                      color={entry.runningBalance >= 0 ? "blue.500" : "red.500"}
+                      ml="auto"
+                    >
+                      Sld: {formatCurrency(entry.runningBalance)}
+                    </Text>
+                    <IconButton
+                      icon={<DeleteIcon />}
+                      size="xs"
+                      variant="ghost"
+                      colorScheme="red"
+                      aria-label="Excluir"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteEntry(entry.id); }}
+                    />
+                  </Flex>
+                </Box>
               ))}
-            </Tbody>
-          </Table>
-        </TableContainer>
-      </Box>
+            </VStack>
+          )}
+
+          {/* FAB - Novo lançamento */}
+          <IconButton
+            icon={<AddIcon />}
+            aria-label="Novo lançamento"
+            colorScheme="blue"
+            borderRadius="full"
+            size="lg"
+            boxShadow="lg"
+            position="fixed"
+            bottom={6}
+            right={6}
+            zIndex="sticky"
+            onClick={openNewEntry}
+          />
+        </>
+      ) : (
+        <Box bg={tableBg} borderRadius="lg" boxShadow="sm" borderWidth="1px" overflow="hidden">
+          <Flex justify="space-between" align="center" px={4} py={3}>
+            <HStack>
+              <Text fontWeight="bold" fontSize="sm">Lançamentos</Text>
+              {activeFilter && (
+                <Button size="xs" colorScheme="gray" variant="outline" onClick={clearFilter}>
+                  Limpar filtro
+                </Button>
+              )}
+            </HStack>
+            <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openNewEntry}>
+              Novo lançamento
+            </Button>
+          </Flex>
+
+          <TableContainer>
+            <Table size="sm">
+              <Thead>
+                <Tr bg={headerBg}>
+                  <Th w="50px" textAlign="center">Status</Th>
+                  <Th w="80px">Data</Th>
+                  <Th w="130px">Tipo</Th>
+                  <Th>Histórico</Th>
+                  <Th isNumeric w="110px">Despesa</Th>
+                  <Th isNumeric w="110px">Receita</Th>
+                  <Th isNumeric w="110px">Saldo</Th>
+                  <Th w="80px" textAlign="right">Ações</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
+                {entriesWithBalance.length === 0 && (
+                  <Tr>
+                    <Td colSpan={8} textAlign="center" py={8} color="gray.500">
+                      Nenhum lançamento neste mês.
+                    </Td>
+                  </Tr>
+                )}
+                {entriesWithBalance.map((entry) => (
+                  <Tr
+                    key={entry.id}
+                    opacity={entry.status === "pending" ? pendingOpacity : 1}
+                    _hover={{ bg: headerBg }}
+                    cursor="pointer"
+                    onClick={() => openEditEntry(entry)}
+                  >
+                    <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
+                      <Checkbox
+                        isChecked={entry.status === "ok"}
+                        onChange={() => handleToggleStatus(entry.id)}
+                        colorScheme="green"
+                      />
+                    </Td>
+                    <Td fontSize="sm">{formatDateBR(entry.date)}</Td>
+                    <Td>
+                      <Badge
+                        fontSize="xs"
+                        colorScheme={entry.type === "income" ? "green" : "red"}
+                        variant="subtle"
+                      >
+                        {entry.categoryName}
+                      </Badge>
+                    </Td>
+                    <Td fontSize="sm">{entry.description}</Td>
+                    <Td isNumeric fontSize="sm" color="red.500" fontWeight="medium">
+                      {entry.type === "expense" ? formatCurrency(entry.amount) : ""}
+                    </Td>
+                    <Td isNumeric fontSize="sm" color="green.500" fontWeight="medium">
+                      {entry.type === "income" ? formatCurrency(entry.amount) : ""}
+                    </Td>
+                    <Td isNumeric fontSize="sm" fontWeight="bold" color={entry.runningBalance >= 0 ? "blue.500" : "red.500"}>
+                      {formatCurrency(entry.runningBalance)}
+                    </Td>
+                    <Td textAlign="right" onClick={(e) => e.stopPropagation()}>
+                      <HStack justify="flex-end" spacing={1}>
+                        <IconButton
+                          icon={<DeleteIcon />}
+                          size="xs"
+                          variant="ghost"
+                          colorScheme="red"
+                          aria-label="Excluir"
+                          onClick={() => handleDeleteEntry(entry.id)}
+                        />
+                      </HStack>
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </TableContainer>
+        </Box>
+      )}
 
       {/* Modals */}
       <CashFlowEntryModal
@@ -593,6 +724,13 @@ const CashFlow = () => {
         isOpen={boxesModal.isOpen}
         onClose={boxesModal.onClose}
         onBoxesChange={loadBoxes}
+      />
+      <CashFlowImportModal
+        isOpen={importModal.isOpen}
+        onClose={importModal.onClose}
+        boxes={boxes}
+        selectedBoxId={selectedBoxId}
+        onImport={handleImportSubmit}
       />
     </Box>
   );

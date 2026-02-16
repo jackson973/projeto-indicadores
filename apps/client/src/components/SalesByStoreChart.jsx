@@ -3,8 +3,7 @@ import {
   Pie,
   Cell,
   Tooltip,
-  ResponsiveContainer,
-  Legend
+  ResponsiveContainer
 } from "recharts";
 import { Box, Button, Flex, Image, Text, HStack, useColorModeValue } from "@chakra-ui/react";
 import { InfoIcon } from "@chakra-ui/icons";
@@ -23,12 +22,12 @@ const downloadCsv = (rows, filename) => {
 };
 
 const renderLegend = (payload, total, textColor) => (
-  <Flex wrap="wrap" gap={3} justify="center" mt={2}>
+  <Flex wrap="wrap" gap={2} justify="center" mt={2}>
     {payload.map((entry) => {
       const percent = total > 0 ? entry.payload?.total / total : 0;
       return (
-        <Flex key={entry.value} align="center" gap={2} fontSize="sm" color={textColor}>
-          <Box w="10px" h="10px" borderRadius="full" bg={entry.color} />
+        <Flex key={entry.value} align="center" gap={1} fontSize="xs" color={textColor}>
+          <Box w="8px" h="8px" borderRadius="full" bg={entry.color} flexShrink={0} />
           <Text>
             {entry.value} • {formatPercent(percent, 1)}
           </Text>
@@ -82,7 +81,7 @@ const SalesByStoreChart = ({ data }) => {
         </Button>
       </Flex>
       <div className="chart">
-        <ResponsiveContainer width="100%" height={280}>
+        <ResponsiveContainer width="100%" height={250}>
           <PieChart>
             <Pie data={data} dataKey="total" nameKey="store" innerRadius={60} outerRadius={100}>
               {data.map((entry, index) => (
@@ -90,10 +89,18 @@ const SalesByStoreChart = ({ data }) => {
               ))}
             </Pie>
             <Tooltip content={({ payload }) => renderTooltip(payload, total, tooltipBg, tooltipBorder, tooltipText, tooltipSubText)} />
-            <Legend content={({ payload }) => renderLegend(payload || [], total, legendText)} />
           </PieChart>
         </ResponsiveContainer>
       </div>
+      {renderLegend(
+        data.map((entry, index) => ({
+          value: entry.store,
+          color: ["#0ea5e9", "#6366f1", "#22c55e", "#f97316", "#e11d48"][index % 5],
+          payload: entry
+        })),
+        total,
+        legendText
+      )}
     </Box>
   );
 };

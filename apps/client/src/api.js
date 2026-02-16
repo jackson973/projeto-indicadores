@@ -345,3 +345,10 @@ export const importCashflow = async (file, boxId) => {
   });
   return handleResponse(response);
 };
+
+export const checkImportDuplicates = async (boxId, year, month) => {
+  const response = await authFetch(
+    `/api/cashflow/import/check?boxId=${boxId}&year=${year}&month=${month}`
+  );
+  return handleResponse(response);
+};

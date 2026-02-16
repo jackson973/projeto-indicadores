@@ -11,7 +11,6 @@ import {
   StatHelpText,
   FormControl,
   FormLabel,
-  Input,
   Select,
   HStack,
   Spinner,
@@ -38,7 +37,28 @@ import { fetchCashflowDashboard, fetchCashflowBoxes } from "../api";
 import { formatCurrency, formatPercent } from "../utils/format";
 
 const PIE_COLORS = ["#0ea5e9", "#6366f1", "#22c55e", "#f97316", "#e11d48", "#8b5cf6", "#14b8a6", "#f59e0b", "#ec4899", "#06b6d4"];
-const EXPENSE_STACK_COLORS = ["#e11d48", "#f97316", "#f59e0b", "#8b5cf6", "#6366f1", "#0ea5e9", "#14b8a6", "#22c55e", "#ec4899", "#06b6d4"];
+const EXPENSE_STACK_COLORS = ["#e11d48", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6", "#78716c", "#06b6d4"];
+
+const MONTH_NAMES = [
+  "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+];
+
+const generateMonthOptions = () => {
+  const now = new Date();
+  const options = [];
+  for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+    const maxM = y === now.getFullYear() ? now.getMonth() + 1 : 12;
+    for (let m = maxM; m >= 1; m--) {
+      const value = `${y}-${String(m).padStart(2, "0")}`;
+      const label = `${MONTH_NAMES[m - 1]} / ${y}`;
+      options.push({ value, label });
+    }
+  }
+  return options;
+};
+
+const MONTH_OPTIONS = generateMonthOptions();
 
 const getDefaultDates = () => {
   const now = new Date();
@@ -151,13 +171,21 @@ const CashFlowDashboard = () => {
               ))}
             </Select>
           </FormControl>
-          <FormControl w="150px">
+          <FormControl w="180px">
             <FormLabel fontSize="xs" mb={1}>De</FormLabel>
-            <Input size="sm" type="month" value={startMonth} onChange={(e) => setStartMonth(e.target.value)} />
+            <Select size="sm" value={startMonth} onChange={(e) => setStartMonth(e.target.value)}>
+              {MONTH_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </Select>
           </FormControl>
-          <FormControl w="150px">
+          <FormControl w="180px">
             <FormLabel fontSize="xs" mb={1}>Até</FormLabel>
-            <Input size="sm" type="month" value={endMonth} onChange={(e) => setEndMonth(e.target.value)} />
+            <Select size="sm" value={endMonth} onChange={(e) => setEndMonth(e.target.value)}>
+              {MONTH_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </Select>
           </FormControl>
         </HStack>
       </Flex>
@@ -275,12 +303,12 @@ const CashFlowDashboard = () => {
                 />
                 <Legend
                   content={({ payload }) => (
-                    <Flex wrap="wrap" gap={3} justify="center" mt={2}>
+                    <Flex wrap="wrap" gap={2} justify="center" mt={2}>
                       {(payload || []).map((entry) => {
                         const pct = expTotal > 0 ? (entry.payload?.total || 0) / expTotal : 0;
                         return (
-                          <Flex key={entry.value} align="center" gap={2} fontSize="sm" color={legendText}>
-                            <Box w="10px" h="10px" borderRadius="full" bg={entry.color} />
+                          <Flex key={entry.value} align="center" gap={1} fontSize="xs" color={legendText}>
+                            <Box w="8px" h="8px" borderRadius="full" bg={entry.color} flexShrink={0} />
                             <Text>{entry.value} {formatPercent(pct, 1)}</Text>
                           </Flex>
                         );
@@ -322,12 +350,12 @@ const CashFlowDashboard = () => {
                 />
                 <Legend
                   content={({ payload }) => (
-                    <Flex wrap="wrap" gap={3} justify="center" mt={2}>
+                    <Flex wrap="wrap" gap={2} justify="center" mt={2}>
                       {(payload || []).map((entry) => {
                         const pct = incTotal > 0 ? (entry.payload?.total || 0) / incTotal : 0;
                         return (
-                          <Flex key={entry.value} align="center" gap={2} fontSize="sm" color={legendText}>
-                            <Box w="10px" h="10px" borderRadius="full" bg={entry.color} />
+                          <Flex key={entry.value} align="center" gap={1} fontSize="xs" color={legendText}>
+                            <Box w="8px" h="8px" borderRadius="full" bg={entry.color} flexShrink={0} />
                             <Text>{entry.value} {formatPercent(pct, 1)}</Text>
                           </Flex>
                         );
