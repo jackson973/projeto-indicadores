@@ -1,5 +1,7 @@
 const nodemailer = require('nodemailer');
 
+const APP_URL = process.env.APP_URL || 'http://localhost:5173';
+
 // Create reusable transporter with Gmail configuration
 const transporter = nodemailer.createTransport({
   service: 'gmail',
@@ -53,7 +55,7 @@ async function sendEmail({ to, subject, text, html, from }) {
  * Send password reset email
  */
 async function sendPasswordResetEmail(to, resetToken, userName) {
-  const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${resetToken}`;
+  const resetLink = `${APP_URL}/reset-password?token=${resetToken}`;
 
   const html = `
     <!DOCTYPE html>
@@ -122,7 +124,7 @@ Se você não solicitou esta redefinição, ignore este email. Sua senha permane
  * Send welcome email to new user
  */
 async function sendWelcomeEmail(to, userName, tempPassword) {
-  const loginUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const loginUrl = APP_URL;
 
   const html = `
     <!DOCTYPE html>
@@ -363,7 +365,10 @@ async function sendCashflowAlertsEmail(to, userName, alertsData) {
             <p>Olá ${userName},</p>
             <p>Segue o resumo das despesas pendentes que requerem atenção:</p>
             ${boxesHtml}
-            <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #718096; font-size: 14px;">
+            <p style="text-align: center; margin-top: 30px;">
+              <a href="${APP_URL}" style="display: inline-block; background: #3182CE; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px;">Acessar o Sistema</a>
+            </p>
+            <p style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e2e8f0; color: #718096; font-size: 14px;">
               Este é um email automático enviado diariamente às 01:00 AM.<br>
               Para marcar despesas como pagas, acesse o sistema.
             </p>
