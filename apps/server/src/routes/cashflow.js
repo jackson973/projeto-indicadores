@@ -235,9 +235,13 @@ router.get('/summary', async (req, res) => {
 router.get('/alerts', async (req, res) => {
   try {
     const boxId = parseInt(req.query.boxId);
-    if (!boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
+    const year = parseInt(req.query.year);
+    const month = parseInt(req.query.month);
 
-    const alerts = await repo.getAlerts(boxId);
+    if (!boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
+    if (!year || !month) return res.status(400).json({ message: 'year e month são obrigatórios.' });
+
+    const alerts = await repo.getAlerts(boxId, year, month);
     return res.json(alerts);
   } catch (error) {
     console.error('Alerts error:', error);

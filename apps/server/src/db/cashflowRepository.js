@@ -562,42 +562,63 @@ async function getDashboardData(startDate, endDate, grouping, boxId) {
 /**
  * Get overdue and due-today pending expenses for a specific box
  */
-async function getAlerts(boxId) {
+async function getAlerts(boxId, year, month) {
   const today = getTodayBrazil();
-  const effectiveDueDate = getEffectiveDueDate();
 
-  // Overdue: date < today, type=expense, status=pending
+  // Calculate period boundaries
+  const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
+  const lastDay = new Date(year, month, 0).getDate();
+  const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
+
+  // Overdue: date < today, type=expense, status=pending, within period
   const overdueQuery = `
     SELECT e.id, e.date, e.category_id AS "categoryId", c.name AS "categoryName",
            e.description, e.amount, e.box_id AS "boxId"
     FROM cashflow_entries e
     JOIN cashflow_categories c ON c.id = e.category_id
-    WHERE e.date < $1 AND e.type = 'expense' AND e.status = 'pending' AND e.box_id = $2
+    WHERE e.date < $1
+      AND e.date >= $3
+      AND e.date <= $4
+      AND e.type = 'expense'
+      AND e.status = 'pending'
+      AND e.box_id = $2
     ORDER BY e.date ASC
   `;
 
-  // Due today: date = effectiveDueDate, type=expense, status=pending
-  const dueTodayQuery = `
+  // Upcoming: date >= today, type=expense, status=pending, within period
+  const upcomingQuery = `
     SELECT e.id, e.date, e.category_id AS "categoryId", c.name AS "categoryName",
            e.description, e.amount, e.box_id AS "boxId"
     FROM cashflow_entries e
     JOIN cashflow_categories c ON c.id = e.category_id
-    WHERE e.date = $1 AND e.type = 'expense' AND e.status = 'pending' AND e.box_id = $2
-    ORDER BY e.amount DESC
+    WHERE e.date >= $1
+      AND e.date >= $3
+      AND e.date <= $4
+      AND e.type = 'expense'
+      AND e.status = 'pending'
+      AND e.box_id = $2
+    ORDER BY e.date ASC
   `;
 
-  const [overdueResult, dueTodayResult] = await Promise.all([
-    db.query(overdueQuery, [today, boxId]),
-    db.query(dueTodayQuery, [effectiveDueDate, boxId])
+  const [overdueResult, upcomingResult] = await Promise.all([
+    db.query(overdueQuery, [today, boxId, startDate, endDate]),
+    db.query(upcomingQuery, [today, boxId, startDate, endDate])
   ]);
 
+  const overdueItems = overdueResult.rows.map(r => ({ ...r, amount: parseFloat(r.amount) }));
+  const upcomingItems = upcomingResult.rows.map(r => ({ ...r, amount: parseFloat(r.amount) }));
+
+  // Calculate totals
+  const overdueTotal = overdueItems.reduce((sum, item) => sum + item.amount, 0);
+  const upcomingTotal = upcomingItems.reduce((sum, item) => sum + item.amount, 0);
+
   return {
-    overdueCount: overdueResult.rows.length,
-    dueTodayCount: dueTodayResult.rows.length,
-    overdueItems: overdueResult.rows.map(r => ({ ...r, amount: parseFloat(r.amount) })),
-    dueTodayItems: dueTodayResult.rows.map(r => ({ ...r, amount: parseFloat(r.amount) })),
-    isWeekend: today !== effectiveDueDate,
-    effectiveDueDate
+    overdueCount: overdueItems.length,
+    overdueTotal,
+    overdueItems,
+    upcomingCount: upcomingItems.length,
+    upcomingTotal,
+    upcomingItems
   };
 }
 
@@ -607,20 +628,17 @@ async function getAlerts(boxId) {
 async function getAllBoxesAlerts() {
   const boxes = await getBoxes();
   const today = getTodayBrazil();
-  const effectiveDueDate = getEffectiveDueDate();
 
   const results = [];
   for (const box of boxes) {
     const alerts = await getAlerts(box.id);
-    if (alerts.overdueCount > 0 || alerts.dueTodayCount > 0) {
+    if (alerts.overdueCount > 0 || alerts.upcomingCount > 0) {
       results.push({ box, ...alerts });
     }
   }
 
   return {
     boxes: results,
-    isWeekend: today !== effectiveDueDate,
-    effectiveDueDate,
     today
   };
 }

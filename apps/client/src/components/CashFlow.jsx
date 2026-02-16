@@ -8,6 +8,7 @@ import {
   Stat,
   StatLabel,
   StatNumber,
+  StatHelpText,
   Table,
   Thead,
   Tbody,
@@ -83,12 +84,13 @@ const CashFlow = () => {
   });
   const [alerts, setAlerts] = useState({
     overdueCount: 0,
-    dueTodayCount: 0,
+    overdueTotal: 0,
     overdueItems: [],
-    dueTodayItems: [],
-    isWeekend: false
+    upcomingCount: 0,
+    upcomingTotal: 0,
+    upcomingItems: []
   });
-  const [activeFilter, setActiveFilter] = useState(null); // null, 'overdue', 'dueToday'
+  const [activeFilter, setActiveFilter] = useState(null); // null, 'overdue', 'upcoming'
   const fileInputRef = useRef(null);
 
   const entryModal = useDisclosure();
@@ -130,7 +132,7 @@ const CashFlow = () => {
         fetchCashflowCategories(),
         fetchCashflowEntries(year, month, selectedBoxId),
         fetchCashflowSummary(year, month, selectedBoxId),
-        fetchCashflowAlerts(selectedBoxId)
+        fetchCashflowAlerts(year, month, selectedBoxId)
       ]);
 
       if (catsResult.status === "fulfilled") setCategories(catsResult.value);
@@ -242,8 +244,8 @@ const CashFlow = () => {
     setActiveFilter(activeFilter === 'overdue' ? null : 'overdue');
   };
 
-  const handleFilterDueToday = () => {
-    setActiveFilter(activeFilter === 'dueToday' ? null : 'dueToday');
+  const handleFilterUpcoming = () => {
+    setActiveFilter(activeFilter === 'upcoming' ? null : 'upcoming');
   };
 
   const clearFilter = () => {
@@ -275,9 +277,9 @@ const CashFlow = () => {
     if (activeFilter === 'overdue') {
       const overdueIds = new Set(alerts.overdueItems.map(item => item.id));
       result = result.filter(e => overdueIds.has(e.id));
-    } else if (activeFilter === 'dueToday') {
-      const dueTodayIds = new Set(alerts.dueTodayItems.map(item => item.id));
-      result = result.filter(e => dueTodayIds.has(e.id));
+    } else if (activeFilter === 'upcoming') {
+      const upcomingIds = new Set(alerts.upcomingItems.map(item => item.id));
+      result = result.filter(e => upcomingIds.has(e.id));
     }
 
     return result;
@@ -417,32 +419,38 @@ const CashFlow = () => {
               {activeFilter === 'overdue' && <Badge ml={2} colorScheme="red" fontSize="xs">Filtrado</Badge>}
             </StatLabel>
             <StatNumber fontSize="lg" color="red.500">
-              {alerts.overdueCount}
+              {formatCurrency(alerts.overdueTotal)}
             </StatNumber>
+            <StatHelpText fontSize="xs" color="gray.600" mt={1}>
+              {alerts.overdueCount} vencimento{alerts.overdueCount !== 1 ? 's' : ''}
+            </StatHelpText>
           </Stat>
         </Box>
 
-        {/* Vencendo Hoje Card */}
+        {/* A Vencer Card */}
         <Box
           bg={cardBg}
           p={4}
           borderRadius="lg"
-          boxShadow={activeFilter === 'dueToday' ? 'lg' : 'sm'}
+          boxShadow={activeFilter === 'upcoming' ? 'lg' : 'sm'}
           borderWidth="2px"
-          borderColor={activeFilter === 'dueToday' ? 'orange.500' : (alerts.dueTodayCount > 0 ? 'orange.300' : 'transparent')}
+          borderColor={activeFilter === 'upcoming' ? 'blue.500' : (alerts.upcomingCount > 0 ? 'blue.300' : 'transparent')}
           cursor="pointer"
-          onClick={handleFilterDueToday}
+          onClick={handleFilterUpcoming}
           transition="all 0.2s"
           _hover={{ transform: 'translateY(-2px)', boxShadow: 'md' }}
         >
           <Stat>
             <StatLabel fontSize="xs" color="gray.500">
-              {alerts.isWeekend ? 'Vencendo 2ª' : 'Vencendo Hoje'}
-              {activeFilter === 'dueToday' && <Badge ml={2} colorScheme="orange" fontSize="xs">Filtrado</Badge>}
+              A Vencer
+              {activeFilter === 'upcoming' && <Badge ml={2} colorScheme="blue" fontSize="xs">Filtrado</Badge>}
             </StatLabel>
-            <StatNumber fontSize="lg" color="orange.500">
-              {alerts.dueTodayCount}
+            <StatNumber fontSize="lg" color="blue.500">
+              {formatCurrency(alerts.upcomingTotal)}
             </StatNumber>
+            <StatHelpText fontSize="xs" color="gray.600" mt={1}>
+              {alerts.upcomingCount} vencimento{alerts.upcomingCount !== 1 ? 's' : ''}
+            </StatHelpText>
           </Stat>
         </Box>
       </SimpleGrid>

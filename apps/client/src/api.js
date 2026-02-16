@@ -284,8 +284,8 @@ export const fetchCashflowSummary = async (year, month, boxId) => {
 };
 
 // Cashflow Alerts API
-export const fetchCashflowAlerts = async (boxId) => {
-  const response = await authFetch(`/api/cashflow/alerts?boxId=${boxId}`);
+export const fetchCashflowAlerts = async (year, month, boxId) => {
+  const response = await authFetch(`/api/cashflow/alerts?year=${year}&month=${month}&boxId=${boxId}`);
   return handleResponse(response);
 };
 

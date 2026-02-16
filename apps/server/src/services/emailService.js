@@ -248,12 +248,12 @@ function formatCurrency(value) {
  * Send daily cashflow alerts email
  */
 async function sendCashflowAlertsEmail(to, userName, alertsData) {
-  const { boxes, isWeekend, effectiveDueDate, today } = alertsData;
+  const { boxes, today } = alertsData;
 
   let boxesHtml = '';
 
   for (const boxData of boxes) {
-    const { box, overdueItems, dueTodayItems, overdueCount, dueTodayCount } = boxData;
+    const { box, overdueItems, overdueCount, overdueTotal, upcomingItems, upcomingCount, upcomingTotal } = boxData;
 
     boxesHtml += `
       <div style="margin-bottom: 30px; padding: 20px; background: #f7fafc; border-radius: 8px; border-left: 4px solid #3182CE;">
@@ -262,11 +262,10 @@ async function sendCashflowAlertsEmail(to, userName, alertsData) {
 
     // Overdue section
     if (overdueCount > 0) {
-      const totalOverdue = overdueItems.reduce((sum, item) => sum + item.amount, 0);
       boxesHtml += `
         <div style="margin-bottom: 20px;">
           <h4 style="color: #E53E3E; margin: 0 0 10px 0;">
-            ⚠️ Vencidos: ${overdueCount} despesa(s) - Total: ${formatCurrency(totalOverdue)}
+            ⚠️ Vencidos: ${overdueCount} despesa(s) - Total: ${formatCurrency(overdueTotal)}
           </h4>
           <table style="width: 100%; border-collapse: collapse; background: white;">
             <thead>
@@ -295,34 +294,32 @@ async function sendCashflowAlertsEmail(to, userName, alertsData) {
       boxesHtml += `</tbody></table></div>`;
     }
 
-    // Due today section
-    if (dueTodayCount > 0) {
-      const totalDueToday = dueTodayItems.reduce((sum, item) => sum + item.amount, 0);
-      const dueTodayLabel = isWeekend ? 'Vencendo na Segunda-feira' : 'Vencendo Hoje';
+    // Upcoming section
+    if (upcomingCount > 0) {
       boxesHtml += `
         <div>
-          <h4 style="color: #D69E2E; margin: 0 0 10px 0;">
-            🔔 ${dueTodayLabel}: ${dueTodayCount} despesa(s) - Total: ${formatCurrency(totalDueToday)}
+          <h4 style="color: #3182CE; margin: 0 0 10px 0;">
+            📅 A Vencer: ${upcomingCount} despesa(s) - Total: ${formatCurrency(upcomingTotal)}
           </h4>
           <table style="width: 100%; border-collapse: collapse; background: white;">
             <thead>
-              <tr style="background: #FEEBC8;">
-                <th style="padding: 8px; text-align: left; border: 1px solid #F6AD55;">Data</th>
-                <th style="padding: 8px; text-align: left; border: 1px solid #F6AD55;">Categoria</th>
-                <th style="padding: 8px; text-align: left; border: 1px solid #F6AD55;">Descrição</th>
-                <th style="padding: 8px; text-align: right; border: 1px solid #F6AD55;">Valor</th>
+              <tr style="background: #BEE3F8;">
+                <th style="padding: 8px; text-align: left; border: 1px solid #63B3ED;">Data</th>
+                <th style="padding: 8px; text-align: left; border: 1px solid #63B3ED;">Categoria</th>
+                <th style="padding: 8px; text-align: left; border: 1px solid #63B3ED;">Descrição</th>
+                <th style="padding: 8px; text-align: right; border: 1px solid #63B3ED;">Valor</th>
               </tr>
             </thead>
             <tbody>
       `;
 
-      for (const item of dueTodayItems) {
+      for (const item of upcomingItems) {
         boxesHtml += `
           <tr>
-            <td style="padding: 8px; border: 1px solid #FBD38D;">${formatDateBR(item.date)}</td>
-            <td style="padding: 8px; border: 1px solid #FBD38D;">${item.categoryName}</td>
-            <td style="padding: 8px; border: 1px solid #FBD38D;">${item.description}</td>
-            <td style="padding: 8px; text-align: right; border: 1px solid #FBD38D; font-weight: bold; color: #D69E2E;">
+            <td style="padding: 8px; border: 1px solid #90CDF4;">${formatDateBR(item.date)}</td>
+            <td style="padding: 8px; border: 1px solid #90CDF4;">${item.categoryName}</td>
+            <td style="padding: 8px; border: 1px solid #90CDF4;">${item.description}</td>
+            <td style="padding: 8px; text-align: right; border: 1px solid #90CDF4; font-weight: bold; color: #3182CE;">
               ${formatCurrency(item.amount)}
             </td>
           </tr>
@@ -337,7 +334,7 @@ async function sendCashflowAlertsEmail(to, userName, alertsData) {
   if (boxes.length === 0) {
     boxesHtml = `
       <div style="padding: 40px; text-align: center; color: #48BB78;">
-        <h3>✓ Nenhuma despesa pendente vencida ou vencendo hoje!</h3>
+        <h3>✓ Nenhuma despesa pendente!</h3>
         <p>Todos os pagamentos estão em dia.</p>
       </div>
     `;
@@ -361,7 +358,6 @@ async function sendCashflowAlertsEmail(to, userName, alertsData) {
           <div class="header">
             <h1>📊 Relatório Diário de Fluxo de Caixa</h1>
             <p style="margin: 5px 0 0 0;">Despesas Pendentes - ${formatDateBR(today)}</p>
-            ${isWeekend ? '<p style="margin: 5px 0 0 0; font-size: 14px;">* Final de semana - mostrando vencimentos de Segunda-feira</p>' : ''}
           </div>
           <div class="content">
             <p>Olá ${userName},</p>
