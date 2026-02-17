@@ -50,6 +50,7 @@ import LoginPage from "./components/LoginPage";
 import ForgotPasswordModal from "./components/ForgotPasswordModal";
 import ResetPasswordPage from "./components/ResetPasswordPage";
 import UsersManagement from "./components/UsersManagement";
+import DatabaseMaintenance from "./components/DatabaseMaintenance";
 import CashFlow from "./components/CashFlow";
 import CashFlowDashboard from "./components/CashFlowDashboard";
 import {
@@ -149,6 +150,7 @@ const App = () => {
   const [abc, setAbc] = useState([]);
   const [error, setError] = useState("");
   const [activeView, setActiveView] = useState("upload");
+  const [expandedMenu, setExpandedMenu] = useState(null); // For submenu expansion
   const isMobile = useBreakpointValue({ base: true, md: false });
   const mobileMenu = useDisclosure();
   const canceledDrawer = useDisclosure();
@@ -321,10 +323,19 @@ const App = () => {
       show: true
     },
     {
-      label: "Gerenciar usuários",
+      label: "Configurações",
       icon: <SettingsIcon />,
-      view: "users",
-      show: user?.role === "admin"
+      show: user?.role === "admin",
+      submenu: [
+        {
+          label: "Gerenciar usuários",
+          view: "users"
+        },
+        {
+          label: "Manutenção de base",
+          view: "database-maintenance"
+        }
+      ]
     }
   ];
 
@@ -356,35 +367,81 @@ const App = () => {
       {/* Navigation items */}
       <VStack spacing={1} align="stretch" px={3} py={4} flex={1}>
         {navItems.filter((item) => item.show).map((item) => (
-          <Box
-            key={item.view}
-            as="button"
-            display="flex"
-            alignItems="center"
-            justifyContent="flex-start"
-            gap={3}
-            px={3}
-            py={2}
-            borderRadius="md"
-            fontSize="sm"
-            fontWeight={activeView === item.view ? "semibold" : "normal"}
-            color={activeView === item.view ? "blue.500" : navColor}
-            bg={activeView === item.view ? navActiveBg : "transparent"}
-            _hover={{ bg: item.disabled ? "transparent" : navHoverBg }}
-            opacity={item.disabled ? 0.4 : 1}
-            cursor={item.disabled ? "not-allowed" : "pointer"}
-            onClick={() => {
-              if (!item.disabled) {
-                setActiveView(item.view);
-                if (isMobile) mobileMenu.onClose();
-              }
-            }}
-            textAlign="left"
-            w="full"
-            whiteSpace="nowrap"
-          >
-            <Box flexShrink={0} fontSize="md">{item.icon}</Box>
-            {item.label}
+          <Box key={item.view || item.label}>
+            {/* Main menu item */}
+            <Box
+              as="button"
+              display="flex"
+              alignItems="center"
+              justifyContent="flex-start"
+              gap={3}
+              px={3}
+              py={2}
+              borderRadius="md"
+              fontSize="sm"
+              fontWeight={activeView === item.view ? "semibold" : "normal"}
+              color={activeView === item.view ? "blue.500" : navColor}
+              bg={activeView === item.view ? navActiveBg : "transparent"}
+              _hover={{ bg: item.disabled ? "transparent" : navHoverBg }}
+              opacity={item.disabled ? 0.4 : 1}
+              cursor={item.disabled ? "not-allowed" : "pointer"}
+              onClick={() => {
+                if (item.disabled) return;
+                if (item.submenu) {
+                  // Toggle submenu
+                  setExpandedMenu(expandedMenu === item.label ? null : item.label);
+                } else {
+                  setActiveView(item.view);
+                  if (isMobile) mobileMenu.onClose();
+                }
+              }}
+              textAlign="left"
+              w="full"
+              whiteSpace="nowrap"
+            >
+              <Box flexShrink={0} fontSize="md">{item.icon}</Box>
+              {item.label}
+              {item.submenu && (
+                <Box ml="auto" fontSize="xs">
+                  {expandedMenu === item.label ? "▼" : "▶"}
+                </Box>
+              )}
+            </Box>
+
+            {/* Submenu items */}
+            {item.submenu && expandedMenu === item.label && (
+              <VStack spacing={0} align="stretch" pl={6} mt={1}>
+                {item.submenu.map((subItem) => (
+                  <Box
+                    key={subItem.view}
+                    as="button"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="flex-start"
+                    gap={2}
+                    px={3}
+                    py={2}
+                    borderRadius="md"
+                    fontSize="sm"
+                    fontWeight={activeView === subItem.view ? "semibold" : "normal"}
+                    color={activeView === subItem.view ? "blue.500" : navColor}
+                    bg={activeView === subItem.view ? navActiveBg : "transparent"}
+                    _hover={{ bg: navHoverBg }}
+                    cursor="pointer"
+                    onClick={() => {
+                      setActiveView(subItem.view);
+                      if (isMobile) mobileMenu.onClose();
+                    }}
+                    textAlign="left"
+                    w="full"
+                    whiteSpace="nowrap"
+                  >
+                    <Box fontSize="xs" color="gray.400">•</Box>
+                    {subItem.label}
+                  </Box>
+                ))}
+              </VStack>
+            )}
           </Box>
         ))}
       </VStack>
@@ -581,6 +638,10 @@ const App = () => {
 
         {activeView === "users" && user?.role === "admin" && (
           <UsersManagement />
+        )}
+
+        {activeView === "database-maintenance" && user?.role === "admin" && (
+          <DatabaseMaintenance />
         )}
 
         {activeView === "cashflow" && (

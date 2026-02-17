@@ -1,7 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const xlsx = require('xlsx');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireAdmin } = require('../middleware/auth');
 const repo = require('../db/cashflowRepository');
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -567,6 +567,18 @@ router.post('/import', upload.single('file'), async (req, res) => {
   } catch (error) {
     console.error('Import cashflow error:', error);
     return res.status(500).json({ message: 'Erro ao importar fluxo de caixa.' });
+  }
+});
+
+// ── Clear All Data (Admin Only) ──
+
+router.delete('/', requireAdmin, async (req, res) => {
+  try {
+    await repo.clearCashflow();
+    return res.json({ message: 'Dados de fluxo de caixa excluídos com sucesso.' });
+  } catch (error) {
+    console.error('Clear cashflow error:', error);
+    return res.status(500).json({ message: 'Erro ao excluir dados de fluxo de caixa.' });
   }
 });
 

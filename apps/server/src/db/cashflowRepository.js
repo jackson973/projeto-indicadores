@@ -655,6 +655,33 @@ async function getAllBoxesAlerts() {
   };
 }
 
+/**
+ * Clear all cashflow data (entries and balances)
+ * WARNING: This is a destructive operation that cannot be undone
+ * Keeps boxes, categories, and recurrences intact
+ */
+async function clearCashflow() {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    // Delete entries first (has foreign keys to boxes and categories)
+    await client.query('TRUNCATE cashflow_entries RESTART IDENTITY CASCADE');
+
+    // Delete balances (has foreign key to boxes)
+    await client.query('TRUNCATE cashflow_balances RESTART IDENTITY CASCADE');
+
+    await client.query('COMMIT');
+    console.log('Cashflow data cleared successfully');
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('Error clearing cashflow data:', error);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   getBoxes,
   createBox,
@@ -680,5 +707,6 @@ module.exports = {
   getDashboardData,
   getAlerts,
   getAllBoxesAlerts,
-  getTodayBrazil
+  getTodayBrazil,
+  clearCashflow
 };

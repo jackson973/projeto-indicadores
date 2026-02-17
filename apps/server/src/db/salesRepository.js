@@ -12,13 +12,25 @@ async function batchUpsertSales(salesData) {
     return { inserted: 0, updated: 0 };
   }
 
+  // Deduplicate data by (order_id, product, variation) - keep last occurrence
+  // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" error
+  const deduped = new Map();
+  salesData.forEach((sale) => {
+    const key = `${sale.orderId}|${sale.product}|${sale.variation || ''}`;
+    deduped.set(key, sale);
+  });
+
+  const uniqueSalesData = Array.from(deduped.values());
+
+  console.log(`Deduplicated: ${salesData.length} rows -> ${uniqueSalesData.length} unique rows`);
+
   // Process in batches of 500 to avoid PostgreSQL parameter limit (~65535)
   const BATCH_SIZE = 500;
   let totalInserted = 0;
   let totalUpdated = 0;
 
-  for (let i = 0; i < salesData.length; i += BATCH_SIZE) {
-    const batch = salesData.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < uniqueSalesData.length; i += BATCH_SIZE) {
+    const batch = uniqueSalesData.slice(i, i + BATCH_SIZE);
     const result = await upsertBatch(batch);
     totalInserted += result.inserted;
     totalUpdated += result.updated;

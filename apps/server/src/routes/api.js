@@ -1,6 +1,7 @@
 const express = require("express");
 const multer = require("multer");
 const xlsx = require("xlsx");
+const { authenticate, requireAdmin } = require('../middleware/auth');
 const { setSales, hasSales } = require("../lib/dataStore");
 const {
   getSalesByPeriod,
@@ -493,6 +494,19 @@ router.get("/abc/details", async (req, res) => {
   } catch (error) {
     console.error('ABC details error:', error);
     return res.status(500).json({ error: error.message });
+  }
+});
+
+// ── Clear All Sales Data (Admin Only) ──
+
+router.delete("/sales", authenticate, requireAdmin, async (req, res) => {
+  try {
+    const salesRepository = require('../db/salesRepository');
+    await salesRepository.clearSales();
+    return res.json({ message: 'Dados de vendas excluídos com sucesso.' });
+  } catch (error) {
+    console.error('Clear sales error:', error);
+    return res.status(500).json({ message: 'Erro ao excluir dados de vendas.' });
   }
 });
 

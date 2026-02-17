@@ -352,3 +352,18 @@ export const checkImportDuplicates = async (boxId, year, month) => {
   );
   return handleResponse(response);
 };
+
+// Database Maintenance API (Admin Only)
+export const clearSalesData = async () => {
+  const response = await authFetch("/api/sales", {
+    method: "DELETE"
+  });
+  return handleResponse(response);
+};
+
+export const clearCashflowData = async () => {
+  const response = await authFetch("/api/cashflow", {
+    method: "DELETE"
+  });
+  return handleResponse(response);
+};
