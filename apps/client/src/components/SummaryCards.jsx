@@ -7,6 +7,7 @@ import {
   StatNumber,
   HStack,
   Icon,
+  Text,
   useColorModeValue
 } from "@chakra-ui/react";
 import {
@@ -15,10 +16,25 @@ import {
   CheckCircleIcon,
   InfoIcon,
   StarIcon,
+  SunIcon,
   TimeIcon,
   WarningIcon
 } from "@chakra-ui/icons";
 import { formatCurrency, formatNumber } from "../utils/format";
+
+const formatLastUpdate = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (isNaN(date.getTime())) return null;
+  return date.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "America/Sao_Paulo"
+  });
+};
 
 const SummaryCards = ({ summary, onCanceledClick }) => {
   if (!summary) return null;
@@ -27,8 +43,13 @@ const SummaryCards = ({ summary, onCanceledClick }) => {
   const cardBorder = useColorModeValue("gray.100", "gray.700");
   const labelColor = useColorModeValue("gray.500", "gray.300");
   const valueColor = useColorModeValue("gray.800", "gray.100");
+  const mutedColor = useColorModeValue("gray.400", "gray.500");
+
+  const lastUpdateFormatted = formatLastUpdate(summary.lastUpdate);
 
   const items = [
+    { title: "Vendas Hoje", value: formatCurrency(summary.todayRevenue), icon: SunIcon },
+    { title: "Vendas Ontem", value: formatCurrency(summary.yesterdayRevenue), icon: CalendarIcon },
     { title: "Faturamento", value: formatCurrency(summary.totalRevenue), icon: StarIcon },
     { title: "Ticket médio", value: formatCurrency(summary.ticketAverage), icon: TimeIcon },
     { title: "Itens vendidos", value: formatNumber(summary.totalQuantity), icon: CheckCircleIcon },
@@ -46,40 +67,47 @@ const SummaryCards = ({ summary, onCanceledClick }) => {
   ];
 
   return (
-    <SimpleGrid className="panel" columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing={4}>
-      {items.map((item) => (
-        <Box
-          key={item.title}
-          bg={cardBg}
-          p={5}
-          borderRadius="xl"
-          boxShadow="md"
-          border="1px solid"
-          borderColor={cardBorder}
-          cursor={item.onClick ? "pointer" : "default"}
-          _hover={item.onClick ? { boxShadow: "lg", transform: "translateY(-2px)" } : undefined}
-          transition="all 0.2s ease"
-          onClick={item.onClick}
-        >
-          <Stat>
-            <StatLabel fontSize="sm" color={labelColor} textTransform="uppercase" letterSpacing="wide">
-              <HStack spacing={2}>
-                <Icon as={item.icon} color="blue.500" />
-                <span>{item.title}</span>
-              </HStack>
-            </StatLabel>
-            <StatNumber fontSize="2xl" fontWeight="bold" color={valueColor}>
-              {item.value}
-            </StatNumber>
-            {item.help && (
-              <StatHelpText fontSize="sm" color={labelColor} mt={1}>
-                {item.help}
-              </StatHelpText>
-            )}
-          </Stat>
-        </Box>
-      ))}
-    </SimpleGrid>
+    <>
+      {lastUpdateFormatted && (
+        <Text fontSize="xs" color={mutedColor} mb={2} textAlign="right">
+          Última atualização: {lastUpdateFormatted}
+        </Text>
+      )}
+      <SimpleGrid className="panel" columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing={4}>
+        {items.map((item) => (
+          <Box
+            key={item.title}
+            bg={cardBg}
+            p={5}
+            borderRadius="xl"
+            boxShadow="md"
+            border="1px solid"
+            borderColor={cardBorder}
+            cursor={item.onClick ? "pointer" : "default"}
+            _hover={item.onClick ? { boxShadow: "lg", transform: "translateY(-2px)" } : undefined}
+            transition="all 0.2s ease"
+            onClick={item.onClick}
+          >
+            <Stat>
+              <StatLabel fontSize="sm" color={labelColor} textTransform="uppercase" letterSpacing="wide">
+                <HStack spacing={2}>
+                  <Icon as={item.icon} color="blue.500" />
+                  <span>{item.title}</span>
+                </HStack>
+              </StatLabel>
+              <StatNumber fontSize="2xl" fontWeight="bold" color={valueColor}>
+                {item.value}
+              </StatNumber>
+              {item.help && (
+                <StatHelpText fontSize="sm" color={labelColor} mt={1}>
+                  {item.help}
+                </StatHelpText>
+              )}
+            </Stat>
+          </Box>
+        ))}
+      </SimpleGrid>
+    </>
   );
 };
 

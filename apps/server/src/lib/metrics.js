@@ -277,10 +277,13 @@ const getAbc = (sales, { start, end, store }) => {
   const map = new Map();
 
   filtered.forEach((sale) => {
-    const key = sale.adName || sale.product;
+    const adName = sale.adName || sale.product;
+    const storeName = sale.store || "Todas";
+    const key = `${adName}|||${storeName}`;
     const current = map.get(key) || {
-      product: key,
-      adName: key,
+      product: adName,
+      adName,
+      store: storeName,
       total: 0,
       quantity: 0,
       image: "",
@@ -327,6 +330,7 @@ const getAbcDetails = (sales, { start, end, store, adName }) => {
   if (!adName) return { adName: "", variations: [], sizes: [] };
   const filtered = filterSales(sales, { start, end, store }).filter(
     (sale) => (sale.adName || sale.product || "") === adName
+      && (!store || sale.store === store)
   );
 
   const variationMap = new Map();

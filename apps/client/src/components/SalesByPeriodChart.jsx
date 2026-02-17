@@ -7,7 +7,7 @@ import {
   ResponsiveContainer,
   CartesianGrid
 } from "recharts";
-import { Box, Button, Flex, Text, HStack, useColorModeValue } from "@chakra-ui/react";
+import { Box, Button, Flex, Select, Text, HStack, useColorModeValue } from "@chakra-ui/react";
 import { CalendarIcon } from "@chakra-ui/icons";
 import { formatCurrency } from "../utils/format";
 
@@ -74,7 +74,7 @@ const getPeriodTooltipLabel = (label) => {
   return { primary: `Período: ${label}` };
 };
 
-const SalesByPeriodChart = ({ data }) => {
+const SalesByPeriodChart = ({ data, period, onPeriodChange }) => {
   const panelBg = useColorModeValue("white", "gray.800");
   const tooltipBg = useColorModeValue("white", "gray.800");
   const tooltipBorder = useColorModeValue("gray.100", "gray.700");
@@ -90,9 +90,21 @@ const SalesByPeriodChart = ({ data }) => {
             <span>Vendas</span>
           </HStack>
         </Text>
-        <Button size="sm" onClick={() => downloadCsv(data, "vendas_por_periodo.csv")} colorScheme="blue">
-          Exportar CSV
-        </Button>
+        <HStack spacing={2}>
+          <Select
+            size="sm"
+            w="130px"
+            value={period}
+            onChange={(e) => onPeriodChange(e.target.value)}
+          >
+            <option value="month">Mensal</option>
+            <option value="week">Semanal</option>
+            <option value="day">Diário</option>
+          </Select>
+          <Button size="sm" onClick={() => downloadCsv(data, "vendas_por_periodo.csv")} colorScheme="blue">
+            Exportar CSV
+          </Button>
+        </HStack>
       </Flex>
       <div className="chart">
         <ResponsiveContainer width="100%" height={280}>

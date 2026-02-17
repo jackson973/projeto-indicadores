@@ -274,11 +274,19 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 router.get("/summary", async (req, res) => {
   try {
     if (!(await hasSales())) {
-      return res.json(getSummary([], {}));
+      return res.json({ ...getSummary([], {}), lastUpdate: null, todayRevenue: 0, yesterdayRevenue: 0 });
     }
     const salesRepository = require('../db/salesRepository');
-    const sales = await salesRepository.getSales(req.query);
-    return res.json(getSummary(sales, req.query));
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const [sales, lastUpdate, todayRevenue, yesterdayRevenue] = await Promise.all([
+      salesRepository.getSales(req.query),
+      salesRepository.getLastUpdate(),
+      salesRepository.getDailyRevenue(today, req.query),
+      salesRepository.getDailyRevenue(yesterday, req.query)
+    ]);
+    return res.json({ ...getSummary(sales, req.query), lastUpdate, todayRevenue, yesterdayRevenue });
   } catch (error) {
     console.error('Summary error:', error);
     return res.status(500).json({ error: error.message });

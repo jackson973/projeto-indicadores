@@ -60,19 +60,22 @@ const AbcTable = ({ data, filters }) => {
   const expandedBg = useColorModeValue("gray.50", "gray.700");
   const cardBorder = useColorModeValue("gray.200", "gray.600");
 
-  const toggleItem = async (adName) => {
-    const isOpen = expanded === adName;
-    const next = isOpen ? "" : adName;
+  const toggleItem = async (item) => {
+    const adName = item.adName || item.product;
+    const itemKey = item.store ? `${adName}|||${item.store}` : adName;
+    const isOpen = expanded === itemKey;
+    const next = isOpen ? "" : itemKey;
     setExpanded(next);
-    if (!details[adName] && !loading[adName] && next) {
-      setLoading((current) => ({ ...current, [adName]: true }));
+    if (!details[itemKey] && !loading[itemKey] && next) {
+      setLoading((current) => ({ ...current, [itemKey]: true }));
       const params = new URLSearchParams(paramsBase);
       params.set("adName", adName);
+      if (item.store) params.set("store", item.store);
       try {
         const payload = await fetchAbcDetails(params.toString());
-        setDetails((current) => ({ ...current, [adName]: payload }));
+        setDetails((current) => ({ ...current, [itemKey]: payload }));
       } finally {
-        setLoading((current) => ({ ...current, [adName]: false }));
+        setLoading((current) => ({ ...current, [itemKey]: false }));
       }
     }
   };
@@ -198,12 +201,13 @@ const AbcTable = ({ data, filters }) => {
     <VStack align="stretch" spacing={3}>
       {pageItems.map((item) => {
         const adName = item.adName || item.product;
-        const isOpen = expanded === adName;
+        const itemKey = item.store ? `${adName}|||${item.store}` : adName;
+        const isOpen = expanded === itemKey;
         const platformMeta = getPlatformMeta(item.platformLabel || "");
 
         return (
           <Box
-            key={adName}
+            key={itemKey}
             borderWidth="1px"
             borderColor={isOpen ? "blue.400" : cardBorder}
             borderRadius="lg"
@@ -212,7 +216,7 @@ const AbcTable = ({ data, filters }) => {
           >
             <Box
               p={3}
-              onClick={() => toggleItem(adName)}
+              onClick={() => toggleItem(item)}
               cursor="pointer"
               _active={{ bg: rowHover }}
             >
@@ -236,8 +240,10 @@ const AbcTable = ({ data, filters }) => {
                 </Box>
               </Flex>
 
-              {/* Row 2: Platform */}
+              {/* Row 2: Store + Platform */}
               <Flex align="center" gap={1} ml="44px" mb={1}>
+                <Text fontSize="xs" color={mutedText}>{item.store || "Todas"}</Text>
+                <Text fontSize="xs" color={mutedText}>·</Text>
                 {platformMeta.logo ? (
                   <Image src={platformMeta.logo} boxSize="16px" borderRadius="full" />
                 ) : null}
@@ -262,7 +268,7 @@ const AbcTable = ({ data, filters }) => {
             {/* Expanded details */}
             <Collapse in={isOpen} animateOpacity>
               <Box bg={expandedBg} borderTop="1px solid" borderColor={cardBorder}>
-                {renderExpandedDetails(adName)}
+                {renderExpandedDetails(itemKey)}
               </Box>
             </Collapse>
           </Box>
@@ -278,6 +284,7 @@ const AbcTable = ({ data, filters }) => {
           <Tr>
             <Th>Imagem</Th>
             <Th>Nome do anúncio</Th>
+            <Th>Loja</Th>
             <Th>Plataforma</Th>
             <Th isNumeric>Quantidade vendida</Th>
             <Th isNumeric>Faturamento</Th>
@@ -287,17 +294,19 @@ const AbcTable = ({ data, filters }) => {
         <Tbody>
           {pageItems.map((item) => {
             const adName = item.adName || item.product;
-            const isOpen = expanded === adName;
+            const itemKey = item.store ? `${adName}|||${item.store}` : adName;
+            const isOpen = expanded === itemKey;
             const platformMeta = getPlatformMeta(item.platformLabel || "");
 
             return (
-              <Fragment key={adName}>
+              <Fragment key={itemKey}>
                 <Tr
-                  onClick={() => toggleItem(adName)}
+                  onClick={() => toggleItem(item)}
                   _hover={{ bg: rowHover, cursor: "pointer" }}
                 >
                   <Td>{item.image ? <Image src={item.image} boxSize="40px" borderRadius="md" /> : "-"}</Td>
                   <Td>{adName}</Td>
+                  <Td>{item.store || "Todas"}</Td>
                   <Td>
                     {platformMeta.logo ? (
                       <Image src={platformMeta.logo} boxSize="28px" borderRadius="full" alt={platformMeta.label} />
@@ -314,10 +323,10 @@ const AbcTable = ({ data, filters }) => {
                   </Td>
                 </Tr>
                 <Tr>
-                  <Td colSpan={6} p={0} border="none">
+                  <Td colSpan={7} p={0} border="none">
                     <Collapse in={isOpen} animateOpacity>
                       <Box bg={expandedBg} p={4} borderBottomRadius="md">
-                        {renderExpandedDetails(adName)}
+                        {renderExpandedDetails(itemKey)}
                       </Box>
                     </Collapse>
                   </Td>

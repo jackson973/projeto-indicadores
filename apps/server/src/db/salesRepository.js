@@ -243,11 +243,47 @@ async function getStates() {
   return result.rows.map(r => r.state);
 }
 
+/**
+ * Get the timestamp of the last sales import/update
+ */
+async function getLastUpdate() {
+  const result = await db.query(
+    "SELECT MAX(updated_at AT TIME ZONE 'UTC') as last_update FROM sales"
+  );
+  return result.rows[0]?.last_update || null;
+}
+
+/**
+ * Get total revenue for a specific date (excluding canceled orders)
+ */
+async function getDailyRevenue(date, filters = {}) {
+  const params = [date];
+  let storeCondition = '';
+  if (filters.store) {
+    storeCondition = ` AND store = $2`;
+    params.push(filters.store);
+  }
+  const result = await db.query(
+    `SELECT COALESCE(SUM(total), 0) as revenue
+     FROM sales
+     WHERE date::date = $1::date${storeCondition}
+       AND (
+         status IS NULL OR status = ''
+         OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
+           NOT SIMILAR TO '%(cancelado|para devolver|pos-venda|pos venda)%'
+       )`,
+    params
+  );
+  return parseFloat(result.rows[0]?.revenue) || 0;
+}
+
 module.exports = {
   batchUpsertSales,
   getSales,
   hasSales,
   clearSales,
   getStores,
-  getStates
+  getStates,
+  getLastUpdate,
+  getDailyRevenue
 };

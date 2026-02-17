@@ -56,7 +56,6 @@ import CashFlowDashboard from "./components/CashFlowDashboard";
 import {
   fetchSummary,
   fetchStores,
-  fetchStates,
   fetchSalesByPeriod,
   fetchSalesByStore,
   fetchSalesByState,
@@ -98,7 +97,6 @@ const defaultFilters = {
   startMonth: `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`,
   endMonth: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
   store: "",
-  state: "",
   period: "month"
 };
 
@@ -115,7 +113,6 @@ const buildParams = (filters) => {
   params.set("start", monthToStartDate(filters.startMonth));
   params.set("end", monthToEndDate(filters.endMonth));
   if (filters.store) params.set("store", filters.store);
-  if (filters.state) params.set("state", filters.state);
   if (filters.period) params.set("period", filters.period);
   return params.toString();
 };
@@ -141,7 +138,6 @@ const App = () => {
   const [hasData, setHasData] = useState(false);
   const [filters, setFilters] = useState(defaultFilters);
   const [stores, setStores] = useState([]);
-  const [states, setStates] = useState([]);
   const [summary, setSummary] = useState(null);
   const [salesByPeriod, setSalesByPeriod] = useState([]);
   const [salesByStore, setSalesByStore] = useState([]);
@@ -219,7 +215,6 @@ const App = () => {
     const [
       summaryData,
       storeList,
-      stateList,
       periodData,
       storeData,
       stateData,
@@ -228,7 +223,6 @@ const App = () => {
     ] = await Promise.all([
       fetchSummary(params),
       fetchStores(),
-      fetchStates(),
       fetchSalesByPeriod(params),
       fetchSalesByStore(params),
       fetchSalesByState(params),
@@ -238,7 +232,6 @@ const App = () => {
 
     setSummary(summaryData);
     setStores(storeList);
-    setStates(stateList);
     setSalesByPeriod(periodData);
     setSalesByStore(storeData);
     setSalesByState(stateData);
@@ -671,70 +664,34 @@ const App = () => {
                     </Select>
                   </FormControl>
                 </SimpleGrid>
-                <SimpleGrid columns={2} spacing={2}>
-                  <Select
-                    size="sm"
-                    value={filters.store}
-                    onChange={(e) => setFilters(f => ({ ...f, store: e.target.value }))}
-                  >
-                    <option value="">Todas as lojas</option>
-                    {stores.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </Select>
-                  <Select
-                    size="sm"
-                    value={filters.state}
-                    onChange={(e) => setFilters(f => ({ ...f, state: e.target.value }))}
-                  >
-                    <option value="">Todos estados</option>
-                    {states.map((s) => <option key={s} value={s}>{s}</option>)}
-                  </Select>
-                </SimpleGrid>
                 <Select
                   size="sm"
-                  value={filters.period}
-                  onChange={(e) => setFilters(f => ({ ...f, period: e.target.value }))}
+                  value={filters.store}
+                  onChange={(e) => setFilters(f => ({ ...f, store: e.target.value }))}
                 >
-                  <option value="month">Agrupamento: Mensal</option>
-                  <option value="week">Agrupamento: Semanal</option>
-                  <option value="day">Agrupamento: Diário</option>
+                  <option value="">Todas as lojas</option>
+                  {stores.map((s) => <option key={s} value={s}>{s}</option>)}
                 </Select>
               </VStack>
             ) : (
-              <Flex justify="space-between" align="flex-end" mb={6} wrap="wrap" gap={3}>
-                <HStack spacing={3} wrap="wrap">
-                  <FormControl w="180px">
-                    <FormLabel fontSize="xs" mb={1}>De</FormLabel>
-                    <Select size="sm" value={filters.startMonth} onChange={(e) => setFilters(f => ({ ...f, startMonth: e.target.value }))}>
-                      {MONTH_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                    </Select>
-                  </FormControl>
-                  <FormControl w="180px">
-                    <FormLabel fontSize="xs" mb={1}>Até</FormLabel>
-                    <Select size="sm" value={filters.endMonth} onChange={(e) => setFilters(f => ({ ...f, endMonth: e.target.value }))}>
-                      {MONTH_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
-                    </Select>
-                  </FormControl>
-                  <FormControl w="180px">
-                    <FormLabel fontSize="xs" mb={1}>Loja</FormLabel>
-                    <Select size="sm" value={filters.store} onChange={(e) => setFilters(f => ({ ...f, store: e.target.value }))}>
-                      <option value="">Todas as lojas</option>
-                      {stores.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </Select>
-                  </FormControl>
-                  <FormControl w="180px">
-                    <FormLabel fontSize="xs" mb={1}>Estado</FormLabel>
-                    <Select size="sm" value={filters.state} onChange={(e) => setFilters(f => ({ ...f, state: e.target.value }))}>
-                      <option value="">Todos estados</option>
-                      {states.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </Select>
-                  </FormControl>
-                </HStack>
+              <Flex justify="flex-start" align="flex-end" mb={6} wrap="wrap" gap={3}>
                 <FormControl w="180px">
-                  <FormLabel fontSize="xs" mb={1}>Agrupamento</FormLabel>
-                  <Select size="sm" value={filters.period} onChange={(e) => setFilters(f => ({ ...f, period: e.target.value }))}>
-                    <option value="month">Mensal</option>
-                    <option value="week">Semanal</option>
-                    <option value="day">Diário</option>
+                  <FormLabel fontSize="xs" mb={1}>De</FormLabel>
+                  <Select size="sm" value={filters.startMonth} onChange={(e) => setFilters(f => ({ ...f, startMonth: e.target.value }))}>
+                    {MONTH_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </Select>
+                </FormControl>
+                <FormControl w="180px">
+                  <FormLabel fontSize="xs" mb={1}>Até</FormLabel>
+                  <Select size="sm" value={filters.endMonth} onChange={(e) => setFilters(f => ({ ...f, endMonth: e.target.value }))}>
+                    {MONTH_OPTIONS.map((opt) => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                  </Select>
+                </FormControl>
+                <FormControl w="180px">
+                  <FormLabel fontSize="xs" mb={1}>Loja</FormLabel>
+                  <Select size="sm" value={filters.store} onChange={(e) => setFilters(f => ({ ...f, store: e.target.value }))}>
+                    <option value="">Todas as lojas</option>
+                    {stores.map((s) => <option key={s} value={s}>{s}</option>)}
                   </Select>
                 </FormControl>
               </Flex>
@@ -746,7 +703,7 @@ const App = () => {
               onClose={canceledDrawer.onClose}
               filters={{ ...filters, start: monthToStartDate(filters.startMonth), end: monthToEndDate(filters.endMonth) }}
             />
-            <SalesByPeriodChart data={salesByPeriod} />
+            <SalesByPeriodChart data={salesByPeriod} period={filters.period} onPeriodChange={(value) => setFilters(f => ({ ...f, period: value }))} />
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
               <SalesByStoreChart data={salesByStore} />
               <SalesByPlatformChart data={salesByPlatform} />
