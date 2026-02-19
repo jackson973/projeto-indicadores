@@ -52,6 +52,7 @@ import ResetPasswordPage from "./components/ResetPasswordPage";
 import UsersManagement from "./components/UsersManagement";
 import DatabaseMaintenance from "./components/DatabaseMaintenance";
 import SisplanSettings from "./components/SisplanSettings";
+import WhatsappSettings from "./components/WhatsappSettings";
 import CashFlow from "./components/CashFlow";
 import CashFlowDashboard from "./components/CashFlowDashboard";
 import {
@@ -335,6 +336,10 @@ const App = () => {
         {
           label: "Conexão Sisplan",
           view: "sisplan-settings"
+        },
+        {
+          label: "WhatsApp Bot",
+          view: "whatsapp-settings"
         },
         {
           label: "Manutenção de base",
@@ -633,7 +638,7 @@ const App = () => {
           </Alert>
         )}
 
-        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "database-maintenance" && (
+        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "database-maintenance" && (
           <Center py={10}>
             <Box maxW="680px" w="full">
               <UploadForm onUpload={handleUpload} />
@@ -651,6 +656,10 @@ const App = () => {
 
         {activeView === "sisplan-settings" && user?.role === "admin" && (
           <SisplanSettings />
+        )}
+
+        {activeView === "whatsapp-settings" && user?.role === "admin" && (
+          <WhatsappSettings />
         )}
 
         {activeView === "cashflow" && (

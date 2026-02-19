@@ -21,7 +21,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, email, password, role, whatsapp } = req.body;
     if (!name || !email || !password) {
       return res.status(400).json({ message: 'Nome, e-mail e senha são obrigatórios.' });
     }
@@ -39,7 +39,8 @@ router.post('/', async (req, res) => {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       passwordHash,
-      role: role || 'user'
+      role: role || 'user',
+      whatsapp: whatsapp?.trim() || null
     });
 
     // Send welcome email with credentials
@@ -59,7 +60,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const { name, email, role, active } = req.body;
+    const { name, email, role, active, whatsapp } = req.body;
     if (!name || !email) {
       return res.status(400).json({ message: 'Nome e e-mail são obrigatórios.' });
     }
@@ -68,7 +69,8 @@ router.put('/:id', async (req, res) => {
       name: name.trim(),
       email: email.toLowerCase().trim(),
       role: role || 'user',
-      active: active !== undefined ? active : true
+      active: active !== undefined ? active : true,
+      whatsapp: whatsapp?.trim() || null
     });
     if (!user) {
       return res.status(404).json({ message: 'Usuário não encontrado.' });

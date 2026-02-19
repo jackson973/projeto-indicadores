@@ -11,6 +11,7 @@
     "db:shell": "docker exec -it projeto-indicadores-db psql -U indicadores_user -d indicadores"
   },
   "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.16",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -21,6 +22,7 @@
     "node-firebird": "^1.1.10",
     "nodemailer": "^8.0.1",
     "pg": "^8.11.3",
+    "qrcode": "^1.5.4",
     "xlsx": "^0.18.5"
   }
 }

@@ -9,6 +9,7 @@ const usersRouter = require("./routes/users");
 const cashflowRouter = require("./routes/cashflow");
 const emailRouter = require("./routes/email");
 const sisplanRouter = require("./routes/sisplan");
+const whatsappRouter = require("./routes/whatsapp");
 const { authenticate } = require("./middleware/auth");
 
 // Initialize database connection (will test connection on import)
@@ -25,6 +26,23 @@ startCashflowAlertScheduler();
 const { startSisplanSyncScheduler } = require('./services/sisplanSyncService');
 startSisplanSyncScheduler();
 
+// Start WhatsApp bot if active
+const { startWhatsappBot } = require('./services/whatsappBotService');
+const whatsappSettingsRepo = require('./db/whatsappRepository');
+(async () => {
+  try {
+    const settings = await whatsappSettingsRepo.getSettings();
+    if (settings && settings.active) {
+      console.log('[WhatsApp Bot] Settings active, attempting to restore connection...');
+      await startWhatsappBot();
+    } else {
+      console.log('[WhatsApp Bot] Not active, skipping auto-start.');
+    }
+  } catch (error) {
+    console.error('[WhatsApp Bot] Failed to auto-start:', error.message);
+  }
+})();
+
 const app = express();
 
 app.use(cors());
@@ -38,6 +56,7 @@ app.use("/api/users", usersRouter);
 app.use("/api/cashflow", cashflowRouter);
 app.use("/api/email", emailRouter);
 app.use("/api/sisplan", sisplanRouter);
+app.use("/api/whatsapp", whatsappRouter);
 app.use("/api", authenticate, apiRouter);
 
 app.get("/health", (_req, res) => {

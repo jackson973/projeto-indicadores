@@ -397,6 +397,40 @@ export const fetchSisplanActive = async () => {
   return handleResponse(response);
 };
 
+// WhatsApp API (Admin)
+export const fetchWhatsappSettings = async () => {
+  const response = await authFetch("/api/whatsapp");
+  return handleResponse(response);
+};
+
+export const updateWhatsappSettings = async (data) => {
+  const response = await authFetch("/api/whatsapp", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const testWhatsappLlm = async (data) => {
+  const response = await authFetch("/api/whatsapp/test-llm", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const connectWhatsapp = async () => {
+  const response = await authFetch("/api/whatsapp/connect", { method: "POST" });
+  return handleResponse(response);
+};
+
+export const disconnectWhatsapp = async () => {
+  const response = await authFetch("/api/whatsapp/disconnect", { method: "POST" });
+  return handleResponse(response);
+};
+
 // Database Maintenance API (Admin Only)
 export const clearSalesData = async () => {
   const response = await authFetch("/api/sales", {

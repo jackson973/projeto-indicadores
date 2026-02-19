@@ -41,7 +41,7 @@ const UsersManagement = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingUser, setEditingUser] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user", active: true });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user", active: true, whatsapp: "" });
   const [saving, setSaving] = useState(false);
   const modal = useDisclosure();
   const toast = useToast();
@@ -66,13 +66,13 @@ const UsersManagement = () => {
 
   const openCreate = () => {
     setEditingUser(null);
-    setForm({ name: "", email: "", password: "", role: "user", active: true });
+    setForm({ name: "", email: "", password: "", role: "user", active: true, whatsapp: "" });
     modal.onOpen();
   };
 
   const openEdit = (user) => {
     setEditingUser(user);
-    setForm({ name: user.name, email: user.email, password: "", role: user.role, active: user.active });
+    setForm({ name: user.name, email: user.email, password: "", role: user.role, active: user.active, whatsapp: user.whatsapp || "" });
     modal.onOpen();
   };
 
@@ -84,7 +84,8 @@ const UsersManagement = () => {
           name: form.name,
           email: form.email,
           role: form.role,
-          active: form.active
+          active: form.active,
+          whatsapp: form.whatsapp
         });
         if (form.password) {
           await updateUserPassword(editingUser.id, form.password);
@@ -95,7 +96,8 @@ const UsersManagement = () => {
           name: form.name,
           email: form.email,
           password: form.password,
-          role: form.role
+          role: form.role,
+          whatsapp: form.whatsapp
         });
         toast({ title: "Usuário criado.", status: "success", duration: 3000 });
       }
@@ -146,6 +148,7 @@ const UsersManagement = () => {
             <Tr>
               <Th>Nome</Th>
               <Th>E-mail</Th>
+              <Th>WhatsApp</Th>
               <Th>Perfil</Th>
               <Th>Status</Th>
               <Th>Criado em</Th>
@@ -157,6 +160,7 @@ const UsersManagement = () => {
               <Tr key={user.id}>
                 <Td>{user.name}</Td>
                 <Td>{user.email}</Td>
+                <Td>{user.whatsapp || "-"}</Td>
                 <Td>
                   <Badge colorScheme={user.role === "admin" ? "purple" : "gray"}>
                     {user.role === "admin" ? "Admin" : "Usuário"}
@@ -222,6 +226,14 @@ const UsersManagement = () => {
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   placeholder={editingUser ? "Deixe vazio para não alterar" : "Mínimo 6 caracteres"}
+                />
+              </FormControl>
+              <FormControl>
+                <FormLabel>WhatsApp</FormLabel>
+                <Input
+                  value={form.whatsapp}
+                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                  placeholder="5511999999999"
                 />
               </FormControl>
               <FormControl>
