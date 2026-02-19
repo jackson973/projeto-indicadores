@@ -6,7 +6,7 @@ const salesRepository = require('../db/salesRepository');
  * @returns {Promise<{inserted: number, updated: number}>}
  */
 const setSales = async (rows) => {
-  return await salesRepository.batchUpsertSales(rows);
+  return await salesRepository.batchUpsertSales(rows, 'online');
 };
 
 /**

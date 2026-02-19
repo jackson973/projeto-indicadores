@@ -85,6 +85,16 @@ const splitVariationAndSize = (sale) => {
     };
   }
 
+  if (rawVariation.includes("-")) {
+    const parts = rawVariation.split("-");
+    if (parts.length >= 3) {
+      return {
+        variation: parts[1] || "Não informado",
+        size: parts[2] || "Não informado"
+      };
+    }
+  }
+
   const adName = String(sale.adName || sale.product || "").trim();
   const rawSku = String(sale.sku || "").trim();
   if (rawSku && adName && rawSku.startsWith(`${adName}-`)) {
@@ -378,7 +388,11 @@ const getSummary = (sales, { start, end, store }) => {
   const stores = new Set(activeSales.map((sale) => sale.store));
   const products = new Set(activeSales.map((sale) => sale.product));
   const states = new Set(activeSales.map((sale) => sale.state).filter(Boolean));
-  const totalSales = activeSales.length;
+  const totalSales = new Set(
+    activeSales.map(
+      (sale) => sale.orderId || `${sale.date.toISOString()}-${sale.store}-${sale.product}`
+    )
+  ).size;
   const ticketAverage = totalSales ? total / totalSales : 0;
   const canceledTotal = canceledSales.reduce(
     (sum, sale) => sum + getUnitPrice(sale) * sale.quantity,

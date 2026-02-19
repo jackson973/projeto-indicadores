@@ -505,6 +505,18 @@ router.get("/abc/details", async (req, res) => {
   }
 });
 
+// ── Sisplan Active Check ──
+
+router.get("/sisplan-active", async (req, res) => {
+  try {
+    const sisplanRepo = require('../db/sisplanRepository');
+    const active = await sisplanRepo.isActive();
+    return res.json({ active });
+  } catch (error) {
+    return res.json({ active: false });
+  }
+});
+
 // ── Clear All Sales Data (Admin Only) ──
 
 router.delete("/sales", authenticate, requireAdmin, async (req, res) => {

@@ -7,7 +7,7 @@ const db = require('./connection');
  * @param {Array} salesData - Array of normalized sale objects
  * @returns {Promise<{inserted: number, updated: number}>}
  */
-async function batchUpsertSales(salesData) {
+async function batchUpsertSales(salesData, saleChannel = 'online') {
   if (!salesData || salesData.length === 0) {
     return { inserted: 0, updated: 0 };
   }
@@ -31,7 +31,7 @@ async function batchUpsertSales(salesData) {
 
   for (let i = 0; i < uniqueSalesData.length; i += BATCH_SIZE) {
     const batch = uniqueSalesData.slice(i, i + BATCH_SIZE);
-    const result = await upsertBatch(batch);
+    const result = await upsertBatch(batch, saleChannel);
     totalInserted += result.inserted;
     totalUpdated += result.updated;
   }
@@ -42,7 +42,7 @@ async function batchUpsertSales(salesData) {
 /**
  * Internal function to upsert a single batch
  */
-async function upsertBatch(batch) {
+async function upsertBatch(batch, saleChannel = 'online') {
   const client = await db.getClient();
 
   try {
@@ -70,24 +70,26 @@ async function upsertBatch(batch) {
         sale.status || '',
         sale.cancelBy || '',
         sale.cancelReason || '',
-        sale.image || ''
+        sale.image || '',
+        saleChannel
       ];
 
       values.push(
         `($${paramIndex}, $${paramIndex+1}, $${paramIndex+2}, $${paramIndex+3}, ` +
         `$${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6}, $${paramIndex+7}, ` +
         `$${paramIndex+8}, $${paramIndex+9}, $${paramIndex+10}, $${paramIndex+11}, ` +
-        `$${paramIndex+12}, $${paramIndex+13}, $${paramIndex+14}, $${paramIndex+15})`
+        `$${paramIndex+12}, $${paramIndex+13}, $${paramIndex+14}, $${paramIndex+15}, ` +
+        `$${paramIndex+16})`
       );
       params.push(...rowParams);
-      paramIndex += 16;
+      paramIndex += 17;
     });
 
     const query = `
       INSERT INTO sales (
         order_id, date, store, product, ad_name, variation, sku,
         quantity, total, unit_price, state, platform, status,
-        cancel_by, cancel_reason, image
+        cancel_by, cancel_reason, image, sale_channel
       ) VALUES ${values.join(', ')}
       ON CONFLICT (order_id, product, COALESCE(variation, ''))
       DO UPDATE SET
@@ -104,6 +106,7 @@ async function upsertBatch(batch) {
         cancel_by = EXCLUDED.cancel_by,
         cancel_reason = EXCLUDED.cancel_reason,
         image = EXCLUDED.image,
+        sale_channel = EXCLUDED.sale_channel,
         updated_at = CURRENT_TIMESTAMP
       RETURNING (xmax = 0) AS inserted
     `;
@@ -131,7 +134,7 @@ async function upsertBatch(batch) {
  * Get all sales with optional filters
  */
 async function getSales(filters = {}) {
-  const { start, end, store, state, platform, status } = filters;
+  const { start, end, store, state, platform, status, sale_channel } = filters;
 
   const conditions = [];
   const params = [];
@@ -166,6 +169,10 @@ async function getSales(filters = {}) {
     conditions.push(`status = $${paramIndex++}`);
     params.push(status);
   }
+  if (sale_channel) {
+    conditions.push(`sale_channel = $${paramIndex++}`);
+    params.push(sale_channel);
+  }
 
   const whereClause = conditions.length > 0
     ? `WHERE ${conditions.join(' AND ')}`
@@ -189,7 +196,8 @@ async function getSales(filters = {}) {
       status,
       cancel_by as "cancelBy",
       cancel_reason as "cancelReason",
-      image
+      image,
+      sale_channel as "saleChannel"
     FROM sales
     ${whereClause}
     ORDER BY date DESC
@@ -258,15 +266,20 @@ async function getLastUpdate() {
  */
 async function getDailyRevenue(date, filters = {}) {
   const params = [date];
-  let storeCondition = '';
+  let extraConditions = '';
+  let paramIdx = 2;
   if (filters.store) {
-    storeCondition = ` AND store = $2`;
+    extraConditions += ` AND store = $${paramIdx++}`;
     params.push(filters.store);
+  }
+  if (filters.sale_channel) {
+    extraConditions += ` AND sale_channel = $${paramIdx++}`;
+    params.push(filters.sale_channel);
   }
   const result = await db.query(
     `SELECT COALESCE(SUM(total), 0) as revenue
      FROM sales
-     WHERE date::date = $1::date${storeCondition}
+     WHERE date::date = $1::date${extraConditions}
        AND (
          status IS NULL OR status = ''
          OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))

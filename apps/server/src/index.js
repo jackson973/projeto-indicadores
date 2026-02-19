@@ -8,6 +8,7 @@ const authRouter = require("./routes/auth");
 const usersRouter = require("./routes/users");
 const cashflowRouter = require("./routes/cashflow");
 const emailRouter = require("./routes/email");
+const sisplanRouter = require("./routes/sisplan");
 const { authenticate } = require("./middleware/auth");
 
 // Initialize database connection (will test connection on import)
@@ -19,6 +20,10 @@ require('./db/seedAdmin');
 // Start cashflow alert scheduler
 const { startCashflowAlertScheduler } = require('./services/cashflowAlertScheduler');
 startCashflowAlertScheduler();
+
+// Start Sisplan sync scheduler
+const { startSisplanSyncScheduler } = require('./services/sisplanSyncService');
+startSisplanSyncScheduler();
 
 const app = express();
 
@@ -32,6 +37,7 @@ app.use("/api/auth", authRouter);
 app.use("/api/users", usersRouter);
 app.use("/api/cashflow", cashflowRouter);
 app.use("/api/email", emailRouter);
+app.use("/api/sisplan", sisplanRouter);
 app.use("/api", authenticate, apiRouter);
 
 app.get("/health", (_req, res) => {

@@ -29,6 +29,23 @@ import { fetchAbcDetails } from "../api";
 
 const PAGE_SIZE = 8;
 
+const NoPhoto = ({ size }) => (
+  <Flex
+    boxSize={`${size}px`}
+    borderRadius="md"
+    bg="gray.100"
+    flexShrink={0}
+    align="center"
+    justify="center"
+  >
+    <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="none" stroke="#A0AEC0" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <circle cx="8.5" cy="8.5" r="1.5" />
+      <polyline points="21 15 16 10 5 21" />
+    </svg>
+  </Flex>
+);
+
 const classColor = (c) =>
   c === "A" ? "green" : c === "B" ? "yellow" : "gray";
 
@@ -109,7 +126,7 @@ const AbcTable = ({ data, filters }) => {
                     {row.image ? (
                       <Image src={row.image} boxSize="28px" borderRadius="md" flexShrink={0} />
                     ) : (
-                      <Box boxSize="28px" flexShrink={0} />
+                      <NoPhoto size={28} />
                     )}
                     <Text flex={1} noOfLines={1}>{row.variation}</Text>
                     <Text flexShrink={0} fontWeight="medium">{formatNumber(row.quantity)}</Text>
@@ -161,7 +178,7 @@ const AbcTable = ({ data, filters }) => {
                     {row.image ? (
                       <Image src={row.image} boxSize="32px" borderRadius="md" />
                     ) : (
-                      "-"
+                      <NoPhoto size={32} />
                     )}
                   </Td>
                   <Td>{row.variation}</Td>
@@ -225,7 +242,7 @@ const AbcTable = ({ data, filters }) => {
                 {item.image ? (
                   <Image src={item.image} boxSize="36px" borderRadius="md" flexShrink={0} />
                 ) : (
-                  <Box boxSize="36px" borderRadius="md" bg="gray.100" flexShrink={0} />
+                  <NoPhoto size={36} />
                 )}
                 <Tooltip label={adName} placement="top" openDelay={300}>
                   <Text fontSize="sm" fontWeight="medium" flex={1} noOfLines={1}>
@@ -304,7 +321,13 @@ const AbcTable = ({ data, filters }) => {
                   onClick={() => toggleItem(item)}
                   _hover={{ bg: rowHover, cursor: "pointer" }}
                 >
-                  <Td>{item.image ? <Image src={item.image} boxSize="40px" borderRadius="md" /> : "-"}</Td>
+                  <Td>
+                    {item.image ? (
+                      <Image src={item.image} boxSize="40px" borderRadius="md" />
+                    ) : (
+                      <NoPhoto size={40} />
+                    )}
+                  </Td>
                   <Td>{adName}</Td>
                   <Td>{item.store || "Todas"}</Td>
                   <Td>

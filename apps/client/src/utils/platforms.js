@@ -2,6 +2,7 @@ const mercadoLivreLogo = new URL("../../images/mercado_livre.ico", import.meta.u
 const shopeeLogo = encodeURI(new URL("../../images/shopee.ico", import.meta.url).href);
 const sheinLogo = encodeURI(new URL("../../images/shein.ico", import.meta.url).href);
 const tiktokLogo = encodeURI(new URL("../../images/tiktok.ico", import.meta.url).href);
+const sisplanLogo = encodeURI(new URL("../../images/sisplan.ico", import.meta.url).href);
 
 const normalize = (value) => String(value || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 
@@ -18,6 +19,9 @@ export const getPlatformMeta = (name) => {
   }
   if (normalized.includes("tiktok") || normalized.includes("tik tok")) {
     return { label: "TikTok", logo: tiktokLogo };
+  }
+  if (normalized.includes("sisplan")) {
+    return { label: "Sisplan", logo: sisplanLogo };
   }
   return { label: name || "Não informado", logo: null };
 };

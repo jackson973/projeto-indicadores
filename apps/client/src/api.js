@@ -353,6 +353,50 @@ export const checkImportDuplicates = async (boxId, year, month) => {
   return handleResponse(response);
 };
 
+// Sisplan API (Admin)
+export const fetchSisplanSettings = async () => {
+  const response = await authFetch("/api/sisplan");
+  return handleResponse(response);
+};
+
+export const updateSisplanSettings = async (data) => {
+  const response = await authFetch("/api/sisplan", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const testSisplanConnection = async (data) => {
+  const response = await authFetch("/api/sisplan/test-connection", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const testSisplanQuery = async (data) => {
+  const response = await authFetch("/api/sisplan/test-query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const triggerSisplanSync = async () => {
+  const response = await authFetch("/api/sisplan/sync", { method: "POST" });
+  return handleResponse(response);
+};
+
+// Sisplan Active Check (any authenticated user)
+export const fetchSisplanActive = async () => {
+  const response = await authFetch("/api/sisplan-active");
+  return handleResponse(response);
+};
+
 // Database Maintenance API (Admin Only)
 export const clearSalesData = async () => {
   const response = await authFetch("/api/sales", {

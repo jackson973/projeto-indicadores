@@ -51,6 +51,7 @@ import ForgotPasswordModal from "./components/ForgotPasswordModal";
 import ResetPasswordPage from "./components/ResetPasswordPage";
 import UsersManagement from "./components/UsersManagement";
 import DatabaseMaintenance from "./components/DatabaseMaintenance";
+import SisplanSettings from "./components/SisplanSettings";
 import CashFlow from "./components/CashFlow";
 import CashFlowDashboard from "./components/CashFlowDashboard";
 import {
@@ -65,7 +66,8 @@ import {
   login,
   fetchMe,
   setToken,
-  getToken
+  getToken,
+  fetchSisplanActive
 } from "./api";
 
 const SIDEBAR_EXPANDED = "220px";
@@ -97,7 +99,8 @@ const defaultFilters = {
   startMonth: `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`,
   endMonth: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
   store: "",
-  period: "month"
+  period: "month",
+  saleChannel: ""
 };
 
 const monthToStartDate = (v) => v ? `${v}-01` : "";
@@ -114,6 +117,7 @@ const buildParams = (filters) => {
   params.set("end", monthToEndDate(filters.endMonth));
   if (filters.store) params.set("store", filters.store);
   if (filters.period) params.set("period", filters.period);
+  if (filters.saleChannel) params.set("sale_channel", filters.saleChannel);
   return params.toString();
 };
 
@@ -147,6 +151,7 @@ const App = () => {
   const [error, setError] = useState("");
   const [activeView, setActiveView] = useState("upload");
   const [expandedMenu, setExpandedMenu] = useState(null); // For submenu expansion
+  const [sisplanActive, setSisplanActive] = useState(false);
   const isMobile = useBreakpointValue({ base: true, md: false });
   const mobileMenu = useDisclosure();
   const canceledDrawer = useDisclosure();
@@ -183,7 +188,7 @@ const App = () => {
       .finally(() => setAuthLoading(false));
   }, []);
 
-  // After authentication, check if there's existing data in the database
+  // After authentication, check if there's existing data and sisplan status
   useEffect(() => {
     if (!user) return;
     fetchSummary("")
@@ -194,6 +199,9 @@ const App = () => {
           loadData(filters);
         }
       })
+      .catch(() => {});
+    fetchSisplanActive()
+      .then((data) => setSisplanActive(data.active))
       .catch(() => {});
   }, [user]);
 
@@ -323,6 +331,10 @@ const App = () => {
         {
           label: "Gerenciar usuários",
           view: "users"
+        },
+        {
+          label: "Conexão Sisplan",
+          view: "sisplan-settings"
         },
         {
           label: "Manutenção de base",
@@ -621,7 +633,7 @@ const App = () => {
           </Alert>
         )}
 
-        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && (
+        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "database-maintenance" && (
           <Center py={10}>
             <Box maxW="680px" w="full">
               <UploadForm onUpload={handleUpload} />
@@ -635,6 +647,10 @@ const App = () => {
 
         {activeView === "database-maintenance" && user?.role === "admin" && (
           <DatabaseMaintenance />
+        )}
+
+        {activeView === "sisplan-settings" && user?.role === "admin" && (
+          <SisplanSettings />
         )}
 
         {activeView === "cashflow" && (
@@ -672,6 +688,17 @@ const App = () => {
                   <option value="">Todas as lojas</option>
                   {stores.map((s) => <option key={s} value={s}>{s}</option>)}
                 </Select>
+                {sisplanActive && (
+                  <Select
+                    size="sm"
+                    value={filters.saleChannel}
+                    onChange={(e) => setFilters(f => ({ ...f, saleChannel: e.target.value }))}
+                  >
+                    <option value="">Todos os canais</option>
+                    <option value="online">Online</option>
+                    <option value="atacado">Atacado</option>
+                  </Select>
+                )}
               </VStack>
             ) : (
               <Flex justify="flex-start" align="flex-end" mb={6} wrap="wrap" gap={3}>
@@ -694,6 +721,16 @@ const App = () => {
                     {stores.map((s) => <option key={s} value={s}>{s}</option>)}
                   </Select>
                 </FormControl>
+                {sisplanActive && (
+                  <FormControl w="180px">
+                    <FormLabel fontSize="xs" mb={1}>Tipo de venda</FormLabel>
+                    <Select size="sm" value={filters.saleChannel} onChange={(e) => setFilters(f => ({ ...f, saleChannel: e.target.value }))}>
+                      <option value="">Todos os canais</option>
+                      <option value="online">Online</option>
+                      <option value="atacado">Atacado</option>
+                    </Select>
+                  </FormControl>
+                )}
               </Flex>
             )}
 
