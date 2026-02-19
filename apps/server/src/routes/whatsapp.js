@@ -132,7 +132,7 @@ router.post('/test-llm', async (req, res) => {
           'Authorization': `Bearer ${realApiKey}`
         },
         body: JSON.stringify({
-          model: llmModel || 'llama-3.1-70b-versatile',
+          model: llmModel || 'llama-3.3-70b-versatile',
           messages: [{ role: 'user', content: testMessage }],
           max_tokens: 50
         })

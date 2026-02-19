@@ -30,11 +30,33 @@ async function findAll() {
 }
 
 async function findByWhatsapp(phone) {
+  // Strip non-digits for comparison (handles +55, spaces, dashes, etc.)
+  const digits = phone.replace(/\D/g, '');
+  const withoutCountry = digits.replace(/^55/, '');
+
+  // Brazilian numbers: WhatsApp may use 8-digit format (without 9th digit)
+  // e.g. stored as 5547991299399 (13 digits) but WA uses 554791299399 (12 digits)
+  // Generate variants: with/without country code, with/without 9th digit
+  const variants = [digits, withoutCountry];
+
+  // If number has 9 digits after DDD (with 9th digit), add variant without it
+  if (withoutCountry.length === 11 && withoutCountry[2] === '9') {
+    variants.push('55' + withoutCountry.slice(0, 2) + withoutCountry.slice(3));
+    variants.push(withoutCountry.slice(0, 2) + withoutCountry.slice(3));
+  }
+  // If number has 8 digits after DDD (without 9th digit), add variant with it
+  if (withoutCountry.length === 10) {
+    variants.push('55' + withoutCountry.slice(0, 2) + '9' + withoutCountry.slice(2));
+    variants.push(withoutCountry.slice(0, 2) + '9' + withoutCountry.slice(2));
+  }
+
   const result = await db.query(
     `SELECT id, name, email, role, active, whatsapp,
             created_at AS "createdAt", updated_at AS "updatedAt"
-     FROM users WHERE whatsapp = $1 AND active = true`,
-    [phone]
+     FROM users
+     WHERE regexp_replace(whatsapp, '\\D', '', 'g') = ANY($1) AND active = true
+     LIMIT 1`,
+    [variants]
   );
   return result.rows[0] || null;
 }

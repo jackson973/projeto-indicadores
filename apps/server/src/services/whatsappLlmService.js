@@ -253,7 +253,7 @@ async function callLlm(settings, messages, tools) {
 
   if (llmProvider === 'groq') {
     const body = {
-      model: llmModel || 'llama-3.1-70b-versatile',
+      model: llmModel || 'llama-3.3-70b-versatile',
       messages: formatMessagesForOpenAI(messages),
       max_tokens: 1024
     };

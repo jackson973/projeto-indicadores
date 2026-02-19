@@ -7,6 +7,7 @@ const usersRepo = require('../db/usersRepository');
 const { processMessage } = require('./whatsappLlmService');
 
 const AUTH_DIR = path.join(__dirname, '..', '..', '.whatsapp-auth');
+const LID_MAP_FILE = path.join(AUTH_DIR, 'lid-map.json');
 const LOG_PREFIX = '[WhatsApp Bot]';
 
 // Module-level state
@@ -16,6 +17,40 @@ let connectionStatus = 'disconnected'; // 'disconnected' | 'connecting' | 'conne
 let reconnectAttempts = 0;
 const MAX_RECONNECT_ATTEMPTS = 5;
 let reconnectTimer = null;
+
+// LID (Linked ID) to phone number mapping
+// WhatsApp uses internal LIDs instead of phone numbers for privacy
+const lidToPhoneMap = new Map();
+
+function loadLidMap() {
+  try {
+    if (fs.existsSync(LID_MAP_FILE)) {
+      const data = JSON.parse(fs.readFileSync(LID_MAP_FILE, 'utf8'));
+      for (const [lid, phone] of Object.entries(data)) {
+        lidToPhoneMap.set(lid, phone);
+      }
+      console.log(`${LOG_PREFIX} Loaded ${lidToPhoneMap.size} LID mappings from disk`);
+    }
+  } catch { /* ignore */ }
+}
+
+function saveLidMap() {
+  try {
+    const data = Object.fromEntries(lidToPhoneMap);
+    fs.writeFileSync(LID_MAP_FILE, JSON.stringify(data, null, 2));
+  } catch { /* ignore */ }
+}
+
+function storeLidMapping(lid, phone) {
+  if (!lid || !phone) return;
+  const cleanLid = lid.includes('@') ? lid : `${lid}@lid`;
+  const cleanPhone = phone.replace('@s.whatsapp.net', '').replace(/\D/g, '');
+  if (lidToPhoneMap.get(cleanLid) !== cleanPhone) {
+    lidToPhoneMap.set(cleanLid, cleanPhone);
+    console.log(`${LOG_PREFIX} Stored LID mapping: ${cleanLid} -> ${cleanPhone}`);
+    saveLidMap();
+  }
+}
 
 // SSE client management
 const sseClients = [];
@@ -66,6 +101,9 @@ async function startWhatsappBot() {
     fs.mkdirSync(AUTH_DIR, { recursive: true });
   }
 
+  // Load persisted LID mappings
+  loadLidMap();
+
   try {
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
     const { version } = await fetchLatestBaileysVersion();
@@ -107,6 +145,11 @@ async function startWhatsappBot() {
         const phone = sock.user?.id?.split(':')[0] || sock.user?.id?.split('@')[0] || '';
         await whatsappRepo.updateConnectionStatus(true, phone);
         broadcastSse('status', { status: 'connected', phone });
+
+        // Build LID-to-phone mapping for whitelisted users
+        buildLidMapping().catch(err => {
+          console.error(`${LOG_PREFIX} Error building LID mapping:`, err.message);
+        });
       }
 
       if (connection === 'close') {
@@ -140,6 +183,24 @@ async function startWhatsappBot() {
       }
     });
 
+    // Capture LID mappings from contact updates
+    sock.ev.on('contacts.update', (updates) => {
+      for (const contact of updates) {
+        // Contact may have both id (@lid) and notify/phone info
+        if (contact.id && contact.id.endsWith('@lid') && contact.lid) {
+          storeLidMapping(contact.id, contact.lid);
+        }
+      }
+    });
+
+    sock.ev.on('contacts.upsert', (contacts) => {
+      for (const contact of contacts) {
+        if (contact.id && contact.id.endsWith('@lid') && contact.lid) {
+          storeLidMapping(contact.id, contact.lid);
+        }
+      }
+    });
+
     // Message handling
     sock.ev.on('messages.upsert', async ({ messages: msgs, type }) => {
       if (type !== 'notify') return;
@@ -152,6 +213,11 @@ async function startWhatsappBot() {
 
         // Skip group messages
         if (msg.key.remoteJid.endsWith('@g.us')) continue;
+
+        // Capture LID mapping from message metadata if available
+        if (msg.key.remoteJid?.endsWith('@lid') && msg.key.remoteJidAlt?.endsWith('@s.whatsapp.net')) {
+          storeLidMapping(msg.key.remoteJid, msg.key.remoteJidAlt);
+        }
 
         await handleIncomingMessage(msg);
       }
@@ -193,22 +259,100 @@ async function restartWhatsappBot() {
   await startWhatsappBot();
 }
 
+// --- LID Mapping ---
+async function buildLidMapping() {
+  const users = await usersRepo.findAll();
+  const whatsappUsers = users.filter(u => u.whatsapp && u.active);
+
+  console.log(`${LOG_PREFIX} Building LID mapping for ${whatsappUsers.length} whitelisted users...`);
+
+  for (const user of whatsappUsers) {
+    const digits = user.whatsapp.replace(/\D/g, '');
+    const fullNumber = digits.startsWith('55') ? digits : `55${digits}`;
+    try {
+      const results = await sock.onWhatsApp(`${fullNumber}@s.whatsapp.net`);
+      console.log(`${LOG_PREFIX} onWhatsApp(${fullNumber}):`, JSON.stringify(results));
+      if (results?.[0]?.exists) {
+        // Store mapping using the LID (used for incoming messages)
+        if (results[0].lid) {
+          storeLidMapping(results[0].lid, fullNumber);
+        }
+        // Also store by phone JID (some messages may use @s.whatsapp.net)
+        if (results[0].jid) {
+          storeLidMapping(results[0].jid, fullNumber);
+        }
+      }
+    } catch (err) {
+      console.log(`${LOG_PREFIX} Could not resolve ${fullNumber}: ${err.message}`);
+    }
+  }
+  console.log(`${LOG_PREFIX} LID mapping complete: ${lidToPhoneMap.size} entries`);
+}
+
+// Resolve a JID (LID or phone) to a phone number for whitelist lookup
+function resolvePhone(msg) {
+  const jid = msg.key.remoteJid;
+
+  // 1. Standard @s.whatsapp.net format - phone number is in the JID
+  if (jid.endsWith('@s.whatsapp.net')) {
+    return jid.replace('@s.whatsapp.net', '');
+  }
+
+  // 2. LID format - try multiple resolution strategies
+  if (jid.endsWith('@lid')) {
+    // Strategy A: Check remoteJidAlt (Baileys v6.7+ may include phone JID here)
+    if (msg.key.remoteJidAlt?.endsWith('@s.whatsapp.net')) {
+      return msg.key.remoteJidAlt.replace('@s.whatsapp.net', '');
+    }
+
+    // Strategy B: Check participantAlt (sometimes available)
+    if (msg.key.participantAlt?.endsWith('@s.whatsapp.net')) {
+      return msg.key.participantAlt.replace('@s.whatsapp.net', '');
+    }
+
+    // Strategy C: Use our persisted LID-to-phone map
+    const mapped = lidToPhoneMap.get(jid);
+    if (mapped) {
+      return mapped;
+    }
+
+    // Strategy D: Check if signalRepository has the mapping (Baileys internal)
+    try {
+      if (sock?.authState?.keys?.get) {
+        // Some Baileys versions store LID mappings in auth state
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Fallback: strip suffix
+  return jid.replace('@lid', '').replace('@s.whatsapp.net', '');
+}
+
 // --- Message Handler ---
 async function handleIncomingMessage(msg) {
   const jid = msg.key.remoteJid;
-  const phone = jid.replace('@s.whatsapp.net', '').replace('@lid', '');
+  const phone = resolvePhone(msg);
 
-  console.log(`${LOG_PREFIX} Message from ${phone}`);
+  // Debug: log full key to help diagnose LID issues
+  if (jid.endsWith('@lid')) {
+    console.log(`${LOG_PREFIX} LID message key:`, JSON.stringify(msg.key));
+  }
+
+  console.log(`${LOG_PREFIX} Message from ${phone} (jid: ${jid})`);
 
   try {
-    // Check whitelist
+    // Check whitelist - silently ignore non-whitelisted numbers
     const user = await usersRepo.findByWhatsapp(phone);
     if (!user) {
-      console.log(`${LOG_PREFIX} Unauthorized number: ${phone}`);
-      await sock.sendMessage(jid, {
-        text: 'Desculpe, seu numero nao esta autorizado a usar este servico. Contate o administrador.'
-      });
+      console.log(`${LOG_PREFIX} Ignoring message from non-whitelisted number: ${phone}`);
       return;
+    }
+
+    // If this was a LID and we found the user, store the mapping for next time
+    if (jid.endsWith('@lid') && user.whatsapp) {
+      const userDigits = user.whatsapp.replace(/\D/g, '');
+      const userFull = userDigits.startsWith('55') ? userDigits : `55${userDigits}`;
+      storeLidMapping(jid, userFull);
     }
 
     // Extract message text

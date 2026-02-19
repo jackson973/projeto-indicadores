@@ -41,9 +41,10 @@ const LLM_PROVIDERS = [
 
 const LLM_MODELS = {
   groq: [
-    { value: "llama-3.1-70b-versatile", label: "Llama 3.1 70B" },
+    { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
     { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (rapido)" },
-    { value: "mixtral-8x7b-32768", label: "Mixtral 8x7B" }
+    { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B" },
+    { value: "qwen/qwen-3-32b", label: "Qwen 3 32B" }
   ],
   claude: [
     { value: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
@@ -67,7 +68,7 @@ const WhatsappSettings = () => {
     active: false,
     llmProvider: "groq",
     llmApiKey: "",
-    llmModel: "llama-3.1-70b-versatile",
+    llmModel: "llama-3.3-70b-versatile",
     llmBaseUrl: "",
     systemPrompt: DEFAULT_PROMPT,
     featureSales: true,
@@ -151,11 +152,16 @@ const WhatsappSettings = () => {
   const loadSettings = async () => {
     try {
       const data = await fetchWhatsappSettings();
+      const provider = data.llmProvider || "groq";
+      const validModels = (LLM_MODELS[provider] || []).map(m => m.value);
+      const model = validModels.includes(data.llmModel)
+        ? data.llmModel
+        : validModels[0] || "";
       setForm({
         active: data.active || false,
-        llmProvider: data.llmProvider || "groq",
+        llmProvider: provider,
         llmApiKey: data.llmApiKey || "",
-        llmModel: data.llmModel || "llama-3.1-70b-versatile",
+        llmModel: model,
         llmBaseUrl: data.llmBaseUrl || "",
         systemPrompt: data.systemPrompt || DEFAULT_PROMPT,
         featureSales: data.featureSales !== false,
