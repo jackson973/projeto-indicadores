@@ -481,7 +481,8 @@ async function getDashboardData(startDate, endDate, grouping, boxId) {
     query = `SELECT e.date, e.type, e.amount, c.name AS category_name
        FROM cashflow_entries e
        JOIN cashflow_categories c ON c.id = e.category_id
-       WHERE e.date >= $1 AND e.date <= $2
+       JOIN cashflow_boxes b ON b.id = e.box_id
+       WHERE e.date >= $1 AND e.date <= $2 AND b.active = true
        ORDER BY e.date`;
     params = [startDate, endDate];
   }
