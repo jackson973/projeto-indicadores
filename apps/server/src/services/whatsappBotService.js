@@ -144,6 +144,8 @@ async function startWhatsappBot() {
 
         const phone = sock.user?.id?.split(':')[0] || sock.user?.id?.split('@')[0] || '';
         await whatsappRepo.updateConnectionStatus(true, phone);
+        // Save phone to history
+        await whatsappRepo.savePhone(phone);
         broadcastSse('status', { status: 'connected', phone });
 
         // Build LID-to-phone mapping for whitelisted users
@@ -240,6 +242,9 @@ async function stopWhatsappBot() {
 
   if (sock) {
     try {
+      await sock.logout();
+    } catch { /* ignore */ }
+    try {
       sock.end(undefined);
     } catch { /* ignore */ }
     sock = null;
@@ -248,9 +253,16 @@ async function stopWhatsappBot() {
   connectionStatus = 'disconnected';
   currentQr = null;
 
+  // Clear auth state so next connect shows a fresh QR code
+  try {
+    if (fs.existsSync(AUTH_DIR)) {
+      fs.rmSync(AUTH_DIR, { recursive: true, force: true });
+    }
+  } catch { /* ignore */ }
+
   await whatsappRepo.updateConnectionStatus(false, null);
   broadcastSse('status', { status: 'disconnected' });
-  console.log(`${LOG_PREFIX} Stopped.`);
+  console.log(`${LOG_PREFIX} Stopped and cleared auth state.`);
 }
 
 async function restartWhatsappBot() {

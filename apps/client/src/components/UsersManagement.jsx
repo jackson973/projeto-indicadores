@@ -36,6 +36,35 @@ import {
 import { AddIcon, EditIcon, DeleteIcon } from "@chakra-ui/icons";
 import { fetchUsers, createUser, updateUser, updateUserPassword, deleteUser } from "../api";
 
+const formatPhoneDisplay = (value) => {
+  if (!value) return "-";
+  const digits = value.replace(/\D/g, "");
+  if (digits.length >= 12) {
+    // +55 (XX) XXXXX-XXXX or +55 (XX) XXXX-XXXX
+    const ddd = digits.slice(2, 4);
+    const rest = digits.slice(4);
+    if (rest.length >= 9) {
+      return `+${digits.slice(0, 2)} (${ddd}) ${rest.slice(0, 5)}-${rest.slice(5, 9)}`;
+    }
+    return `+${digits.slice(0, 2)} (${ddd}) ${rest.slice(0, 4)}-${rest.slice(4)}`;
+  }
+  return value;
+};
+
+const applyPhoneMask = (value) => {
+  let digits = value.replace(/\D/g, "");
+  if (digits.length > 13) digits = digits.slice(0, 13);
+
+  // Build mask: +55 (XX) XXXXX-XXXX
+  if (digits.length <= 2) return digits;
+  let result = `+${digits.slice(0, 2)}`;
+  if (digits.length > 2) result += ` (${digits.slice(2, 4)}`;
+  if (digits.length >= 4) result += `)`;
+  if (digits.length > 4) result += ` ${digits.slice(4, 9)}`;
+  if (digits.length > 9) result += `-${digits.slice(9, 13)}`;
+  return result;
+};
+
 const UsersManagement = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -160,7 +189,7 @@ const UsersManagement = () => {
               <Tr key={user.id}>
                 <Td>{user.name}</Td>
                 <Td>{user.email}</Td>
-                <Td>{user.whatsapp || "-"}</Td>
+                <Td>{formatPhoneDisplay(user.whatsapp)}</Td>
                 <Td>
                   <Badge colorScheme={user.role === "admin" ? "purple" : "gray"}>
                     {user.role === "admin" ? "Admin" : "Usuário"}
@@ -231,9 +260,9 @@ const UsersManagement = () => {
               <FormControl>
                 <FormLabel>WhatsApp</FormLabel>
                 <Input
-                  value={form.whatsapp}
-                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                  placeholder="5511999999999"
+                  value={applyPhoneMask(form.whatsapp)}
+                  onChange={(e) => setForm({ ...form, whatsapp: e.target.value.replace(/\D/g, "") })}
+                  placeholder="+55 (11) 99999-9999"
                 />
               </FormControl>
               <FormControl>

@@ -218,4 +218,37 @@ router.post('/disconnect', async (req, res) => {
   }
 });
 
+// GET /api/whatsapp/phones - Listar telefones salvos
+router.get('/phones', async (req, res) => {
+  try {
+    const phones = await whatsappRepo.getSavedPhones();
+    res.json(phones);
+  } catch (error) {
+    console.error('Get saved phones error:', error);
+    res.status(500).json({ message: 'Erro ao buscar telefones.' });
+  }
+});
+
+// PUT /api/whatsapp/phones/:id - Atualizar label do telefone
+router.put('/phones/:id', async (req, res) => {
+  try {
+    await whatsappRepo.updatePhoneLabel(req.params.id, req.body.label);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update phone label error:', error);
+    res.status(500).json({ message: 'Erro ao atualizar telefone.' });
+  }
+});
+
+// DELETE /api/whatsapp/phones/:id - Remover telefone salvo
+router.delete('/phones/:id', async (req, res) => {
+  try {
+    await whatsappRepo.deletePhone(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete phone error:', error);
+    res.status(500).json({ message: 'Erro ao remover telefone.' });
+  }
+});
+
 module.exports = router;

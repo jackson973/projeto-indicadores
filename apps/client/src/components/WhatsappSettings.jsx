@@ -12,24 +12,35 @@ import {
   FormHelperText,
   FormLabel,
   HStack,
+  IconButton,
   Image,
   Input,
   Select,
   SimpleGrid,
   Spinner,
   Switch,
+  Table,
+  TableContainer,
+  Tbody,
+  Td,
   Text,
   Textarea,
+  Th,
+  Thead,
+  Tr,
   VStack,
   useColorModeValue,
   useToast
 } from "@chakra-ui/react";
+import { DeleteIcon } from "@chakra-ui/icons";
 import {
   fetchWhatsappSettings,
   updateWhatsappSettings,
   testWhatsappLlm,
   connectWhatsapp,
   disconnectWhatsapp,
+  fetchWhatsappPhones,
+  deleteWhatsappPhone,
   getToken
 } from "../api";
 
@@ -87,6 +98,7 @@ const WhatsappSettings = () => {
   const [disconnecting, setDisconnecting] = useState(false);
   const [qrCode, setQrCode] = useState(null);
   const [liveStatus, setLiveStatus] = useState("disconnected");
+  const [savedPhones, setSavedPhones] = useState([]);
   const eventSourceRef = useRef(null);
   const toast = useToast();
 
@@ -96,6 +108,7 @@ const WhatsappSettings = () => {
 
   useEffect(() => {
     loadSettings();
+    loadSavedPhones();
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -124,6 +137,7 @@ const WhatsappSettings = () => {
           setQrCode(null);
           setConnecting(false);
           setStatus(prev => ({ ...prev, connected: true, connectedPhone: data.phone || prev.connectedPhone }));
+          loadSavedPhones();
         } else if (data.status === "disconnected") {
           setQrCode(null);
           setStatus(prev => ({ ...prev, connected: false }));
@@ -187,6 +201,34 @@ const WhatsappSettings = () => {
     }
   };
 
+  const loadSavedPhones = async () => {
+    try {
+      const phones = await fetchWhatsappPhones();
+      setSavedPhones(phones);
+    } catch { /* ignore */ }
+  };
+
+  const handleDeletePhone = async (id) => {
+    try {
+      await deleteWhatsappPhone(id);
+      await loadSavedPhones();
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    }
+  };
+
+  const formatPhone = (phone) => {
+    if (!phone) return "-";
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length === 13) {
+      return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 9)}-${digits.slice(9)}`;
+    }
+    if (digits.length === 12) {
+      return `+${digits.slice(0, 2)} (${digits.slice(2, 4)}) ${digits.slice(4, 8)}-${digits.slice(8)}`;
+    }
+    return phone;
+  };
+
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -239,6 +281,7 @@ const WhatsappSettings = () => {
       setLiveStatus("disconnected");
       toast({ title: "Desconectado com sucesso.", status: "success", duration: 3000 });
       await loadSettings();
+      await loadSavedPhones();
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
     } finally {
@@ -313,7 +356,7 @@ const WhatsappSettings = () => {
             <HStack spacing={3} mb={3}>
               {getStatusBadge()}
               {liveStatus === "connected" && status.connectedPhone && (
-                <Text fontSize="sm" color="gray.500">{status.connectedPhone}</Text>
+                <Text fontSize="sm" color="gray.500">{formatPhone(status.connectedPhone)}</Text>
               )}
             </HStack>
 
@@ -371,6 +414,48 @@ const WhatsappSettings = () => {
               <Text fontSize="xs" color="orange.500" mt={2}>
                 Ative o bot acima para poder conectar.
               </Text>
+            )}
+
+            {/* Saved phones history */}
+            {savedPhones.length > 0 && (
+              <Box mt={4}>
+                <Text fontSize="sm" fontWeight="semibold" mb={2}>Numeros conectados anteriormente</Text>
+                <TableContainer>
+                  <Table size="sm" variant="simple">
+                    <Thead>
+                      <Tr>
+                        <Th>Telefone</Th>
+                        <Th>Ultima conexao</Th>
+                        <Th w="50px"></Th>
+                      </Tr>
+                    </Thead>
+                    <Tbody>
+                      {savedPhones.map((p) => (
+                        <Tr key={p.id}>
+                          <Td>
+                            <Text fontSize="sm">{formatPhone(p.phone)}</Text>
+                          </Td>
+                          <Td>
+                            <Text fontSize="xs" color="gray.500">
+                              {formatDate(p.lastConnectedAt)}
+                            </Text>
+                          </Td>
+                          <Td>
+                            <IconButton
+                              icon={<DeleteIcon />}
+                              size="xs"
+                              variant="ghost"
+                              colorScheme="red"
+                              aria-label="Remover"
+                              onClick={() => handleDeletePhone(p.id)}
+                            />
+                          </Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </TableContainer>
+              </Box>
             )}
           </Box>
         </Box>

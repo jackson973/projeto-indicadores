@@ -73,6 +73,20 @@ const COLUMN_ALIASES = {
     "valor un",
     "preço un",
     "preco un"
+  ],
+  clientName: [
+    "nome de comprador",
+    "nome do comprador",
+    "comprador",
+    "cliente",
+    "nome do cliente"
+  ],
+  codcli: [
+    "id do comprador",
+    "id comprador",
+    "codigo do cliente",
+    "codigo cliente",
+    "codcli"
   ]
 };
 
@@ -149,7 +163,9 @@ const normalizeRows = (rows) => {
     cancelBy: findHeaderKey(headerMap, COLUMN_ALIASES.cancelBy),
     cancelReason: findHeaderKey(headerMap, COLUMN_ALIASES.cancelReason),
     image: findHeaderKey(headerMap, COLUMN_ALIASES.image),
-    unitPrice: findHeaderKey(headerMap, COLUMN_ALIASES.unitPrice)
+    unitPrice: findHeaderKey(headerMap, COLUMN_ALIASES.unitPrice),
+    clientName: findHeaderKey(headerMap, COLUMN_ALIASES.clientName),
+    codcli: findHeaderKey(headerMap, COLUMN_ALIASES.codcli)
   };
 
   const missingColumns = [];
@@ -177,6 +193,8 @@ const normalizeRows = (rows) => {
   const cancelReasonValue = headerKeys.cancelReason ? row[headerKeys.cancelReason] : "";
   const imageValue = headerKeys.image ? row[headerKeys.image] : "";
   const unitPriceValue = headerKeys.unitPrice ? row[headerKeys.unitPrice] : "";
+  const clientNameValue = headerKeys.clientName ? row[headerKeys.clientName] : "";
+  const codcliValue = headerKeys.codcli ? row[headerKeys.codcli] : "";
 
     const parsedDate = parseDateValue(dateValue);
   const quantity = parseNumber(quantityValue);
@@ -206,7 +224,9 @@ const normalizeRows = (rows) => {
       status: String(statusValue || "").trim(),
       cancelBy: String(cancelByValue || "").trim(),
       cancelReason: String(cancelReasonValue || "").trim(),
-      image: String(imageValue || "").trim()
+      image: String(imageValue || "").trim(),
+      clientName: String(clientNameValue || "").trim(),
+      codcli: String(codcliValue || "").trim()
     });
   });
 

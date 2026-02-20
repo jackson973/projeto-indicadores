@@ -431,6 +431,25 @@ export const disconnectWhatsapp = async () => {
   return handleResponse(response);
 };
 
+export const fetchWhatsappPhones = async () => {
+  const response = await authFetch("/api/whatsapp/phones");
+  return handleResponse(response);
+};
+
+export const updateWhatsappPhoneLabel = async (id, label) => {
+  const response = await authFetch(`/api/whatsapp/phones/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ label })
+  });
+  return handleResponse(response);
+};
+
+export const deleteWhatsappPhone = async (id) => {
+  const response = await authFetch(`/api/whatsapp/phones/${id}`, { method: "DELETE" });
+  return handleResponse(response);
+};
+
 // Database Maintenance API (Admin Only)
 export const clearSalesData = async () => {
   const response = await authFetch("/api/sales", {

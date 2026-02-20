@@ -47,7 +47,11 @@ const SYSTEM_FIELDS = [
   { key: "state", label: "state", description: "Estado (UF)", required: false },
   { key: "status", label: "status", description: "Status do pedido", required: false },
   { key: "ad_name", label: "ad_name", description: "Nome do anuncio", required: false },
-  { key: "image", label: "image", description: "Link da imagem", required: false }
+  { key: "image", label: "image", description: "Link da imagem", required: false },
+  { key: "client_name", label: "client_name", description: "Nome do comprador", required: false },
+  { key: "codcli", label: "codcli", description: "Codigo do cliente", required: false },
+  { key: "nome_fantasia", label: "nome_fantasia", description: "Nome fantasia", required: false },
+  { key: "cnpj_cpf", label: "cnpj_cpf", description: "CNPJ/CPF", required: false }
 ];
 
 const SisplanSettings = () => {

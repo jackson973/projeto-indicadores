@@ -88,7 +88,11 @@ function mapRow(row, columnMapping) {
     status: String(getValue('status') || '').trim(),
     cancelBy: String(getValue('cancel_by') || '').trim(),
     cancelReason: String(getValue('cancel_reason') || '').trim(),
-    image: String(getValue('image') || '').trim()
+    image: String(getValue('image') || '').trim(),
+    clientName: String(getValue('client_name') || '').trim(),
+    codcli: String(getValue('codcli') || '').trim(),
+    nomeFantasia: String(getValue('nome_fantasia') || '').trim(),
+    cnpjCpf: String(getValue('cnpj_cpf') || '').trim()
   };
 }
 

@@ -71,7 +71,11 @@ async function upsertBatch(batch, saleChannel = 'online') {
         sale.cancelBy || '',
         sale.cancelReason || '',
         sale.image || '',
-        saleChannel
+        saleChannel,
+        sale.clientName || '',
+        sale.codcli || '',
+        sale.nomeFantasia || '',
+        sale.cnpjCpf || ''
       ];
 
       values.push(
@@ -79,17 +83,19 @@ async function upsertBatch(batch, saleChannel = 'online') {
         `$${paramIndex+4}, $${paramIndex+5}, $${paramIndex+6}, $${paramIndex+7}, ` +
         `$${paramIndex+8}, $${paramIndex+9}, $${paramIndex+10}, $${paramIndex+11}, ` +
         `$${paramIndex+12}, $${paramIndex+13}, $${paramIndex+14}, $${paramIndex+15}, ` +
-        `$${paramIndex+16})`
+        `$${paramIndex+16}, $${paramIndex+17}, $${paramIndex+18}, $${paramIndex+19}, ` +
+        `$${paramIndex+20})`
       );
       params.push(...rowParams);
-      paramIndex += 17;
+      paramIndex += 21;
     });
 
     const query = `
       INSERT INTO sales (
         order_id, date, store, product, ad_name, variation, sku,
         quantity, total, unit_price, state, platform, status,
-        cancel_by, cancel_reason, image, sale_channel
+        cancel_by, cancel_reason, image, sale_channel,
+        client_name, codcli, nome_fantasia, cnpj_cpf
       ) VALUES ${values.join(', ')}
       ON CONFLICT (order_id, product, COALESCE(variation, ''))
       DO UPDATE SET
@@ -107,6 +113,10 @@ async function upsertBatch(batch, saleChannel = 'online') {
         cancel_reason = EXCLUDED.cancel_reason,
         image = EXCLUDED.image,
         sale_channel = EXCLUDED.sale_channel,
+        client_name = EXCLUDED.client_name,
+        codcli = EXCLUDED.codcli,
+        nome_fantasia = EXCLUDED.nome_fantasia,
+        cnpj_cpf = EXCLUDED.cnpj_cpf,
         updated_at = CURRENT_TIMESTAMP
       RETURNING (xmax = 0) AS inserted
     `;
@@ -197,7 +207,11 @@ async function getSales(filters = {}) {
       cancel_by as "cancelBy",
       cancel_reason as "cancelReason",
       image,
-      sale_channel as "saleChannel"
+      sale_channel as "saleChannel",
+      client_name as "clientName",
+      codcli,
+      nome_fantasia as "nomeFantasia",
+      cnpj_cpf as "cnpjCpf"
     FROM sales
     ${whereClause}
     ORDER BY date DESC
@@ -290,9 +304,43 @@ async function getDailyRevenue(date, filters = {}) {
   return parseFloat(result.rows[0]?.revenue) || 0;
 }
 
+/**
+ * Search sales by order_id, codcli, client_name or cnpj_cpf
+ */
+async function searchSales(searchTerm, limit = 500) {
+  const term = `%${searchTerm}%`;
+  const cleanTerm = `%${searchTerm.replace(/[.\-\/]/g, '')}%`;
+  const query = `
+    SELECT
+      id, order_id as "orderId", date, store, product,
+      ad_name as "adName", variation, sku, quantity, total,
+      unit_price as "unitPrice", state, platform, status,
+      cancel_by as "cancelBy", cancel_reason as "cancelReason",
+      image, sale_channel as "saleChannel",
+      client_name as "clientName", codcli,
+      nome_fantasia as "nomeFantasia", cnpj_cpf as "cnpjCpf"
+    FROM sales
+    WHERE order_id ILIKE $1
+       OR codcli ILIKE $1
+       OR client_name ILIKE $1
+       OR nome_fantasia ILIKE $1
+       OR REPLACE(REPLACE(REPLACE(cnpj_cpf, '.', ''), '-', ''), '/', '') ILIKE $2
+    ORDER BY date DESC
+    LIMIT $3
+  `;
+  const result = await db.query(query, [term, cleanTerm, limit]);
+  return result.rows.map(row => ({
+    ...row,
+    quantity: parseFloat(row.quantity) || 0,
+    total: parseFloat(row.total) || 0,
+    unitPrice: parseFloat(row.unitPrice) || 0
+  }));
+}
+
 module.exports = {
   batchUpsertSales,
   getSales,
+  searchSales,
   hasSales,
   clearSales,
   getStores,

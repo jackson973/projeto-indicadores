@@ -128,9 +128,46 @@ async function incrementInteractions() {
   );
 }
 
+// --- Saved phones history ---
+
+async function getSavedPhones() {
+  const result = await db.query(
+    `SELECT id, phone, label, connected_at AS "connectedAt", last_connected_at AS "lastConnectedAt"
+     FROM whatsapp_phones
+     ORDER BY last_connected_at DESC`
+  );
+  return result.rows;
+}
+
+async function savePhone(phone) {
+  if (!phone) return;
+  await db.query(
+    `INSERT INTO whatsapp_phones (phone, last_connected_at)
+     VALUES ($1, NOW())
+     ON CONFLICT (phone)
+     DO UPDATE SET last_connected_at = NOW()`,
+    [phone]
+  );
+}
+
+async function updatePhoneLabel(id, label) {
+  await db.query(
+    `UPDATE whatsapp_phones SET label = $1 WHERE id = $2`,
+    [label || null, id]
+  );
+}
+
+async function deletePhone(id) {
+  await db.query(`DELETE FROM whatsapp_phones WHERE id = $1`, [id]);
+}
+
 module.exports = {
   getSettings,
   updateSettings,
   updateConnectionStatus,
-  incrementInteractions
+  incrementInteractions,
+  getSavedPhones,
+  savePhone,
+  updatePhoneLabel,
+  deletePhone
 };
