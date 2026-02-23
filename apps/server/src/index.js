@@ -16,26 +16,31 @@ const { authenticate } = require("./middleware/auth");
 // Initialize database connection (will test connection on import)
 require('./db/connection');
 
-// Seed admin user on startup
-require('./db/seedAdmin');
+const { runMigrations } = require('./db/migrate');
 
-// Start cashflow alert scheduler
-const { startCashflowAlertScheduler } = require('./services/cashflowAlertScheduler');
-startCashflowAlertScheduler();
+async function start() {
+  // Run pending migrations before anything else
+  await runMigrations();
 
-// Start Sisplan sync scheduler
-const { startSisplanSyncScheduler } = require('./services/sisplanSyncService');
-startSisplanSyncScheduler();
+  // Seed admin user on startup
+  require('./db/seedAdmin');
 
-// Start UpSeller sync scheduler
-const { startUpsellerSyncScheduler } = require('./services/upsellerSyncService');
-startUpsellerSyncScheduler();
+  // Start cashflow alert scheduler
+  const { startCashflowAlertScheduler } = require('./services/cashflowAlertScheduler');
+  startCashflowAlertScheduler();
 
-// Start WhatsApp bot if active
-const { startWhatsappBot } = require('./services/whatsappBotService');
-const whatsappSettingsRepo = require('./db/whatsappRepository');
-(async () => {
+  // Start Sisplan sync scheduler
+  const { startSisplanSyncScheduler } = require('./services/sisplanSyncService');
+  startSisplanSyncScheduler();
+
+  // Start UpSeller sync scheduler
+  const { startUpsellerSyncScheduler } = require('./services/upsellerSyncService');
+  startUpsellerSyncScheduler();
+
+  // Start WhatsApp bot if active
   try {
+    const { startWhatsappBot } = require('./services/whatsappBotService');
+    const whatsappSettingsRepo = require('./db/whatsappRepository');
     const settings = await whatsappSettingsRepo.getSettings();
     if (settings && settings.active) {
       console.log('[WhatsApp Bot] Settings active, attempting to restore connection...');
@@ -46,30 +51,35 @@ const whatsappSettingsRepo = require('./db/whatsappRepository');
   } catch (error) {
     console.error('[WhatsApp Bot] Failed to auto-start:', error.message);
   }
-})();
 
-const app = express();
+  const app = express();
 
-app.use(cors());
-app.use(express.json());
+  app.use(cors());
+  app.use(express.json());
 
-// Public routes (no auth required)
-app.use("/api/auth", authRouter);
+  // Public routes (no auth required)
+  app.use("/api/auth", authRouter);
 
-// Protected routes (require valid JWT)
-app.use("/api/users", usersRouter);
-app.use("/api/cashflow", cashflowRouter);
-app.use("/api/email", emailRouter);
-app.use("/api/sisplan", sisplanRouter);
-app.use("/api/whatsapp", whatsappRouter);
-app.use("/api/upseller", upsellerRouter);
-app.use("/api", authenticate, apiRouter);
+  // Protected routes (require valid JWT)
+  app.use("/api/users", usersRouter);
+  app.use("/api/cashflow", cashflowRouter);
+  app.use("/api/email", emailRouter);
+  app.use("/api/sisplan", sisplanRouter);
+  app.use("/api/whatsapp", whatsappRouter);
+  app.use("/api/upseller", upsellerRouter);
+  app.use("/api", authenticate, apiRouter);
 
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
-});
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok" });
+  });
 
-const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`API running on http://localhost:${PORT}`);
+  const PORT = process.env.PORT || 4000;
+  app.listen(PORT, () => {
+    console.log(`API running on http://localhost:${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
