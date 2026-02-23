@@ -36,7 +36,7 @@ const formatLastUpdate = (value) => {
   });
 };
 
-const SummaryCards = ({ summary, onCanceledClick }) => {
+const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick }) => {
   if (!summary) return null;
 
   const cardBg = useColorModeValue("white", "gray.800");
@@ -48,8 +48,8 @@ const SummaryCards = ({ summary, onCanceledClick }) => {
   const lastUpdateFormatted = formatLastUpdate(summary.lastUpdate);
 
   const items = [
-    { title: "Vendas Hoje", value: formatCurrency(summary.todayRevenue), icon: SunIcon },
-    { title: "Vendas Ontem", value: formatCurrency(summary.yesterdayRevenue), icon: CalendarIcon },
+    { title: "Vendas Hoje", value: formatCurrency(summary.todayRevenue), icon: SunIcon, onClick: onTodayClick },
+    { title: "Vendas Ontem", value: formatCurrency(summary.yesterdayRevenue), icon: CalendarIcon, onClick: onYesterdayClick },
     { title: "Faturamento", value: formatCurrency(summary.totalRevenue), icon: StarIcon },
     { title: "Ticket médio", value: formatCurrency(summary.ticketAverage), icon: TimeIcon },
     { title: "Itens vendidos", value: formatNumber(summary.totalQuantity), icon: CheckCircleIcon },

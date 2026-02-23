@@ -24,6 +24,9 @@ BlrReader.prototype.readString = function(_encoding) {
 };
 
 let currentJob = null;
+const SISPLAN_LOG = false; // set true to enable Sisplan sync logs
+const slog = (...args) => SISPLAN_LOG && console.log(...args);
+const serr = (...args) => SISPLAN_LOG && console.error(...args);
 
 function queryFirebird(options, sql) {
   return new Promise((resolve, reject) => {
@@ -97,17 +100,17 @@ function mapRow(row, columnMapping) {
 }
 
 async function runSync() {
-  console.log('[Sisplan Sync] Starting sync...');
+  slog('[Sisplan Sync] Starting sync...');
 
   try {
     const settings = await sisplanRepo.getSettings();
     if (!settings || !settings.active) {
-      console.log('[Sisplan Sync] Integration not active, skipping.');
+      slog('[Sisplan Sync] Integration not active, skipping.');
       return { success: false, message: 'Integração não ativa.' };
     }
 
     if (!settings.host || !settings.databasePath || !settings.fbUser || !settings.fbPassword || !settings.sqlQuery) {
-      console.log('[Sisplan Sync] Incomplete configuration, skipping.');
+      slog('[Sisplan Sync] Incomplete configuration, skipping.');
       await sisplanRepo.updateSyncStatus('error', 'Configuração incompleta.', 0);
       return { success: false, message: 'Configuração incompleta.' };
     }
@@ -120,7 +123,7 @@ async function runSync() {
       password: settings.fbPassword
     };
 
-    console.log('[Sisplan Sync] Connecting to Firebird...');
+    slog('[Sisplan Sync] Connecting to Firebird...');
     const rows = await queryFirebird(fbOptions, settings.sqlQuery);
 
     console.log(`[Sisplan Sync] Query returned ${rows.length} rows`);
@@ -146,19 +149,19 @@ async function runSync() {
     return { success: true, message, rows: validRows.length, inserted, updated };
   } catch (error) {
     const message = error.message || 'Erro desconhecido';
-    console.error('[Sisplan Sync] Error:', message);
+    serr('[Sisplan Sync] Error:', message);
     await sisplanRepo.updateSyncStatus('error', message, 0);
     return { success: false, message };
   }
 }
 
 async function startSisplanSyncScheduler() {
-  console.log('[Sisplan Sync] Initializing scheduler...');
+  slog('[Sisplan Sync] Initializing scheduler...');
 
   try {
     const settings = await sisplanRepo.getSettings();
     if (!settings || !settings.active) {
-      console.log('[Sisplan Sync] Integration not active, scheduler not started.');
+      slog('[Sisplan Sync] Integration not active, scheduler not started.');
       return;
     }
 
@@ -174,7 +177,7 @@ async function startSisplanSyncScheduler() {
 
     console.log(`[Sisplan Sync] Scheduler started (every ${interval} minutes)`);
   } catch (error) {
-    console.error('[Sisplan Sync] Failed to start scheduler:', error.message);
+    serr('[Sisplan Sync] Failed to start scheduler:', error.message);
   }
 }
 
@@ -182,7 +185,7 @@ function stopSisplanSyncScheduler() {
   if (currentJob) {
     currentJob.stop();
     currentJob = null;
-    console.log('[Sisplan Sync] Scheduler stopped');
+    slog('[Sisplan Sync] Scheduler stopped');
   }
 }
 

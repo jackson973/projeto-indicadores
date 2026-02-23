@@ -11,17 +11,23 @@
     "db:shell": "docker exec -it projeto-indicadores-db psql -U indicadores_user -d indicadores"
   },
   "dependencies": {
+    "@antiadmin/anticaptchaofficial": "^1.0.55",
     "@whiskeysockets/baileys": "^6.7.16",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "imapflow": "^1.2.10",
     "jsonwebtoken": "^9.0.3",
+    "mailparser": "^3.9.3",
     "multer": "^2.0.0",
     "node-cron": "^4.2.1",
     "node-firebird": "^1.1.10",
     "nodemailer": "^8.0.1",
     "pg": "^8.11.3",
+    "puppeteer": "^24.37.5",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "qrcode": "^1.5.4",
     "xlsx": "^0.18.5"
   }

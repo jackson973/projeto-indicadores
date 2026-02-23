@@ -171,6 +171,11 @@ export const fetchCanceledSummary = async (params) => {
   return handleResponse(response);
 };
 
+export const fetchDailySalesDetails = async (params) => {
+  const response = await authFetch(`/api/daily-sales-details?${params}`);
+  return handleResponse(response);
+};
+
 // Cashflow Boxes API
 export const fetchCashflowBoxes = async () => {
   const response = await authFetch("/api/cashflow/boxes");
@@ -394,6 +399,26 @@ export const triggerSisplanSync = async () => {
 // Sisplan Active Check (any authenticated user)
 export const fetchSisplanActive = async () => {
   const response = await authFetch("/api/sisplan-active");
+  return handleResponse(response);
+};
+
+// UpSeller API (Admin)
+export const fetchUpsellerSettings = async () => {
+  const response = await authFetch("/api/upseller");
+  return handleResponse(response);
+};
+
+export const updateUpsellerSettings = async (data) => {
+  const response = await authFetch("/api/upseller", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const triggerUpsellerSync = async () => {
+  const response = await authFetch("/api/upseller/sync", { method: "POST" });
   return handleResponse(response);
 };
 

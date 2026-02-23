@@ -35,6 +35,7 @@ import {
 } from "recharts";
 import { fetchCashflowDashboard, fetchCashflowBoxes } from "../api";
 import { formatCurrency, formatPercent } from "../utils/format";
+import { getSaoPauloYear, getSaoPauloMonth } from "../utils/timezone";
 
 const PIE_COLORS = ["#0ea5e9", "#6366f1", "#22c55e", "#f97316", "#e11d48", "#8b5cf6", "#14b8a6", "#f59e0b", "#ec4899", "#06b6d4"];
 const EXPENSE_STACK_COLORS = ["#e11d48", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6", "#78716c", "#06b6d4"];
@@ -45,10 +46,11 @@ const MONTH_NAMES = [
 ];
 
 const generateMonthOptions = () => {
-  const now = new Date();
+  const currentYear = getSaoPauloYear();
+  const currentMonth = getSaoPauloMonth();
   const options = [];
-  for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
-    const maxM = y === now.getFullYear() ? now.getMonth() + 1 : 12;
+  for (let y = currentYear; y >= currentYear - 3; y--) {
+    const maxM = y === currentYear ? currentMonth : 12;
     for (let m = maxM; m >= 1; m--) {
       const value = `${y}-${String(m).padStart(2, "0")}`;
       const label = `${MONTH_NAMES[m - 1]} / ${y}`;
@@ -61,10 +63,9 @@ const generateMonthOptions = () => {
 const MONTH_OPTIONS = generateMonthOptions();
 
 const getDefaultDates = () => {
-  const now = new Date();
-  const endY = now.getFullYear();
-  const endM = now.getMonth() + 1;
-  const startDate = new Date(endY - 1, now.getMonth(), 1);
+  const endY = getSaoPauloYear();
+  const endM = getSaoPauloMonth();
+  const startDate = new Date(endY - 1, endM - 1, 1);
   const startY = startDate.getFullYear();
   const startM = startDate.getMonth() + 1;
   return {

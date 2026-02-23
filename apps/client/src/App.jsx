@@ -46,6 +46,7 @@ import SalesByStateChart from "./components/SalesByStateChart";
 import SalesByPlatformChart from "./components/SalesByPlatformChart";
 import AbcTable from "./components/AbcTable";
 import CanceledReportDrawer from "./components/CanceledReportDrawer";
+import DailySalesDrawer from "./components/DailySalesDrawer";
 import LoginPage from "./components/LoginPage";
 import ForgotPasswordModal from "./components/ForgotPasswordModal";
 import ResetPasswordPage from "./components/ResetPasswordPage";
@@ -53,8 +54,10 @@ import UsersManagement from "./components/UsersManagement";
 import DatabaseMaintenance from "./components/DatabaseMaintenance";
 import SisplanSettings from "./components/SisplanSettings";
 import WhatsappSettings from "./components/WhatsappSettings";
+import UpsellerSettings from "./components/UpsellerSettings";
 import CashFlow from "./components/CashFlow";
 import CashFlowDashboard from "./components/CashFlowDashboard";
+import { getSaoPauloDate, getSaoPauloYear, getSaoPauloMonth } from "./utils/timezone";
 import {
   fetchSummary,
   fetchStores,
@@ -80,10 +83,11 @@ const MONTH_NAMES = [
 ];
 
 const generateMonthOptions = () => {
-  const now = new Date();
+  const currentYear = getSaoPauloYear();
+  const currentMonth = getSaoPauloMonth();
   const options = [];
-  for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
-    const maxM = y === now.getFullYear() ? now.getMonth() + 1 : 12;
+  for (let y = currentYear; y >= currentYear - 3; y--) {
+    const maxM = y === currentYear ? currentMonth : 12;
     for (let m = maxM; m >= 1; m--) {
       const value = `${y}-${String(m).padStart(2, "0")}`;
       const label = `${MONTH_NAMES[m - 1]} / ${y}`;
@@ -156,6 +160,9 @@ const App = () => {
   const isMobile = useBreakpointValue({ base: true, md: false });
   const mobileMenu = useDisclosure();
   const canceledDrawer = useDisclosure();
+  const dailySalesDrawer = useDisclosure();
+  const [dailySalesDate, setDailySalesDate] = useState("");
+  const [dailySalesTitle, setDailySalesTitle] = useState("");
   const forgotModal = useDisclosure();
   const { colorMode, toggleColorMode } = useColorMode();
   const pageBg = useColorModeValue("gray.50", "gray.900");
@@ -340,6 +347,10 @@ const App = () => {
         {
           label: "WhatsApp Bot",
           view: "whatsapp-settings"
+        },
+        {
+          label: "UpSeller",
+          view: "upseller-settings"
         },
         {
           label: "Manutenção de base",
@@ -638,7 +649,7 @@ const App = () => {
           </Alert>
         )}
 
-        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "database-maintenance" && (
+        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "database-maintenance" && (
           <Center py={10}>
             <Box maxW="680px" w="full">
               <UploadForm onUpload={handleUpload} />
@@ -656,6 +667,10 @@ const App = () => {
 
         {activeView === "sisplan-settings" && user?.role === "admin" && (
           <SisplanSettings />
+        )}
+
+        {activeView === "upseller-settings" && user?.role === "admin" && (
+          <UpsellerSettings />
         )}
 
         {activeView === "whatsapp-settings" && user?.role === "admin" && (
@@ -743,11 +758,31 @@ const App = () => {
               </Flex>
             )}
 
-            <SummaryCards summary={summary} onCanceledClick={canceledDrawer.onOpen} />
+            <SummaryCards
+              summary={summary}
+              onCanceledClick={canceledDrawer.onOpen}
+              onTodayClick={() => {
+                setDailySalesDate(getSaoPauloDate());
+                setDailySalesTitle("Vendas Hoje");
+                dailySalesDrawer.onOpen();
+              }}
+              onYesterdayClick={() => {
+                setDailySalesDate(getSaoPauloDate(-1));
+                setDailySalesTitle("Vendas Ontem");
+                dailySalesDrawer.onOpen();
+              }}
+            />
             <CanceledReportDrawer
               isOpen={canceledDrawer.isOpen}
               onClose={canceledDrawer.onClose}
               filters={{ ...filters, start: monthToStartDate(filters.startMonth), end: monthToEndDate(filters.endMonth) }}
+            />
+            <DailySalesDrawer
+              isOpen={dailySalesDrawer.isOpen}
+              onClose={dailySalesDrawer.onClose}
+              date={dailySalesDate}
+              title={dailySalesTitle}
+              filters={filters}
             />
             <SalesByPeriodChart data={salesByPeriod} period={filters.period} onPeriodChange={(value) => setFilters(f => ({ ...f, period: value }))} />
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>

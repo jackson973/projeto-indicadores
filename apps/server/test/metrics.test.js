@@ -1,16 +1,20 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  filterSales,
   getSalesByPeriod,
   getSalesByStore,
   getSalesByState,
   getSalesByPlatform,
   getCancellationsByReason,
+  getCanceledDetails,
   getTicketByState,
   getCanceledSummary,
   getAbc,
   getAbcDetails,
-  getSummary
+  getSummary,
+  getStores,
+  getStates
 } = require("../src/lib/metrics");
 
 const sampleSales = [
@@ -56,7 +60,7 @@ const sampleSales = [
     state: "SP",
     platform: "Mercado Livre",
   status: "",
-    orderId: "PED-1",
+    orderId: "PED-3",
     cancelReason: ""
   }
 ];
@@ -188,7 +192,8 @@ test("canceled summary agrega por razao com pedidos unicos", () => {
 test("ticket-by-state calcula media por pedido", () => {
   const tickets = getTicketByState(sampleSales, {});
   assert.equal(tickets[0].state, "SP");
-  assert.equal(tickets[0].average, 250);
+  // PED-1 (R$100) + PED-3 (R$150) = 2 pedidos, media = 125
+  assert.equal(tickets[0].average, 125);
 });
 
 test("abc classifica produtos", () => {
@@ -206,4 +211,129 @@ test("abc details agrega variacoes e tamanhos", () => {
   assert.equal(details.variations[0].quantity, 5);
   assert.equal(details.sizes[0].size, "M");
   assert.equal(details.sizes[0].quantity, 5);
+});
+
+// ── Novos testes: filterSales ──
+
+test("filterSales filtra por data inicio e fim", () => {
+  const filtered = filterSales(sampleSales, {
+    start: "2026-01-01",
+    end: "2026-01-31"
+  });
+  // Deve retornar apenas as vendas de janeiro (2 jan e 3 jan)
+  assert.equal(filtered.length, 2);
+});
+
+test("filterSales filtra por loja", () => {
+  const filtered = filterSales(sampleSales, { store: "Loja Shopping" });
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].store, "Loja Shopping");
+});
+
+test("filterSales filtra por estado", () => {
+  const filtered = filterSales(sampleSales, { state: "RJ" });
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].state, "RJ");
+});
+
+test("filterSales filtra por plataforma", () => {
+  const filtered = filterSales(sampleSales, { platform: "Shopee" });
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].platform, "Shopee");
+});
+
+test("filterSales com multiplos filtros combinados", () => {
+  const filtered = filterSales(sampleSales, {
+    store: "Loja Centro",
+    state: "SP",
+    platform: "Mercado Livre"
+  });
+  assert.equal(filtered.length, 2);
+});
+
+test("filterSales retorna tudo sem filtros", () => {
+  const filtered = filterSales(sampleSales, {});
+  assert.equal(filtered.length, 3);
+});
+
+// ── Novos testes: getCanceledDetails ──
+
+test("getCanceledDetails retorna detalhes formatados", () => {
+  const details = getCanceledDetails(sampleSales, {});
+  assert.equal(details.length, 1);
+  assert.equal(details[0].orderId, "PED-2");
+  assert.equal(details[0].product, "Produto B");
+  assert.equal(details[0].cancelReason, "Estoque");
+  assert.ok(details[0].total > 0);
+});
+
+test("getCanceledDetails sem cancelamentos retorna array vazio", () => {
+  const activeSales = sampleSales.filter(s => s.status !== "Cancelado");
+  const details = getCanceledDetails(activeSales, {});
+  assert.equal(details.length, 0);
+});
+
+// ── Novos testes: getSalesByPeriod com diferentes periodos ──
+
+test("sales-by-period agrega por dia", () => {
+  const periods = getSalesByPeriod(sampleSales, { period: "day" });
+  assert.equal(periods.length, 3);
+  assert.equal(periods[0].period, "2026-01-02");
+});
+
+test("sales-by-period agrega por semana", () => {
+  const periods = getSalesByPeriod(sampleSales, { period: "week" });
+  assert.ok(periods.length >= 1);
+  assert.ok(periods[0].period.includes("W"), "periodo deve conter 'W' para semana");
+});
+
+// ── Novos testes: getSummary edge cases ──
+
+test("summary com array vazio retorna zeros", () => {
+  const summary = getSummary([], {});
+  assert.equal(summary.totalRevenue, 0);
+  assert.equal(summary.totalQuantity, 0);
+  assert.equal(summary.totalStores, 0);
+  assert.equal(summary.totalProducts, 0);
+  assert.equal(summary.totalStates, 0);
+  assert.equal(summary.totalSales, 0);
+  assert.equal(summary.ticketAverage, 0);
+  assert.equal(summary.canceledTotal, 0);
+  assert.equal(summary.canceledOrders, 0);
+});
+
+// ── Novos testes: getStores e getStates ──
+
+test("getStores retorna lojas unicas ordenadas", () => {
+  const stores = getStores(sampleSales);
+  assert.deepEqual(stores, ["Loja Centro", "Loja Shopping"]);
+});
+
+test("getStates retorna estados unicos ordenados", () => {
+  const states = getStates(sampleSales);
+  assert.deepEqual(states, ["RJ", "SP"]);
+});
+
+// ── Novos testes: status de cancelamento variantes ──
+
+test("status 'para devolver' conta como cancelado", () => {
+  const summary = getSummary([
+    { ...sampleSales[0], orderId: "PED-10", status: "Para Devolver" }
+  ], {});
+  assert.equal(summary.canceledOrders, 1);
+  assert.equal(summary.totalSales, 0);
+});
+
+test("status 'pos-venda' conta como cancelado", () => {
+  const summary = getSummary([
+    { ...sampleSales[0], orderId: "PED-11", status: "Pós-Venda" }
+  ], {});
+  assert.equal(summary.canceledOrders, 1);
+});
+
+test("abc details sem adName retorna vazio", () => {
+  const details = getAbcDetails(sampleSales, {});
+  assert.equal(details.adName, "");
+  assert.equal(details.variations.length, 0);
+  assert.equal(details.sizes.length, 0);
 });

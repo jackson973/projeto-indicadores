@@ -297,14 +297,15 @@ router.get("/summary", async (req, res) => {
       return res.json({ ...getSummary([], {}), lastUpdate: null, todayRevenue: 0, yesterdayRevenue: 0 });
     }
     const salesRepository = require('../db/salesRepository');
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(yesterday.getDate() - 1);
+    const { getSaoPauloDate } = require('../lib/timezone');
+    // Use São Paulo timezone for "today" and "yesterday"
+    const spToday = getSaoPauloDate();
+    const spYesterday = getSaoPauloDate(-1);
     const [sales, lastUpdate, todayRevenue, yesterdayRevenue] = await Promise.all([
       salesRepository.getSales(req.query),
       salesRepository.getLastUpdate(),
-      salesRepository.getDailyRevenue(today, req.query),
-      salesRepository.getDailyRevenue(yesterday, req.query)
+      salesRepository.getDailyRevenue(spToday, req.query),
+      salesRepository.getDailyRevenue(spYesterday, req.query)
     ]);
     return res.json({ ...getSummary(sales, req.query), lastUpdate, todayRevenue, yesterdayRevenue });
   } catch (error) {
@@ -521,6 +522,26 @@ router.get("/abc/details", async (req, res) => {
     return res.json(getAbcDetails(sales, req.query));
   } catch (error) {
     console.error('ABC details error:', error);
+    return res.status(500).json({ error: error.message });
+  }
+});
+
+// ── Daily Sales Details (for Vendas Hoje / Ontem drawers) ──
+
+router.get("/daily-sales-details", async (req, res) => {
+  try {
+    if (!(await hasSales())) {
+      return res.json({ summary: { total: 0, orders: 0 }, rows: [] });
+    }
+    const salesRepository = require('../db/salesRepository');
+    const { date } = req.query;
+    if (!date) {
+      return res.status(400).json({ error: "Parâmetro 'date' obrigatório." });
+    }
+    const result = await salesRepository.getDailySalesDetails(date, req.query);
+    return res.json(result);
+  } catch (error) {
+    console.error('Daily sales details error:', error);
     return res.status(500).json({ error: error.message });
   }
 });

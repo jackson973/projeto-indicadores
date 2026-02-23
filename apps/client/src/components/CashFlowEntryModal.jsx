@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { getSaoPauloDate } from "../utils/timezone";
 import {
   Modal,
   ModalOverlay,
@@ -48,7 +49,7 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
       });
     } else {
       setForm({
-        date: new Date().toISOString().slice(0, 10),
+        date: getSaoPauloDate(),
         categoryId: categories.length > 0 ? String(categories[0].id) : "",
         description: "",
         type: "expense",

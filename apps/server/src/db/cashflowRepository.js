@@ -1,31 +1,25 @@
 const db = require('./connection');
+const { getSaoPauloDate, getSaoPauloDayOfWeek } = require('../lib/timezone');
 
 // ── Date Utilities ──
 
 /**
- * Get today's date in YYYY-MM-DD format (Brazil timezone UTC-3)
+ * Get today's date in YYYY-MM-DD format (São Paulo timezone)
  */
 function getTodayBrazil() {
-  const now = new Date();
-  const brazilTime = new Date(now.getTime() - (3 * 60 * 60 * 1000));
-  return brazilTime.toISOString().slice(0, 10);
+  return getSaoPauloDate();
 }
 
 /**
  * Check if date is weekend and return the next Monday if so
  */
 function getEffectiveDueDate() {
-  const today = new Date();
-  const dayOfWeek = today.getDay();
+  const dayOfWeek = getSaoPauloDayOfWeek();
 
   if (dayOfWeek === 0) { // Sunday
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + 1);
-    return monday.toISOString().slice(0, 10);
+    return getSaoPauloDate(1);
   } else if (dayOfWeek === 6) { // Saturday
-    const monday = new Date(today);
-    monday.setDate(today.getDate() + 2);
-    return monday.toISOString().slice(0, 10);
+    return getSaoPauloDate(2);
   }
 
   return getTodayBrazil();

@@ -10,6 +10,7 @@ const cashflowRouter = require("./routes/cashflow");
 const emailRouter = require("./routes/email");
 const sisplanRouter = require("./routes/sisplan");
 const whatsappRouter = require("./routes/whatsapp");
+const upsellerRouter = require("./routes/upseller");
 const { authenticate } = require("./middleware/auth");
 
 // Initialize database connection (will test connection on import)
@@ -25,6 +26,10 @@ startCashflowAlertScheduler();
 // Start Sisplan sync scheduler
 const { startSisplanSyncScheduler } = require('./services/sisplanSyncService');
 startSisplanSyncScheduler();
+
+// Start UpSeller sync scheduler
+const { startUpsellerSyncScheduler } = require('./services/upsellerSyncService');
+startUpsellerSyncScheduler();
 
 // Start WhatsApp bot if active
 const { startWhatsappBot } = require('./services/whatsappBotService');
@@ -57,6 +62,7 @@ app.use("/api/cashflow", cashflowRouter);
 app.use("/api/email", emailRouter);
 app.use("/api/sisplan", sisplanRouter);
 app.use("/api/whatsapp", whatsappRouter);
+app.use("/api/upseller", upsellerRouter);
 app.use("/api", authenticate, apiRouter);
 
 app.get("/health", (_req, res) => {

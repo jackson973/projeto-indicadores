@@ -39,6 +39,7 @@ import CashFlowCategoriesModal from "./CashFlowCategoriesModal";
 import CashFlowRecurrencesModal from "./CashFlowRecurrencesModal";
 import CashFlowBoxesModal from "./CashFlowBoxesModal";
 import CashFlowImportModal from "./CashFlowImportModal";
+import { getSaoPauloYear, getSaoPauloMonth } from "../utils/timezone";
 import {
   fetchCashflowCategories,
   fetchCashflowEntries,
@@ -69,9 +70,8 @@ const formatDateBR = (d) => {
 };
 
 const CashFlow = () => {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [year, setYear] = useState(getSaoPauloYear());
+  const [month, setMonth] = useState(getSaoPauloMonth());
   const [entries, setEntries] = useState([]);
   const [categories, setCategories] = useState([]);
   const [summary, setSummary] = useState(null);

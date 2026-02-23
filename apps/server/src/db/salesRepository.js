@@ -337,6 +337,64 @@ async function searchSales(searchTerm, limit = 500) {
   }));
 }
 
+/**
+ * Get daily sales details grouped by order for a specific date
+ * Excludes canceled orders. Returns summary + detail rows.
+ */
+async function getDailySalesDetails(date, filters = {}) {
+  const params = [date];
+  let extraConditions = '';
+  let paramIdx = 2;
+  if (filters.store) {
+    extraConditions += ` AND store = $${paramIdx++}`;
+    params.push(filters.store);
+  }
+  if (filters.sale_channel) {
+    extraConditions += ` AND sale_channel = $${paramIdx++}`;
+    params.push(filters.sale_channel);
+  }
+
+  const notCanceled = `
+    AND (
+      status IS NULL OR status = ''
+      OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
+        NOT SIMILAR TO '%(cancelado|para devolver|pos-venda|pos venda)%'
+    )`;
+
+  const query = `
+    SELECT
+      order_id AS "orderId",
+      MIN(date) AS date,
+      COALESCE(NULLIF(store, ''), 'Todas') AS store,
+      COALESCE(NULLIF(platform, ''), '-') AS platform,
+      COALESCE(NULLIF(client_name, ''), '-') AS "clientName",
+      COALESCE(NULLIF(state, ''), '-') AS state,
+      SUM(quantity) AS quantity,
+      SUM(total) AS total
+    FROM sales
+    WHERE date::date = $1::date${extraConditions}${notCanceled}
+    GROUP BY order_id, store, platform, client_name, state
+    ORDER BY MIN(date) DESC
+  `;
+
+  const result = await db.query(query, params);
+  const rows = result.rows.map(r => ({
+    ...r,
+    quantity: parseFloat(r.quantity) || 0,
+    total: parseFloat(r.total) || 0
+  }));
+
+  const totalValue = rows.reduce((sum, r) => sum + r.total, 0);
+
+  return {
+    summary: {
+      total: Number(totalValue.toFixed(2)),
+      orders: rows.length
+    },
+    rows
+  };
+}
+
 module.exports = {
   batchUpsertSales,
   getSales,
@@ -346,5 +404,6 @@ module.exports = {
   getStores,
   getStates,
   getLastUpdate,
-  getDailyRevenue
+  getDailyRevenue,
+  getDailySalesDetails
 };

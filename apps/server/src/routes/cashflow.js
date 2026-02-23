@@ -3,6 +3,7 @@ const multer = require('multer');
 const xlsx = require('xlsx');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const repo = require('../db/cashflowRepository');
+const { getSaoPauloYear, getSaoPauloMonth } = require('../lib/timezone');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -110,8 +111,8 @@ router.delete('/categories/:id', async (req, res) => {
 
 router.get('/entries', async (req, res) => {
   try {
-    const year = parseInt(req.query.year) || new Date().getFullYear();
-    const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
+    const year = parseInt(req.query.year) || getSaoPauloYear();
+    const month = parseInt(req.query.month) || getSaoPauloMonth();
     const boxId = parseInt(req.query.boxId);
     if (!boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
     // Auto-generate recurrence entries for this month (non-blocking)
@@ -188,8 +189,8 @@ router.delete('/entries/:id', async (req, res) => {
 
 router.get('/balance', async (req, res) => {
   try {
-    const year = parseInt(req.query.year) || new Date().getFullYear();
-    const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
+    const year = parseInt(req.query.year) || getSaoPauloYear();
+    const month = parseInt(req.query.month) || getSaoPauloMonth();
     const boxId = parseInt(req.query.boxId);
     if (!boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
     const openingBalance = await repo.getBalance(year, month, boxId);
@@ -218,8 +219,8 @@ router.put('/balance', async (req, res) => {
 
 router.get('/summary', async (req, res) => {
   try {
-    const year = parseInt(req.query.year) || new Date().getFullYear();
-    const month = parseInt(req.query.month) || (new Date().getMonth() + 1);
+    const year = parseInt(req.query.year) || getSaoPauloYear();
+    const month = parseInt(req.query.month) || getSaoPauloMonth();
     const boxId = parseInt(req.query.boxId);
     if (!boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
     const summary = await repo.getSummary(year, month, boxId);
@@ -374,7 +375,7 @@ function parseMonthYear(title) {
   // Try just month name (assume current year)
   for (const [name, num] of Object.entries(MONTH_MAP)) {
     if (text.includes(name)) {
-      return { month: num, year: new Date().getFullYear() };
+      return { month: num, year: getSaoPauloYear() };
     }
   }
 
