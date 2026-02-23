@@ -1,4 +1,11 @@
-const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, fetchLatestBaileysVersion } = require('@whiskeysockets/baileys');
+// Baileys is ESM-only, use dynamic import (cached after first load)
+let _baileys = null;
+async function getBaileys() {
+  if (!_baileys) {
+    _baileys = await import('@whiskeysockets/baileys');
+  }
+  return _baileys;
+}
 const QRCode = require('qrcode');
 const path = require('path');
 const fs = require('fs');
@@ -105,12 +112,13 @@ async function startWhatsappBot() {
   loadLidMap();
 
   try {
-    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
-    const { version } = await fetchLatestBaileysVersion();
+    const baileys = await getBaileys();
+    const { state, saveCreds } = await baileys.useMultiFileAuthState(AUTH_DIR);
+    const { version } = await baileys.fetchLatestBaileysVersion();
 
     console.log(`${LOG_PREFIX} Starting with Baileys v${version.join('.')}`);
 
-    sock = makeWASocket({
+    sock = baileys.default({
       version,
       auth: state,
       printQRInTerminal: false,
@@ -156,6 +164,7 @@ async function startWhatsappBot() {
 
       if (connection === 'close') {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const { DisconnectReason } = await getBaileys();
         const loggedOut = statusCode === DisconnectReason.loggedOut;
 
         console.log(`${LOG_PREFIX} Disconnected. Status code: ${statusCode}, Logged out: ${loggedOut}`);
