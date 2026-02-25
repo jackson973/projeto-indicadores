@@ -53,14 +53,21 @@ cd apps/server
 npm install --production
 cd ../..
 
-# 5. Executar migrations (se houver novas)
-print_warning "Verificar se há novas migrations para executar manualmente!"
+# 5. Instalar dependências do Chrome/Puppeteer (se necessário)
+if ! dpkg -s libgbm1 >/dev/null 2>&1; then
+    print_step "Instalando dependências do Chrome/Puppeteer..."
+    bash scripts/install-chrome-deps.sh
+else
+    print_step "Dependências do Chrome já instaladas."
+fi
 
-# 6. Restart PM2
+# 6. Migrations rodam automaticamente ao iniciar o servidor
+
+# 7. Restart PM2
 print_step "Reiniciando servidor API..."
 pm2 restart api
 
-# 7. Verificar status
+# 8. Verificar status
 print_step "Verificando status..."
 pm2 status
 
