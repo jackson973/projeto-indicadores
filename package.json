@@ -10,7 +10,8 @@
     "test": "npm run test -w apps/server && npm run test -w apps/client",
     "db:start": "docker-compose up -d",
     "db:stop": "docker-compose stop",
-    "db:logs": "docker-compose logs -f"
+    "db:logs": "docker-compose logs -f",
+    "setup:chrome": "bash scripts/install-chrome-deps.sh"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"
