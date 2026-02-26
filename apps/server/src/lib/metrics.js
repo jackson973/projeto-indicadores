@@ -121,7 +121,7 @@ const splitVariationAndSize = (sale) => {
 };
 
 const getSalesByPeriod = (sales, { start, end, store, period = "month" }) => {
-  const filtered = filterSales(sales, { start, end, store });
+  const filtered = filterSales(sales, { start, end, store }).filter((s) => !isCanceled(s));
   const map = new Map();
 
   filtered.forEach((sale) => {

@@ -295,17 +295,17 @@ const AbcTable = ({ data, filters }) => {
   );
 
   const renderDesktopTable = () => (
-    <TableContainer>
-      <Table size="sm">
+    <Box overflowX="hidden">
+      <Table size="sm" layout="fixed" w="100%">
         <Thead>
-          <Tr>
-            <Th>Imagem</Th>
-            <Th>Nome do anúncio</Th>
-            <Th>Loja</Th>
-            <Th>Plataforma</Th>
-            <Th isNumeric>Quantidade vendida</Th>
-            <Th isNumeric>Faturamento</Th>
-            <Th>Classe</Th>
+          <Tr whiteSpace="nowrap">
+            <Th w="56px" px={2}></Th>
+            <Th>Anúncio</Th>
+            <Th w="150px">Loja</Th>
+            <Th w="50px" px={2}></Th>
+            <Th w="70px" isNumeric>Qtd</Th>
+            <Th w="120px" isNumeric>Faturamento</Th>
+            <Th w="50px" textAlign="center">ABC</Th>
           </Tr>
         </Thead>
         <Tbody>
@@ -321,25 +321,31 @@ const AbcTable = ({ data, filters }) => {
                   onClick={() => toggleItem(item)}
                   _hover={{ bg: rowHover, cursor: "pointer" }}
                 >
-                  <Td>
+                  <Td px={2}>
                     {item.image ? (
                       <Image src={item.image} boxSize="40px" borderRadius="md" />
                     ) : (
                       <NoPhoto size={40} />
                     )}
                   </Td>
-                  <Td>{adName}</Td>
-                  <Td>{item.store || "Todas"}</Td>
                   <Td>
+                    <Tooltip label={adName} placement="top" openDelay={300}>
+                      <Text noOfLines={1}>{adName}</Text>
+                    </Tooltip>
+                  </Td>
+                  <Td>
+                    <Text noOfLines={1}>{item.store || "Todas"}</Text>
+                  </Td>
+                  <Td px={2} textAlign="center">
                     {platformMeta.logo ? (
-                      <Image src={platformMeta.logo} boxSize="28px" borderRadius="full" alt={platformMeta.label} />
+                      <Image src={platformMeta.logo} boxSize="28px" borderRadius="full" alt={platformMeta.label} mx="auto" />
                     ) : (
                       platformMeta.label
                     )}
                   </Td>
                   <Td isNumeric>{formatNumber(item.quantity)}</Td>
                   <Td isNumeric>{formatCurrency(item.total)}</Td>
-                  <Td>
+                  <Td textAlign="center">
                     <Badge colorScheme={classColor(item.classification)}>
                       {item.classification}
                     </Badge>
@@ -359,7 +365,7 @@ const AbcTable = ({ data, filters }) => {
           })}
         </Tbody>
       </Table>
-    </TableContainer>
+    </Box>
   );
 
   return (

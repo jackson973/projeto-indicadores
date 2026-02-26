@@ -179,7 +179,7 @@ REGRAS OBRIGATORIAS DE SQL:
    Para "este mes": BETWEEN '2026-02-01' AND a data de hoje.
    Para "mes passado inteiro": BETWEEN '2026-01-01' AND '2026-01-31'.
 
-8. AGREGACAO: O resultado e limitado a 50 linhas. NUNCA some ou conte linhas manualmente.
+8. AGREGACAO: O resultado e limitado a 200 linhas. NUNCA some ou conte linhas manualmente.
    Para totais, SEMPRE use funcoes SQL: SUM(total), COUNT(*), COUNT(DISTINCT order_id), AVG(total).
    ERRADO: SELECT * FROM sales WHERE ... (e depois tentar somar na resposta)
    CORRETO: SELECT COUNT(DISTINCT order_id) as pedidos, SUM(total) as receita FROM sales WHERE ...
@@ -214,7 +214,7 @@ const FORBIDDEN_PATTERNS = [
   /--/,       // SQL comments (possible injection)
   /\/\*/      // block comments
 ];
-const MAX_ROWS = 50;
+const MAX_ROWS = 200;
 const QUERY_TIMEOUT_MS = 5000;
 
 function validateSql(sql) {
