@@ -298,16 +298,64 @@ router.get("/summary", async (req, res) => {
     }
     const salesRepository = require('../db/salesRepository');
     const { getSaoPauloDate } = require('../lib/timezone');
-    // Use São Paulo timezone for "today" and "yesterday"
     const spToday = getSaoPauloDate();
     const spYesterday = getSaoPauloDate(-1);
-    const [sales, lastUpdate, todayRevenue, yesterdayRevenue] = await Promise.all([
+
+    const [sales, lastUpdate, salesTodayRevenue, salesYesterdayRevenue] = await Promise.all([
       salesRepository.getSales(req.query),
       salesRepository.getLastUpdate(),
       salesRepository.getDailyRevenue(spToday, req.query),
       salesRepository.getDailyRevenue(spYesterday, req.query)
     ]);
-    return res.json({ ...getSummary(sales, req.query), lastUpdate, todayRevenue, yesterdayRevenue });
+
+    // Use UpSeller analytics for today/yesterday revenue
+    let todayRevenue = salesTodayRevenue;
+    let yesterdayRevenue = salesYesterdayRevenue;
+    let upsellerFetchedAt = null;
+    const storeFilter = req.query.store || '';
+    const channelFilter = (req.query.sale_channel || '').toLowerCase();
+    const isFabrica = storeFilter.toLowerCase() === 'fabrica';
+    const isAtacado = channelFilter === 'atacado';
+    const isOnline = channelFilter === 'online';
+
+    // Atacado = only Fabrica/Sisplan data (already filtered by getDailyRevenue via sale_channel)
+    // Online = only UpSeller data (no Fabrica addition)
+    // No filter = UpSeller + Fabrica combined
+    if (!isFabrica && !isAtacado) {
+      try {
+        const analyticsRepo = require('../db/upsellerAnalyticsRepository');
+        const analytics = await analyticsRepo.getDailyAnalytics(spToday);
+        if (analytics) {
+          upsellerFetchedAt = analytics.fetchedAt;
+          if (analytics.todaySaleAmount > 0) {
+            if (!storeFilter) {
+              if (isOnline) {
+                // Online only = UpSeller total (lojas)
+                todayRevenue = parseFloat(analytics.todaySaleAmount);
+                yesterdayRevenue = parseFloat(analytics.yesterdaySaleAmount);
+              } else {
+                // Todas as lojas = UpSeller total + Fábrica (Sisplan)
+                const fabricaToday = await salesRepository.getDailyRevenue(spToday, { store: 'Fabrica' });
+                const fabricaYesterday = await salesRepository.getDailyRevenue(spYesterday, { store: 'Fabrica' });
+                todayRevenue = parseFloat(analytics.todaySaleAmount) + fabricaToday;
+                yesterdayRevenue = parseFloat(analytics.yesterdaySaleAmount) + fabricaYesterday;
+              }
+            } else {
+              // Loja específica — buscar no shopTops do UpSeller
+              const shopTops = analytics.shopTops || [];
+              const match = shopTops.find(s =>
+                (s.shopName || '').toLowerCase() === storeFilter.toLowerCase()
+              );
+              if (match) {
+                todayRevenue = parseFloat(match.validSales || 0);
+              }
+            }
+          }
+        }
+      } catch (_) { /* analytics not available, use sales data */ }
+    }
+
+    return res.json({ ...getSummary(sales, req.query), lastUpdate, upsellerFetchedAt, todayRevenue, yesterdayRevenue });
   } catch (error) {
     console.error('Summary error:', error);
     return res.status(500).json({ error: error.message });

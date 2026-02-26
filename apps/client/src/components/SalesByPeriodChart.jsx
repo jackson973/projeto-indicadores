@@ -74,6 +74,26 @@ const getPeriodTooltipLabel = (label) => {
   return { primary: `Período: ${label}` };
 };
 
+const formatXAxisLabel = (label) => {
+  if (!label) return "";
+  const weekMatch = label.match(/^(\d{4})-W(\d{2})$/);
+  if (weekMatch) {
+    const start = getIsoWeekStart(Number(weekMatch[1]), Number(weekMatch[2]));
+    return `${formatShortDate(start)}`;
+  }
+  const dayMatch = label.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (dayMatch) {
+    return `${dayMatch[3]}/${dayMatch[2]}`;
+  }
+  const monthMatch = label.match(/^(\d{4})-(\d{2})$/);
+  if (monthMatch) {
+    const date = new Date(Number(monthMatch[1]), Number(monthMatch[2]) - 1, 1);
+    const m = new Intl.DateTimeFormat("pt-BR", { month: "short" }).format(date);
+    return `${m}/${monthMatch[1].slice(2)}`;
+  }
+  return label;
+};
+
 const SalesByPeriodChart = ({ data, period, onPeriodChange }) => {
   const panelBg = useColorModeValue("white", "gray.800");
   const tooltipBg = useColorModeValue("white", "gray.800");
@@ -110,7 +130,7 @@ const SalesByPeriodChart = ({ data, period, onPeriodChange }) => {
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="period" />
+            <XAxis dataKey="period" tickFormatter={formatXAxisLabel} fontSize={11} angle={-35} textAnchor="end" height={50} interval="preserveStartEnd" />
             <YAxis />
             <Tooltip
               content={({ active, payload, label }) => {

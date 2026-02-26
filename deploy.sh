@@ -61,13 +61,17 @@ else
     print_step "Dependências do Chrome já instaladas."
 fi
 
-# 6. Migrations rodam automaticamente ao iniciar o servidor
+# 6. Backup do banco antes de reiniciar
+print_step "Fazendo backup do banco de dados..."
+bash scripts/backup-db.sh || print_warning "Backup falhou (continuando deploy...)"
 
-# 7. Restart PM2
+# 7. Migrations rodam automaticamente ao iniciar o servidor
+
+# 8. Restart PM2
 print_step "Reiniciando servidor API..."
 pm2 restart api
 
-# 8. Verificar status
+# 9. Verificar status
 print_step "Verificando status..."
 pm2 status
 

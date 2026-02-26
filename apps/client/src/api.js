@@ -396,6 +396,11 @@ export const triggerSisplanSync = async () => {
   return handleResponse(response);
 };
 
+export const refreshSisplanData = async () => {
+  const response = await authFetch("/api/sisplan/refresh", { method: "POST" });
+  return handleResponse(response);
+};
+
 // Sisplan Active Check (any authenticated user)
 export const fetchSisplanActive = async () => {
   const response = await authFetch("/api/sisplan-active");
@@ -419,6 +424,16 @@ export const updateUpsellerSettings = async (data) => {
 
 export const triggerUpsellerSync = async () => {
   const response = await authFetch("/api/upseller/sync", { method: "POST" });
+  return handleResponse(response);
+};
+
+export const fetchUpsellerTodayAnalytics = async () => {
+  const response = await authFetch("/api/upseller/today-analytics");
+  return handleResponse(response);
+};
+
+export const refreshUpsellerTodayAnalytics = async () => {
+  const response = await authFetch("/api/upseller/today-analytics/refresh", { method: "POST" });
   return handleResponse(response);
 };
 

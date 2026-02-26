@@ -7,9 +7,9 @@ async function getSettings() {
             fb_user AS "fbUser", fb_password_encrypted AS "fbPasswordEncrypted",
             sql_query AS "sqlQuery", column_mapping AS "columnMapping",
             sync_interval_minutes AS "syncIntervalMinutes",
-            last_sync_at AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
+            last_sync_at AT TIME ZONE 'UTC' AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
             last_sync_message AS "lastSyncMessage", last_sync_rows AS "lastSyncRows",
-            created_at AS "createdAt", updated_at AS "updatedAt"
+            created_at AT TIME ZONE 'UTC' AS "createdAt", updated_at AT TIME ZONE 'UTC' AS "updatedAt"
      FROM sisplan_settings WHERE id = 1`
   );
 
@@ -60,7 +60,7 @@ async function updateSettings({
                fb_user AS "fbUser", sql_query AS "sqlQuery",
                column_mapping AS "columnMapping",
                sync_interval_minutes AS "syncIntervalMinutes",
-               last_sync_at AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
+               last_sync_at AT TIME ZONE 'UTC' AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
                last_sync_message AS "lastSyncMessage", last_sync_rows AS "lastSyncRows"`,
     params
   );

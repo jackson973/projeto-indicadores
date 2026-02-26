@@ -12,11 +12,11 @@ async function getSettings() {
             imap_user AS "imapUser", imap_pass_encrypted AS "imapPassEncrypted",
             sync_interval_minutes AS "syncIntervalMinutes",
             default_days AS "defaultDays",
-            last_sync_at AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
+            last_sync_at AT TIME ZONE 'UTC' AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
             last_sync_message AS "lastSyncMessage", last_sync_rows AS "lastSyncRows",
             session_cookies AS "sessionCookies",
-            session_saved_at AS "sessionSavedAt",
-            created_at AS "createdAt", updated_at AS "updatedAt"
+            session_saved_at AT TIME ZONE 'UTC' AS "sessionSavedAt",
+            created_at AT TIME ZONE 'UTC' AS "createdAt", updated_at AT TIME ZONE 'UTC' AS "updatedAt"
      FROM upseller_settings WHERE id = 1`
   );
 
@@ -91,7 +91,7 @@ async function updateSettings({
                imap_user AS "imapUser",
                sync_interval_minutes AS "syncIntervalMinutes",
                default_days AS "defaultDays",
-               last_sync_at AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
+               last_sync_at AT TIME ZONE 'UTC' AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
                last_sync_message AS "lastSyncMessage", last_sync_rows AS "lastSyncRows"`,
     params
   );
@@ -134,7 +134,7 @@ async function updateSyncStatus(status, message, rows) {
 async function getSessionCookies() {
   const result = await db.query(
     `SELECT session_cookies AS "sessionCookies",
-            session_saved_at AS "sessionSavedAt"
+            session_saved_at AT TIME ZONE 'UTC' AS "sessionSavedAt"
      FROM upseller_settings WHERE id = 1`
   );
 

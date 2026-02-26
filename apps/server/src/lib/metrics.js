@@ -45,9 +45,7 @@ const isCanceled = (sale) => {
   const statusValue = normalizeStatusValue(sale.status);
   if (!statusValue) return false;
   const normalized = statusValue.replace(/\s+/g, " ");
-  return ["cancelado", "para devolver", "pos-venda", "pos venda"].some((token) =>
-    normalized.includes(token)
-  );
+  return normalized.includes("cancelado");
 };
 
 const getUnitPrice = (sale) => {

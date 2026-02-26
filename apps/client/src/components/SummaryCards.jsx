@@ -1,6 +1,10 @@
+import { useState } from "react";
 import {
   Box,
+  Button,
+  IconButton,
   SimpleGrid,
+  Spinner,
   Stat,
   StatHelpText,
   StatLabel,
@@ -15,6 +19,7 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   InfoIcon,
+  RepeatIcon,
   StarIcon,
   SunIcon,
   TimeIcon,
@@ -36,7 +41,10 @@ const formatLastUpdate = (value) => {
   });
 };
 
-const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick }) => {
+const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick, onRefresh, onRefreshFabrica, onRefreshOnline }) => {
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshingFabrica, setRefreshingFabrica] = useState(false);
+  const [refreshingOnline, setRefreshingOnline] = useState(false);
   if (!summary) return null;
 
   const cardBg = useColorModeValue("white", "gray.800");
@@ -45,10 +53,23 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
   const valueColor = useColorModeValue("gray.800", "gray.100");
   const mutedColor = useColorModeValue("gray.400", "gray.500");
 
-  const lastUpdateFormatted = formatLastUpdate(summary.lastUpdate);
+  const sisplanUpdate = formatLastUpdate(summary.lastUpdate);
+  const upsellerUpdate = formatLastUpdate(summary.upsellerFetchedAt);
+
+  const handleRefreshFabrica = () => {
+    if (!onRefreshFabrica || refreshingFabrica) return;
+    setRefreshingFabrica(true);
+    Promise.resolve(onRefreshFabrica()).finally(() => setRefreshingFabrica(false));
+  };
+
+  const handleRefreshOnline = () => {
+    if (!onRefreshOnline || refreshingOnline) return;
+    setRefreshingOnline(true);
+    Promise.resolve(onRefreshOnline()).finally(() => setRefreshingOnline(false));
+  };
 
   const items = [
-    { title: "Vendas Hoje", value: formatCurrency(summary.todayRevenue), icon: SunIcon, onClick: onTodayClick },
+    { title: "Vendas Hoje", value: formatCurrency(summary.todayRevenue), icon: SunIcon, action: onTodayClick, actionLabel: "Detalhes", refreshable: true },
     { title: "Vendas Ontem", value: formatCurrency(summary.yesterdayRevenue), icon: CalendarIcon, onClick: onYesterdayClick },
     { title: "Faturamento", value: formatCurrency(summary.totalRevenue), icon: StarIcon },
     { title: "Ticket médio", value: formatCurrency(summary.ticketAverage), icon: TimeIcon },
@@ -68,10 +89,31 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
 
   return (
     <>
-      {lastUpdateFormatted && (
-        <Text fontSize="xs" color={mutedColor} mb={2} textAlign="right">
-          Última atualização: {lastUpdateFormatted}
-        </Text>
+      {(sisplanUpdate || upsellerUpdate) && (
+        <HStack fontSize="xs" color={mutedColor} mb={2} justify="flex-end" spacing={1} whiteSpace="nowrap">
+          <Text>Atualização:</Text>
+          {sisplanUpdate && (
+            <>
+              <Text>Fábrica {sisplanUpdate}</Text>
+              {onRefreshFabrica && (
+                refreshingFabrica
+                  ? <Spinner size="xs" />
+                  : <IconButton icon={<RepeatIcon />} size="xs" variant="ghost" aria-label="Atualizar Fábrica" onClick={handleRefreshFabrica} minW="auto" h="auto" p={0.5} />
+              )}
+            </>
+          )}
+          {sisplanUpdate && upsellerUpdate && <Text mx={1}>|</Text>}
+          {upsellerUpdate && (
+            <>
+              <Text>Online {upsellerUpdate}</Text>
+              {onRefreshOnline && (
+                refreshingOnline
+                  ? <Spinner size="xs" />
+                  : <IconButton icon={<RepeatIcon />} size="xs" variant="ghost" aria-label="Atualizar Online" onClick={handleRefreshOnline} minW="auto" h="auto" p={0.5} />
+              )}
+            </>
+          )}
+        </HStack>
       )}
       <SimpleGrid className="panel" columns={{ base: 1, sm: 2, lg: 3, xl: 4 }} spacing={4}>
         {items.map((item) => (
@@ -104,6 +146,34 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
                 </StatHelpText>
               )}
             </Stat>
+            {(item.action || item.refreshable) && (
+              <HStack spacing={2} mt={2} justify="space-between">
+                {item.action && (
+                  <Button
+                    size="xs"
+                    colorScheme="blue"
+                    variant="outline"
+                    onClick={(e) => { e.stopPropagation(); item.action(); }}
+                  >
+                    {item.actionLabel}
+                  </Button>
+                )}
+                {item.refreshable && onRefresh && (
+                  <IconButton
+                    icon={<RepeatIcon />}
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Atualizar"
+                    isLoading={refreshing}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setRefreshing(true);
+                      Promise.resolve(onRefresh()).finally(() => setRefreshing(false));
+                    }}
+                  />
+                )}
+              </HStack>
+            )}
           </Box>
         ))}
       </SimpleGrid>

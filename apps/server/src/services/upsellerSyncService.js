@@ -289,22 +289,32 @@ const PAGE_SIZE = 50;
 
 /**
  * Fetch orders from /api/order/index (POST form).
- * Orders come sorted by date DESC. We paginate until we reach orders
- * older than cutoffDate, then stop.
+ * Uses timeType=1 (data do pedido) with startTime/endTime to filter
+ * server-side, matching the UpSeller frontend behaviour.
  */
 async function fetchOrders(cookies, cutoffDate) {
   const allOrders = [];
   let pageNum = 1;
-  let keepGoing = true;
 
-  console.log(`[UpSeller] Fetching orders (cutoff: ${cutoffDate})...`);
+  const startTime = `${cutoffDate} 00:00:00`;
+  const endTime = `${getSaoPauloDate()} 23:59:59`;
 
-  while (keepGoing) {
-    const formData = `pageNum=${pageNum}&pageSize=${PAGE_SIZE}`;
+  console.log(`[UpSeller] Fetching orders (timeType=1, ${startTime} → ${endTime})...`);
+
+  while (true) {
+    const params = new URLSearchParams({
+      pageNum: String(pageNum),
+      pageSize: String(PAGE_SIZE),
+      timeType: '1',
+      startTime,
+      endTime,
+      sortName: '1',
+      sortValue: '1',
+    });
 
     const { data: res } = await axios.post(
       'https://app.upseller.com/api/order/index',
-      formData,
+      params.toString(),
       {
         headers: {
           Cookie: cookies,
@@ -322,21 +332,14 @@ async function fetchOrders(cookies, cutoffDate) {
     const orders = res.data.list || [];
     if (orders.length === 0) break;
 
-    for (const order of orders) {
-      const orderDate = (order.orderCreateTime || '').split(' ')[0];
-      if (orderDate < cutoffDate) {
-        keepGoing = false;
-        break;
-      }
-      allOrders.push(order);
-    }
+    allOrders.push(...orders);
+    console.log(`[UpSeller] Page ${pageNum}: ${allOrders.length} orders so far`);
 
-    if (keepGoing) {
-      console.log(`[UpSeller] Page ${pageNum}: ${allOrders.length} orders so far`);
-      pageNum++;
-      // Safety: stop at 500 pages max
-      if (pageNum > 500) break;
-    }
+    // All pages fetched when we get less than a full page
+    if (orders.length < PAGE_SIZE) break;
+
+    pageNum++;
+    if (pageNum > 500) break;
   }
 
   console.log(`[UpSeller] Total orders fetched: ${allOrders.length}`);
@@ -346,6 +349,9 @@ async function fetchOrders(cookies, cutoffDate) {
 function mapOrdersToSales(orders) {
   const platformMap = {
     mercado: 'Mercado Livre',
+    'mercado libre': 'Mercado Livre',
+    'mercado livre': 'Mercado Livre',
+    meli: 'Mercado Livre',
     shopee: 'Shopee',
     shein: 'Shein',
     amazon: 'Amazon',
@@ -356,25 +362,40 @@ function mapOrdersToSales(orders) {
   const sales = [];
 
   for (const order of orders) {
-    const basePlatform = platformMap[order.platform] || order.platform || '';
+    const rawPlatform = (order.platform || '').toLowerCase().trim();
+    const basePlatform = platformMap[rawPlatform] || order.platform || '';
     const items = order.orderItemList || [];
+
+    // Derive status from orderStatePlatform (e.g. CANCELLED, cancelled_cancelled, cancelled_not_delivered_returned)
+    // Orders with orderAmount=0 but items with prices are refunded orders (sale happened),
+    // not true cancellations - the UpSeller analytics panel counts them as valid sales
+    const platformState = (order.orderStatePlatform || '').toLowerCase();
+    const rawOrderTotal = parseFloat(order.orderAmount) || 0;
+    const itemsSum = items.reduce((s, i) => s + (parseFloat(i.price) || 0) * (i.productCount || 1), 0);
+    const orderTotal = rawOrderTotal > 0 ? rawOrderTotal : itemsSum;
+    const isRefunded = rawOrderTotal === 0 && itemsSum > 0;
+    const isCancelled = platformState.includes('cancel') && !isRefunded;
+    const orderStatus = isCancelled ? 'Cancelado' : '';
+
+    // Use orderPayTime as date (matches UpSeller's timeType=1 "hora do pagamento" filter)
+    const orderDate = order.orderPayTime || order.orderCreateTime || '';
 
     if (items.length === 0) {
       // Order without item detail - create single row
       sales.push({
         orderId: order.orderNumber || '',
-        date: order.orderCreateTime || '',
+        date: orderDate,
         store: order.shopName || '',
         product: 'Geral',
         adName: 'Geral',
         variation: '',
         sku: '',
         quantity: 1,
-        total: parseFloat(order.orderAmount) || 0,
-        unitPrice: parseFloat(order.orderAmount) || 0,
+        total: orderTotal,
+        unitPrice: orderTotal,
         state: '',
         platform: basePlatform,
-        status: order.isVoided ? 'Cancelado' : '',
+        status: orderStatus,
         cancelBy: '',
         cancelReason: '',
         image: '',
@@ -384,22 +405,25 @@ function mapOrdersToSales(orders) {
         cnpjCpf: '',
       });
     } else {
-      // Expand each item into a sale row
+      // Distribute orderTotal proportionally across items
+      const ratio = itemsSum > 0 ? orderTotal / itemsSum : 1;
+
       for (const item of items) {
+        const itemValue = (parseFloat(item.price) || 0) * (item.productCount || 1);
         sales.push({
           orderId: order.orderNumber || '',
-          date: order.orderCreateTime || '',
+          date: orderDate,
           store: order.shopName || '',
           product: item.productName || 'Geral',
           adName: item.productName || 'Geral',
           variation: item.productAttr || '',
           sku: item.productSku || item.variationSku || '',
           quantity: item.productCount || 1,
-          total: parseFloat(item.price) * (item.productCount || 1),
-          unitPrice: parseFloat(item.price) || 0,
+          total: Number((itemValue * ratio).toFixed(2)),
+          unitPrice: Number(((parseFloat(item.price) || 0) * ratio).toFixed(2)),
           state: '',
           platform: basePlatform,
-          status: item.isCancel ? 'Cancelado' : (order.isVoided ? 'Cancelado' : ''),
+          status: orderStatus,
           cancelBy: '',
           cancelReason: item.cancelReason || '',
           image: item.productImg || '',

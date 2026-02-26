@@ -415,47 +415,51 @@ const WhatsappSettings = () => {
                 Ative o bot acima para poder conectar.
               </Text>
             )}
+          </Box>
 
-            {/* Saved phones history */}
-            {savedPhones.length > 0 && (
-              <Box mt={4}>
-                <Text fontSize="sm" fontWeight="semibold" mb={2}>Numeros conectados anteriormente</Text>
-                <TableContainer>
-                  <Table size="sm" variant="simple">
-                    <Thead>
-                      <Tr>
-                        <Th>Telefone</Th>
-                        <Th>Ultima conexao</Th>
-                        <Th w="50px"></Th>
+          {/* Saved phones history - always visible */}
+          <Box mt={4}>
+            <Text fontSize="sm" fontWeight="semibold" mb={2}>Aparelhos conectados anteriormente</Text>
+            {savedPhones.length > 0 ? (
+              <TableContainer bg={refBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                <Table size="sm" variant="simple">
+                  <Thead>
+                    <Tr>
+                      <Th>Telefone</Th>
+                      <Th>Ultima conexao</Th>
+                      <Th w="50px"></Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {savedPhones.map((p) => (
+                      <Tr key={p.id}>
+                        <Td>
+                          <Text fontSize="sm">{formatPhone(p.phone)}</Text>
+                        </Td>
+                        <Td>
+                          <Text fontSize="xs" color="gray.500">
+                            {formatDate(p.lastConnectedAt)}
+                          </Text>
+                        </Td>
+                        <Td>
+                          <IconButton
+                            icon={<DeleteIcon />}
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="red"
+                            aria-label="Remover"
+                            onClick={() => handleDeletePhone(p.id)}
+                          />
+                        </Td>
                       </Tr>
-                    </Thead>
-                    <Tbody>
-                      {savedPhones.map((p) => (
-                        <Tr key={p.id}>
-                          <Td>
-                            <Text fontSize="sm">{formatPhone(p.phone)}</Text>
-                          </Td>
-                          <Td>
-                            <Text fontSize="xs" color="gray.500">
-                              {formatDate(p.lastConnectedAt)}
-                            </Text>
-                          </Td>
-                          <Td>
-                            <IconButton
-                              icon={<DeleteIcon />}
-                              size="xs"
-                              variant="ghost"
-                              colorScheme="red"
-                              aria-label="Remover"
-                              onClick={() => handleDeletePhone(p.id)}
-                            />
-                          </Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
-                </TableContainer>
-              </Box>
+                    ))}
+                  </Tbody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Text fontSize="xs" color="gray.500">
+                Nenhum aparelho conectado anteriormente.
+              </Text>
             )}
           </Box>
         </Box>

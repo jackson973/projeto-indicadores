@@ -270,7 +270,7 @@ async function getStates() {
  */
 async function getLastUpdate() {
   const result = await db.query(
-    "SELECT MAX(updated_at AT TIME ZONE 'UTC') as last_update FROM sales"
+    "SELECT MAX(updated_at) AT TIME ZONE 'UTC' as last_update FROM sales"
   );
   return result.rows[0]?.last_update || null;
 }
@@ -297,7 +297,7 @@ async function getDailyRevenue(date, filters = {}) {
        AND (
          status IS NULL OR status = ''
          OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
-           NOT SIMILAR TO '%(cancelado|para devolver|pos-venda|pos venda)%'
+           NOT SIMILAR TO '%(cancelado)%'
        )`,
     params
   );
@@ -358,7 +358,7 @@ async function getDailySalesDetails(date, filters = {}) {
     AND (
       status IS NULL OR status = ''
       OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
-        NOT SIMILAR TO '%(cancelado|para devolver|pos-venda|pos venda)%'
+        NOT SIMILAR TO '%(cancelado)%'
     )`;
 
   const query = `

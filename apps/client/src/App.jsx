@@ -47,6 +47,7 @@ import SalesByPlatformChart from "./components/SalesByPlatformChart";
 import AbcTable from "./components/AbcTable";
 import CanceledReportDrawer from "./components/CanceledReportDrawer";
 import DailySalesDrawer from "./components/DailySalesDrawer";
+import UpsellerTodayDrawer from "./components/UpsellerTodayDrawer";
 import LoginPage from "./components/LoginPage";
 import ForgotPasswordModal from "./components/ForgotPasswordModal";
 import ResetPasswordPage from "./components/ResetPasswordPage";
@@ -71,7 +72,9 @@ import {
   fetchMe,
   setToken,
   getToken,
-  fetchSisplanActive
+  fetchSisplanActive,
+  refreshSisplanData,
+  refreshUpsellerTodayAnalytics
 } from "./api";
 
 const SIDEBAR_EXPANDED = "220px";
@@ -100,11 +103,12 @@ const generateMonthOptions = () => {
 const MONTH_OPTIONS = generateMonthOptions();
 
 const now = new Date();
+const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 const defaultFilters = {
-  startMonth: `${now.getFullYear() - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`,
-  endMonth: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`,
+  startMonth: currentMonth,
+  endMonth: currentMonth,
   store: "",
-  period: "month",
+  period: "week",
   saleChannel: ""
 };
 
@@ -161,6 +165,7 @@ const App = () => {
   const mobileMenu = useDisclosure();
   const canceledDrawer = useDisclosure();
   const dailySalesDrawer = useDisclosure();
+  const upsellerTodayDrawer = useDisclosure();
   const [dailySalesDate, setDailySalesDate] = useState("");
   const [dailySalesTitle, setDailySalesTitle] = useState("");
   const forgotModal = useDisclosure();
@@ -762,14 +767,21 @@ const App = () => {
               summary={summary}
               onCanceledClick={canceledDrawer.onOpen}
               onTodayClick={() => {
-                setDailySalesDate(getSaoPauloDate());
-                setDailySalesTitle("Vendas Hoje");
-                dailySalesDrawer.onOpen();
+                upsellerTodayDrawer.onOpen();
               }}
               onYesterdayClick={() => {
                 setDailySalesDate(getSaoPauloDate(-1));
                 setDailySalesTitle("Vendas Ontem");
                 dailySalesDrawer.onOpen();
+              }}
+              onRefresh={() => loadData(filters)}
+              onRefreshFabrica={async () => {
+                await refreshSisplanData();
+                await loadData(filters);
+              }}
+              onRefreshOnline={async () => {
+                await refreshUpsellerTodayAnalytics();
+                await loadData(filters);
               }}
             />
             <CanceledReportDrawer
@@ -783,6 +795,10 @@ const App = () => {
               date={dailySalesDate}
               title={dailySalesTitle}
               filters={filters}
+            />
+            <UpsellerTodayDrawer
+              isOpen={upsellerTodayDrawer.isOpen}
+              onClose={upsellerTodayDrawer.onClose}
             />
             <SalesByPeriodChart data={salesByPeriod} period={filters.period} onPeriodChange={(value) => setFilters(f => ({ ...f, period: value }))} />
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>

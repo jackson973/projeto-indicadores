@@ -37,6 +37,10 @@ async function start() {
   const { startUpsellerSyncScheduler } = require('./services/upsellerSyncService');
   startUpsellerSyncScheduler();
 
+  // Start UpSeller analytics scheduler (per-hour data, every 5 min)
+  const { startAnalyticsScheduler } = require('./services/upsellerAnalyticsService');
+  startAnalyticsScheduler();
+
   // Start WhatsApp bot if active
   try {
     const { startWhatsappBot } = require('./services/whatsappBotService');

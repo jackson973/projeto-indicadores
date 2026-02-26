@@ -5,12 +5,15 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "docker-compose up -d && concurrently \"npm run dev -w apps/server\" \"npm run dev -w apps/client\"",
+    "dev": "bash scripts/dev.sh",
     "dev:no-db": "concurrently \"npm run dev -w apps/server\" \"npm run dev -w apps/client\"",
     "test": "npm run test -w apps/server && npm run test -w apps/client",
     "db:start": "docker-compose up -d",
-    "db:stop": "docker-compose stop",
+    "db:stop": "bash scripts/backup-db.sh; docker-compose stop",
+    "db:down": "bash scripts/backup-db.sh; docker-compose down",
     "db:logs": "docker-compose logs -f",
+    "db:backup": "bash scripts/backup-db.sh",
+    "db:restore": "bash scripts/restore-db.sh",
     "setup:chrome": "bash scripts/install-chrome-deps.sh"
   },
   "devDependencies": {

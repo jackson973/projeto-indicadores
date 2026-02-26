@@ -12,6 +12,23 @@ const { encrypt, decrypt } = require('../lib/encryption');
 
 const router = express.Router();
 
+// ── Rotas acessíveis por qualquer usuário autenticado ───────────────────────
+
+// POST /api/sisplan/refresh - Forçar sync (qualquer usuário autenticado)
+router.post('/refresh', authenticate, async (req, res) => {
+  try {
+    const result = await runSync();
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+    return res.json(result);
+  } catch (error) {
+    console.error('Sisplan refresh error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// ── Rotas admin ─────────────────────────────────────────────────────────────
 router.use(authenticate, requireAdmin);
 
 // GET /api/sisplan - Retorna configurações (senha mascarada)
