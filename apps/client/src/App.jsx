@@ -42,7 +42,7 @@ import UploadForm from "./components/UploadForm";
 import SummaryCards from "./components/SummaryCards";
 import SalesByPeriodChart from "./components/SalesByPeriodChart";
 import SalesByStoreChart from "./components/SalesByStoreChart";
-import SalesByStateChart from "./components/SalesByStateChart";
+// import SalesByStateChart from "./components/SalesByStateChart";
 import SalesByPlatformChart from "./components/SalesByPlatformChart";
 import AbcTable from "./components/AbcTable";
 import CanceledReportDrawer from "./components/CanceledReportDrawer";
@@ -64,7 +64,6 @@ import {
   fetchStores,
   fetchSalesByPeriod,
   fetchSalesByStore,
-  fetchSalesByState,
   fetchSalesByPlatform,
   fetchAbc,
   uploadFile,
@@ -154,7 +153,6 @@ const App = () => {
   const [summary, setSummary] = useState(null);
   const [salesByPeriod, setSalesByPeriod] = useState([]);
   const [salesByStore, setSalesByStore] = useState([]);
-  const [salesByState, setSalesByState] = useState([]);
   const [salesByPlatform, setSalesByPlatform] = useState([]);
   const [abc, setAbc] = useState([]);
   const [error, setError] = useState("");
@@ -238,7 +236,6 @@ const App = () => {
       storeList,
       periodData,
       storeData,
-      stateData,
       platformData,
       abcData
     ] = await Promise.all([
@@ -246,7 +243,6 @@ const App = () => {
       fetchStores(),
       fetchSalesByPeriod(params),
       fetchSalesByStore(params),
-      fetchSalesByState(params),
       fetchSalesByPlatform(params),
       fetchAbc(params)
     ]);
@@ -255,7 +251,6 @@ const App = () => {
     setStores(storeList);
     setSalesByPeriod(periodData);
     setSalesByStore(storeData);
-    setSalesByState(stateData);
     setSalesByPlatform(platformData);
     setAbc(abcData);
   };
@@ -805,7 +800,6 @@ const App = () => {
               <SalesByStoreChart data={salesByStore} />
               <SalesByPlatformChart data={salesByPlatform} />
             </SimpleGrid>
-            <SalesByStateChart data={salesByState} />
             <AbcTable data={abc} filters={{ ...filters, start: monthToStartDate(filters.startMonth), end: monthToEndDate(filters.endMonth) }} />
           </>
         )}

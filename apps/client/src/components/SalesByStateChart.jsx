@@ -125,8 +125,8 @@ const SalesByStateChart = ({ data }) => {
                 : share > 0
                   ? 1
                   : 0;
-              const fillColor = share > 0 ? mixColor(lightBlue, darkBlue, normalizedShare) : "transparent";
-              const strokeColor = value > 0 ? "#ffffff" : "#94a3b8";
+              const fillColor = share > 0 ? mixColor(lightBlue, darkBlue, normalizedShare) : "#f1f5f9";
+              const strokeColor = value > 0 ? "#ffffff" : "#cbd5e1";
 
               return (
                 <Tooltip
