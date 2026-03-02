@@ -26,6 +26,7 @@ import {
   WarningIcon
 } from "@chakra-ui/icons";
 import { formatCurrency, formatNumber } from "../utils/format";
+import { useCountUp } from "../hooks/useCountUp";
 
 const formatLastUpdate = (value) => {
   if (!value) return null;
@@ -41,6 +42,11 @@ const formatLastUpdate = (value) => {
   });
 };
 
+const AnimatedValue = ({ value, formatter }) => {
+  const display = useCountUp(Number(value || 0), { duration: 1500, formatter });
+  return <>{display}</>;
+};
+
 const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick, onRefresh, onRefreshFabrica, onRefreshOnline }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingFabrica, setRefreshingFabrica] = useState(false);
@@ -54,7 +60,8 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
   const mutedColor = useColorModeValue("gray.400", "gray.500");
 
   const sisplanUpdate = formatLastUpdate(summary.lastUpdate);
-  const upsellerUpdate = formatLastUpdate(summary.upsellerFetchedAt);
+  const upsellerUpdate = formatLastUpdate(summary.upsellerLastSyncAt);
+  const analyticsUpdate = formatLastUpdate(summary.upsellerFetchedAt);
 
   const handleRefreshFabrica = () => {
     if (!onRefreshFabrica || refreshingFabrica) return;
@@ -69,22 +76,23 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
   };
 
   const items = [
-    { title: "Vendas Hoje", value: formatCurrency(summary.todayRevenue), icon: SunIcon, action: onTodayClick, actionLabel: "Detalhes", refreshable: true },
-    { title: "Vendas Ontem", value: formatCurrency(summary.yesterdayRevenue), icon: CalendarIcon, onClick: onYesterdayClick },
-    { title: "Faturamento", value: formatCurrency(summary.totalRevenue), icon: StarIcon },
-    { title: "Ticket médio", value: formatCurrency(summary.ticketAverage), icon: TimeIcon },
-    { title: "Itens vendidos", value: formatNumber(summary.totalQuantity), icon: CheckCircleIcon },
-    { title: "Vendas", value: formatNumber(summary.totalSales), icon: CalendarIcon },
+    { title: "Vendas Hoje", rawValue: summary.todayRevenue, formatter: formatCurrency, icon: SunIcon, action: onTodayClick, actionLabel: "Detalhes", refreshable: true, highlight: true },
+    { title: "Vendas Ontem", rawValue: summary.yesterdayRevenue, formatter: formatCurrency, icon: CalendarIcon, onClick: onYesterdayClick },
+    { title: "Faturamento", rawValue: summary.totalRevenue, formatter: formatCurrency, icon: StarIcon, highlight: true },
+    { title: "Ticket médio", rawValue: summary.ticketAverage, formatter: formatCurrency, icon: TimeIcon },
+    { title: "Itens vendidos", rawValue: summary.totalQuantity, formatter: formatNumber, icon: CheckCircleIcon },
+    { title: "Vendas", rawValue: summary.totalSales, formatter: formatNumber, icon: CalendarIcon },
     {
       title: "Cancelados/Devolvidos",
-      value: formatCurrency(summary.canceledTotal || 0),
+      rawValue: summary.canceledTotal || 0,
+      formatter: formatCurrency,
       icon: WarningIcon,
       help: `${formatNumber(summary.canceledOrders || 0)} pedidos`,
       onClick: onCanceledClick
     },
-    { title: "Lojas", value: formatNumber(summary.totalStores), icon: InfoIcon },
-    { title: "Produtos", value: formatNumber(summary.totalProducts), icon: AtSignIcon },
-    { title: "Estados", value: formatNumber(summary.totalStates), icon: InfoIcon }
+    { title: "Lojas", rawValue: summary.totalStores, formatter: formatNumber, icon: InfoIcon },
+    { title: "Produtos", rawValue: summary.totalProducts, formatter: formatNumber, icon: AtSignIcon },
+    { title: "Estados", rawValue: summary.totalStates, formatter: formatNumber, icon: InfoIcon }
   ];
 
   return (
@@ -129,6 +137,7 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
             _hover={item.onClick ? { boxShadow: "lg", transform: "translateY(-2px)" } : undefined}
             transition="all 0.2s ease"
             onClick={item.onClick}
+            className={item.highlight ? "card-highlight-pulse" : undefined}
           >
             <Stat>
               <StatLabel fontSize="sm" color={labelColor} textTransform="uppercase" letterSpacing="wide">
@@ -138,7 +147,7 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
                 </HStack>
               </StatLabel>
               <StatNumber fontSize="2xl" fontWeight="bold" color={valueColor}>
-                {item.value}
+                <AnimatedValue value={item.rawValue} formatter={item.formatter} />
               </StatNumber>
               {item.help && (
                 <StatHelpText fontSize="sm" color={labelColor} mt={1}>
@@ -147,32 +156,39 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
               )}
             </Stat>
             {(item.action || item.refreshable) && (
-              <HStack spacing={2} mt={2} justify="space-between">
-                {item.action && (
-                  <Button
-                    size="xs"
-                    colorScheme="blue"
-                    variant="outline"
-                    onClick={(e) => { e.stopPropagation(); item.action(); }}
-                  >
-                    {item.actionLabel}
-                  </Button>
+              <>
+                <HStack spacing={2} mt={2} justify="space-between">
+                  {item.action && (
+                    <Button
+                      size="xs"
+                      colorScheme="blue"
+                      variant="outline"
+                      onClick={(e) => { e.stopPropagation(); item.action(); }}
+                    >
+                      {item.actionLabel}
+                    </Button>
+                  )}
+                  {item.refreshable && onRefresh && (
+                    <IconButton
+                      icon={<RepeatIcon />}
+                      size="sm"
+                      variant="ghost"
+                      aria-label="Atualizar"
+                      isLoading={refreshing}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setRefreshing(true);
+                        Promise.resolve(onRefresh()).finally(() => setRefreshing(false));
+                      }}
+                    />
+                  )}
+                </HStack>
+                {item.refreshable && analyticsUpdate && (
+                  <Text fontSize="2xs" color={mutedColor} mt={1}>
+                    Atualizado: {analyticsUpdate}
+                  </Text>
                 )}
-                {item.refreshable && onRefresh && (
-                  <IconButton
-                    icon={<RepeatIcon />}
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Atualizar"
-                    isLoading={refreshing}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setRefreshing(true);
-                      Promise.resolve(onRefresh()).finally(() => setRefreshing(false));
-                    }}
-                  />
-                )}
-              </HStack>
+              </>
             )}
           </Box>
         ))}

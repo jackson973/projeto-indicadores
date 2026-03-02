@@ -8,6 +8,7 @@ import {
   CartesianGrid
 } from "recharts";
 import { Box, Button, Flex, Select, Text, HStack, useColorModeValue } from "@chakra-ui/react";
+import { useAnimationCycle } from "../hooks/useAnimationCycle";
 import { CalendarIcon } from "@chakra-ui/icons";
 import { formatCurrency } from "../utils/format";
 
@@ -94,7 +95,8 @@ const formatXAxisLabel = (label) => {
   return label;
 };
 
-const SalesByPeriodChart = ({ data, period, onPeriodChange }) => {
+const SalesByPeriodChart = ({ data, period, onPeriodChange, autoplay = true }) => {
+  const cycle = useAnimationCycle(30000, 0, autoplay);
   const panelBg = useColorModeValue("white", "gray.800");
   const tooltipBg = useColorModeValue("white", "gray.800");
   const tooltipBorder = useColorModeValue("gray.100", "gray.700");
@@ -128,7 +130,7 @@ const SalesByPeriodChart = ({ data, period, onPeriodChange }) => {
       </Flex>
       <div className="chart">
         <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={data} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
+          <LineChart key={cycle} data={data} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="period" tickFormatter={formatXAxisLabel} fontSize={11} angle={-35} textAnchor="end" height={50} interval="preserveStartEnd" />
             <YAxis />
@@ -153,7 +155,7 @@ const SalesByPeriodChart = ({ data, period, onPeriodChange }) => {
                 );
               }}
             />
-            <Line type="monotone" dataKey="total" stroke="#3182ce" strokeWidth={2} />
+            <Line type="monotone" dataKey="total" stroke="#3182ce" strokeWidth={2} isAnimationActive animationDuration={1200} animationEasing="ease-in-out" />
           </LineChart>
         </ResponsiveContainer>
       </div>

@@ -8,6 +8,7 @@ import {
 import { Box, Button, Flex, Image, Text, HStack, useColorModeValue } from "@chakra-ui/react";
 import { InfoIcon } from "@chakra-ui/icons";
 import { formatCurrency, formatPercent } from "../utils/format";
+import { useAnimationCycle } from "../hooks/useAnimationCycle";
 
 const downloadCsv = (rows, filename) => {
   if (!rows.length) return;
@@ -58,7 +59,8 @@ const renderTooltip = (payload, total, bg, border, textColor, subTextColor) => {
   );
 };
 
-const SalesByStoreChart = ({ data }) => {
+const SalesByStoreChart = ({ data, autoplay = true }) => {
+  const cycle = useAnimationCycle(30000, 10000, autoplay);
   const total = data.reduce((sum, item) => sum + (item.total || 0), 0) || 1;
   const panelBg = useColorModeValue("white", "gray.800");
   const tooltipBg = useColorModeValue("white", "gray.800");
@@ -82,8 +84,8 @@ const SalesByStoreChart = ({ data }) => {
       </Flex>
       <div className="chart">
         <ResponsiveContainer width="100%" height={250}>
-          <PieChart>
-            <Pie data={data} dataKey="total" nameKey="store" innerRadius={60} outerRadius={100}>
+          <PieChart key={cycle}>
+            <Pie data={data} dataKey="total" nameKey="store" innerRadius={60} outerRadius={100} isAnimationActive animationDuration={1000} animationEasing="ease-out">
               {data.map((entry, index) => (
                 <Cell key={`cell-${entry.store}-${index}`} fill={["#0ea5e9", "#6366f1", "#22c55e", "#f97316", "#e11d48"][index % 5]} />
               ))}

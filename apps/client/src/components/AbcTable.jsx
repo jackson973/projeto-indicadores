@@ -1,4 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
+import { useAutoPagination } from "../hooks/useAutoPagination";
 import {
   Badge,
   Box,
@@ -49,12 +50,12 @@ const NoPhoto = ({ size }) => (
 const classColor = (c) =>
   c === "A" ? "green" : c === "B" ? "yellow" : "gray";
 
-const AbcTable = ({ data, filters }) => {
-  const [page, setPage] = useState(1);
+const AbcTable = ({ data, filters, autoplay = true }) => {
   const [expanded, setExpanded] = useState("");
   const [details, setDetails] = useState({});
   const [loading, setLoading] = useState({});
   const totalPages = Math.max(1, Math.ceil(data.length / PAGE_SIZE));
+  const { page, setPage } = useAutoPagination(totalPages, { intervalMs: 8000, resumeAfterMs: 15000, enabled: autoplay });
   const startIndex = (page - 1) * PAGE_SIZE;
   const pageItems = data.slice(startIndex, startIndex + PAGE_SIZE);
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -66,10 +67,6 @@ const AbcTable = ({ data, filters }) => {
     if (filters?.store) params.set("store", filters.store);
     return params;
   }, [filters]);
-
-  useEffect(() => {
-    setPage((current) => Math.min(current, totalPages));
-  }, [totalPages]);
 
   const panelBg = useColorModeValue("white", "gray.800");
   const mutedText = useColorModeValue("gray.500", "gray.300");
@@ -303,8 +300,8 @@ const AbcTable = ({ data, filters }) => {
             <Th>Anúncio</Th>
             <Th w="150px">Loja</Th>
             <Th w="50px" px={2}></Th>
-            <Th w="70px" isNumeric>Qtd</Th>
-            <Th w="120px" isNumeric>Faturamento</Th>
+            <Th w="80px" isNumeric>Qtd</Th>
+            <Th w="130px" isNumeric>Faturamento</Th>
             <Th w="50px" textAlign="center">ABC</Th>
           </Tr>
         </Thead>
@@ -343,8 +340,8 @@ const AbcTable = ({ data, filters }) => {
                       platformMeta.label
                     )}
                   </Td>
-                  <Td isNumeric>{formatNumber(item.quantity)}</Td>
-                  <Td isNumeric>{formatCurrency(item.total)}</Td>
+                  <Td isNumeric whiteSpace="nowrap">{formatNumber(item.quantity)}</Td>
+                  <Td isNumeric whiteSpace="nowrap">{formatCurrency(item.total)}</Td>
                   <Td textAlign="center">
                     <Badge colorScheme={classColor(item.classification)}>
                       {item.classification}

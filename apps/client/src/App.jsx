@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Alert,
   AlertDescription,
@@ -141,6 +141,18 @@ const ChartBarIcon = (props) => (
   </svg>
 );
 
+const PlayIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M8 5v14l11-7z" />
+  </svg>
+);
+
+const PauseIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+  </svg>
+);
+
 const App = () => {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -158,6 +170,7 @@ const App = () => {
   const [error, setError] = useState("");
   const [activeView, setActiveView] = useState("upload");
   const [expandedMenu, setExpandedMenu] = useState(null); // For submenu expansion
+  const [autoplay, setAutoplay] = useState(true);
   const [sisplanActive, setSisplanActive] = useState(false);
   const isMobile = useBreakpointValue({ base: true, md: false });
   const mobileMenu = useDisclosure();
@@ -271,6 +284,17 @@ const App = () => {
     if (!hasData) return;
     loadData(filters).catch((err) => setError(err.message || "Erro ao carregar dados."));
   }, [filters, hasData]);
+
+  // Auto-refresh a cada 5 minutos (silencioso, para exibição em TV)
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
+  useEffect(() => {
+    if (!hasData) return;
+    const id = setInterval(() => {
+      loadData(filtersRef.current).catch(() => {});
+    }, 5 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [hasData]);
 
   // Loading state while checking auth
   if (authLoading) {
@@ -723,6 +747,16 @@ const App = () => {
                     <option value="atacado">Atacado</option>
                   </Select>
                 )}
+                <Tooltip label={autoplay ? "Pausar animações" : "Ativar animações"} placement="top">
+                  <IconButton
+                    icon={autoplay ? <PauseIcon /> : <PlayIcon />}
+                    size="sm"
+                    variant="ghost"
+                    aria-label={autoplay ? "Pausar animações" : "Ativar animações"}
+                    onClick={() => setAutoplay((v) => !v)}
+                    alignSelf="flex-end"
+                  />
+                </Tooltip>
               </VStack>
             ) : (
               <Flex justify="flex-start" align="flex-end" mb={6} wrap="wrap" gap={3}>
@@ -755,6 +789,17 @@ const App = () => {
                     </Select>
                   </FormControl>
                 )}
+                <Tooltip label={autoplay ? "Pausar animações" : "Ativar animações"} placement="top">
+                  <IconButton
+                    icon={autoplay ? <PauseIcon /> : <PlayIcon />}
+                    size="sm"
+                    variant="ghost"
+                    aria-label={autoplay ? "Pausar animações" : "Ativar animações"}
+                    onClick={() => setAutoplay((v) => !v)}
+                    alignSelf="flex-end"
+                    mb="1px"
+                  />
+                </Tooltip>
               </Flex>
             )}
 
@@ -795,12 +840,12 @@ const App = () => {
               isOpen={upsellerTodayDrawer.isOpen}
               onClose={upsellerTodayDrawer.onClose}
             />
-            <SalesByPeriodChart data={salesByPeriod} period={filters.period} onPeriodChange={(value) => setFilters(f => ({ ...f, period: value }))} />
+            <SalesByPeriodChart data={salesByPeriod} period={filters.period} onPeriodChange={(value) => setFilters(f => ({ ...f, period: value }))} autoplay={autoplay} />
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
-              <SalesByStoreChart data={salesByStore} />
-              <SalesByPlatformChart data={salesByPlatform} />
+              <SalesByStoreChart data={salesByStore} autoplay={autoplay} />
+              <SalesByPlatformChart data={salesByPlatform} autoplay={autoplay} />
             </SimpleGrid>
-            <AbcTable data={abc} filters={{ ...filters, start: monthToStartDate(filters.startMonth), end: monthToEndDate(filters.endMonth) }} />
+            <AbcTable data={abc} filters={{ ...filters, start: monthToStartDate(filters.startMonth), end: monthToEndDate(filters.endMonth) }} autoplay={autoplay} />
           </>
         )}
       </Box>

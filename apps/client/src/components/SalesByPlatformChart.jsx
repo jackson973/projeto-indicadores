@@ -8,6 +8,7 @@ import {
 import { Box, Button, Flex, Image, Text, HStack, useColorModeValue } from "@chakra-ui/react";
 import { AtSignIcon } from "@chakra-ui/icons";
 import { formatCurrency, formatPercent } from "../utils/format";
+import { useAnimationCycle } from "../hooks/useAnimationCycle";
 import { getPlatformMeta } from "../utils/platforms";
 
 const downloadCsv = (rows, filename) => {
@@ -66,8 +67,9 @@ const renderTooltip = (payload, total, bg, border, textColor, subTextColor) => {
   );
 };
 
-const SalesByPlatformChart = ({ data }) => {
-  const total = data.reduce((sum, item) => sum + (item.total || 0), 0) || 1;
+const SalesByPlatformChart = ({ data, autoplay = true }) => {
+  const cycle = useAnimationCycle(30000, 20000, autoplay);
+  const total = data.reduce((sum, item) => sum + (item.total || 0) , 0) || 1;
   const panelBg = useColorModeValue("white", "gray.800");
   const tooltipBg = useColorModeValue("white", "gray.800");
   const tooltipBorder = useColorModeValue("gray.100", "gray.700");
@@ -90,8 +92,8 @@ const SalesByPlatformChart = ({ data }) => {
       </Flex>
       <div className="chart">
         <ResponsiveContainer width="100%" height={250}>
-          <PieChart>
-            <Pie data={data} dataKey="total" nameKey="platform" innerRadius={60} outerRadius={100}>
+          <PieChart key={cycle}>
+            <Pie data={data} dataKey="total" nameKey="platform" innerRadius={60} outerRadius={100} isAnimationActive animationDuration={1000} animationEasing="ease-out">
               {data.map((entry, index) => (
                 <Cell key={`cell-${entry.platform}-${index}`} fill={["#14b8a6", "#f59e0b", "#8b5cf6", "#ef4444", "#0ea5e9"][index % 5]} />
               ))}

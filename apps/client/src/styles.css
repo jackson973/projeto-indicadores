@@ -40,3 +40,35 @@ body {
 .react-datepicker__input-container {
   width: 100%;
 }
+
+@keyframes subtlePulse {
+  0%, 100% {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  }
+  50% {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
+                0 2px 4px -1px rgba(0, 0, 0, 0.06),
+                0 0 20px 2px rgba(49, 130, 206, 0.15);
+  }
+}
+
+.chakra-ui-dark .card-highlight-pulse {
+  animation: subtlePulseDark 4s ease-in-out infinite;
+}
+
+@keyframes subtlePulseDark {
+  0%, 100% {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3),
+                0 2px 4px -1px rgba(0, 0, 0, 0.2);
+  }
+  50% {
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3),
+                0 2px 4px -1px rgba(0, 0, 0, 0.2),
+                0 0 20px 2px rgba(99, 179, 237, 0.2);
+  }
+}
+
+.card-highlight-pulse {
+  animation: subtlePulse 4s ease-in-out infinite;
+}
