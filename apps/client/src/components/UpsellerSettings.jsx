@@ -10,14 +10,25 @@ import {
   FormControl,
   FormLabel,
   HStack,
+  IconButton,
   Input,
+  InputGroup,
+  InputRightElement,
   SimpleGrid,
   Switch,
+  Table,
+  TableContainer,
+  Tbody,
+  Td,
   Text,
+  Th,
+  Thead,
+  Tr,
   VStack,
   useColorModeValue,
   useToast
 } from "@chakra-ui/react";
+import { ViewIcon, ViewOffIcon, CopyIcon } from "@chakra-ui/icons";
 import {
   fetchUpsellerSettings,
   updateUpsellerSettings,
@@ -42,6 +53,8 @@ const UpsellerSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [showCaptchaKey, setShowCaptchaKey] = useState(false);
+  const [lastUsedCaptchaKey, setLastUsedCaptchaKey] = useState("");
   const toast = useToast();
 
   const panelBg = useColorModeValue("white", "gray.800");
@@ -50,6 +63,8 @@ const UpsellerSettings = () => {
 
   useEffect(() => {
     loadSettings();
+    const saved = localStorage.getItem("indicadores_lastUsed_anticaptchaKey");
+    if (saved) setLastUsedCaptchaKey(saved);
   }, []);
 
   const loadSettings = async () => {
@@ -74,6 +89,11 @@ const UpsellerSettings = () => {
         lastSyncMessage: data.lastSyncMessage,
         lastSyncRows: data.lastSyncRows
       });
+      // Persist captcha key to localStorage for history
+      if (data.anticaptchaKey) {
+        localStorage.setItem("indicadores_lastUsed_anticaptchaKey", data.anticaptchaKey);
+        setLastUsedCaptchaKey(data.anticaptchaKey);
+      }
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
     } finally {
@@ -84,6 +104,10 @@ const UpsellerSettings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      if (form.anticaptchaKey) {
+        localStorage.setItem("indicadores_lastUsed_anticaptchaKey", form.anticaptchaKey);
+        setLastUsedCaptchaKey(form.anticaptchaKey);
+      }
       await updateUpsellerSettings(form);
       toast({ title: "Configuracoes salvas com sucesso!", status: "success", duration: 3000 });
       await loadSettings();
@@ -180,19 +204,83 @@ const UpsellerSettings = () => {
           <Text fontWeight="semibold" mb={3}>Resolucao de CAPTCHA</Text>
           <FormControl isRequired>
             <FormLabel fontSize="sm">Chave API AntiCaptcha</FormLabel>
-            <Input
-              size="sm"
-              type="password"
-              value={form.anticaptchaKey}
-              onChange={(e) => setForm(prev => ({ ...prev, anticaptchaKey: e.target.value }))}
-              placeholder="Chave da API anti-captcha.com"
-            />
+            <InputGroup size="sm">
+              <Input
+                type={showCaptchaKey ? "text" : "password"}
+                value={form.anticaptchaKey}
+                onChange={(e) => setForm(prev => ({ ...prev, anticaptchaKey: e.target.value }))}
+                placeholder="Chave da API anti-captcha.com"
+                pr="4.5rem"
+              />
+              <InputRightElement width="4.5rem">
+                <IconButton
+                  h="1.5rem"
+                  size="xs"
+                  variant="ghost"
+                  icon={showCaptchaKey ? <ViewOffIcon /> : <ViewIcon />}
+                  onClick={() => setShowCaptchaKey(!showCaptchaKey)}
+                  aria-label={showCaptchaKey ? "Ocultar" : "Mostrar"}
+                />
+              </InputRightElement>
+            </InputGroup>
           </FormControl>
           <Box bg={sectionBg} p={3} borderRadius="md" mt={2} border="1px solid" borderColor={borderColor}>
             <Text fontSize="xs" color="gray.500">
               O UpSeller exige resolucao de CAPTCHA por imagem no login.
               Cadastre-se em anti-captcha.com para obter uma chave de API.
             </Text>
+          </Box>
+
+          {/* Chave anterior */}
+          <Box mt={4}>
+            <Text fontSize="sm" fontWeight="semibold" mb={2}>Chave utilizada anteriormente</Text>
+            {lastUsedCaptchaKey ? (
+              <TableContainer bg={sectionBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                <Table size="sm" variant="simple">
+                  <Thead>
+                    <Tr>
+                      <Th>Chave API</Th>
+                      <Th w="80px"></Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    <Tr>
+                      <Td>
+                        <Text fontSize="xs" fontFamily="mono">
+                          {lastUsedCaptchaKey.slice(0, 12)}...{lastUsedCaptchaKey.slice(-4)}
+                        </Text>
+                      </Td>
+                      <Td>
+                        <HStack spacing={1}>
+                          <IconButton
+                            icon={<CopyIcon />}
+                            size="xs"
+                            variant="ghost"
+                            aria-label="Copiar chave"
+                            onClick={() => {
+                              navigator.clipboard.writeText(lastUsedCaptchaKey);
+                              toast({ title: "Chave copiada!", status: "success", duration: 2000 });
+                            }}
+                          />
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="blue"
+                            onClick={() => setForm(prev => ({ ...prev, anticaptchaKey: lastUsedCaptchaKey }))}
+                          >
+                            Usar
+                          </Button>
+                        </HStack>
+                      </Td>
+                    </Tr>
+                  </Tbody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Text fontSize="xs" color="gray.500">
+                Nenhuma chave salva anteriormente.
+              </Text>
+            )}
           </Box>
         </Box>
 

@@ -1,5 +1,10 @@
 import { useState, useEffect } from "react";
 import {
+  Accordion,
+  AccordionButton,
+  AccordionIcon,
+  AccordionItem,
+  AccordionPanel,
   Alert,
   AlertIcon,
   Badge,
@@ -304,367 +309,172 @@ const SisplanSettings = () => {
         </HStack>
       </HStack>
 
-      <VStack spacing={6} align="stretch">
-        {/* Conexao */}
-        <Box>
-          <Text fontWeight="semibold" mb={3}>Dados de Conexao</Text>
-          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-            <FormControl isRequired>
-              <FormLabel fontSize="sm">Host</FormLabel>
-              <Input
-                size="sm"
-                value={form.host}
-                onChange={(e) => setForm(prev => ({ ...prev, host: e.target.value }))}
-                placeholder="192.168.1.100"
-              />
-            </FormControl>
-            <FormControl>
-              <FormLabel fontSize="sm">Porta</FormLabel>
-              <Input
-                size="sm"
-                type="number"
-                value={form.port}
-                onChange={(e) => setForm(prev => ({ ...prev, port: parseInt(e.target.value) || 3050 }))}
-              />
-            </FormControl>
-            <FormControl isRequired>
-              <FormLabel fontSize="sm">Caminho do Banco</FormLabel>
-              <Input
-                size="sm"
-                value={form.databasePath}
-                onChange={(e) => setForm(prev => ({ ...prev, databasePath: e.target.value }))}
-                placeholder="C:/sisplan/dados/BANCO.FDB"
-              />
-            </FormControl>
-            <FormControl isRequired>
-              <FormLabel fontSize="sm">Usuario</FormLabel>
-              <Input
-                size="sm"
-                value={form.fbUser}
-                onChange={(e) => setForm(prev => ({ ...prev, fbUser: e.target.value }))}
-                placeholder="SYSDBA"
-              />
-            </FormControl>
-            <FormControl isRequired>
-              <FormLabel fontSize="sm">Senha</FormLabel>
-              <Input
-                size="sm"
-                type="password"
-                value={form.fbPassword}
-                onChange={(e) => setForm(prev => ({ ...prev, fbPassword: e.target.value }))}
-              />
-            </FormControl>
-          </SimpleGrid>
-          <Button
-            mt={3}
-            size="sm"
-            colorScheme="blue"
-            variant="outline"
-            isLoading={testingConnection}
-            loadingText="Testando..."
-            onClick={handleTestConnection}
-          >
-            Testar Conexao
-          </Button>
-        </Box>
-
-        <Divider />
-
-        {/* SQL Query */}
-        <Box>
-          <Text fontWeight="semibold" mb={3}>Query SQL</Text>
-
-          <Box bg={refBg} p={4} borderRadius="md" mb={4} border="1px solid" borderColor={borderColor}>
-            <Text fontSize="sm" fontWeight="semibold" mb={2}>Colunas disponiveis para mapeamento:</Text>
-            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={1}>
-              {SYSTEM_FIELDS.map(f => (
-                <Text key={f.key} fontSize="xs" fontFamily="mono">
-                  <Text as="span" fontWeight="bold" color={f.required ? "red.400" : "inherit"}>
-                    {f.label}
-                  </Text>
-                  {f.required && <Text as="span" color="red.400">*</Text>}
-                  {" - "}{f.description}
-                </Text>
-              ))}
+      <Accordion allowMultiple defaultIndex={[0]}>
+        {/* 1. Dados de Conexao */}
+        <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
+          <AccordionButton py={3} _expanded={{ bg: refBg }}>
+            <Box flex="1" textAlign="left">
+              <Text fontWeight="semibold">Dados de Conexao</Text>
+            </Box>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel pb={4}>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              <FormControl isRequired>
+                <FormLabel fontSize="sm">Host</FormLabel>
+                <Input
+                  size="sm"
+                  value={form.host}
+                  onChange={(e) => setForm(prev => ({ ...prev, host: e.target.value }))}
+                  placeholder="192.168.1.100"
+                />
+              </FormControl>
+              <FormControl>
+                <FormLabel fontSize="sm">Porta</FormLabel>
+                <Input
+                  size="sm"
+                  type="number"
+                  value={form.port}
+                  onChange={(e) => setForm(prev => ({ ...prev, port: parseInt(e.target.value) || 3050 }))}
+                />
+              </FormControl>
+              <FormControl isRequired>
+                <FormLabel fontSize="sm">Caminho do Banco</FormLabel>
+                <Input
+                  size="sm"
+                  value={form.databasePath}
+                  onChange={(e) => setForm(prev => ({ ...prev, databasePath: e.target.value }))}
+                  placeholder="C:/sisplan/dados/BANCO.FDB"
+                />
+              </FormControl>
+              <FormControl isRequired>
+                <FormLabel fontSize="sm">Usuario</FormLabel>
+                <Input
+                  size="sm"
+                  value={form.fbUser}
+                  onChange={(e) => setForm(prev => ({ ...prev, fbUser: e.target.value }))}
+                  placeholder="SYSDBA"
+                />
+              </FormControl>
+              <FormControl isRequired>
+                <FormLabel fontSize="sm">Senha</FormLabel>
+                <Input
+                  size="sm"
+                  type="password"
+                  value={form.fbPassword}
+                  onChange={(e) => setForm(prev => ({ ...prev, fbPassword: e.target.value }))}
+                />
+              </FormControl>
             </SimpleGrid>
-            <Text fontSize="xs" color="gray.500" mt={2}>* Campos obrigatorios</Text>
-          </Box>
-
-          <FormControl>
-            <FormLabel fontSize="sm">SQL para buscar vendas do Sisplan</FormLabel>
-            <Textarea
+            <Button
+              mt={3}
               size="sm"
-              rows={6}
-              fontFamily="mono"
-              fontSize="sm"
-              value={form.sqlQuery}
-              onChange={(e) => setForm(prev => ({ ...prev, sqlQuery: e.target.value }))}
-              placeholder="SELECT NR_PEDIDO, DT_VENDA, VL_TOTAL, DS_PRODUTO, QT_ITEM FROM PEDIDOS WHERE DT_VENDA >= '2024-01-01'"
-            />
-          </FormControl>
-          <Button
-            mt={3}
-            size="sm"
-            colorScheme="blue"
-            variant="outline"
-            isLoading={testingQuery}
-            loadingText="Executando..."
-            onClick={handleTestQuery}
-          >
-            Testar Query
-          </Button>
-        </Box>
+              colorScheme="blue"
+              variant="outline"
+              isLoading={testingConnection}
+              loadingText="Testando..."
+              onClick={handleTestConnection}
+            >
+              Testar Conexao
+            </Button>
+          </AccordionPanel>
+        </AccordionItem>
 
-        {/* Preview */}
-        {previewRows.length > 0 && (
-          <Box>
-            <Text fontWeight="semibold" mb={2} fontSize="sm">
-              Preview ({previewRows.length} registros)
-            </Text>
-            <TableContainer maxH="300px" overflowY="auto">
-              <Table size="sm" variant="simple">
-                <Thead>
-                  <Tr>
-                    {queryColumns.map(col => (
-                      <Th key={col} fontSize="xs">{col}</Th>
-                    ))}
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {previewRows.map((row, i) => (
-                    <Tr key={i}>
-                      {queryColumns.map(col => (
-                        <Td key={col} fontSize="xs" maxW="200px" isTruncated>
-                          {row[col] !== null && row[col] !== undefined ? String(row[col]) : ""}
-                        </Td>
-                      ))}
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            </TableContainer>
-          </Box>
-        )}
-
-        {/* Mapeamento de Colunas */}
-        {queryColumns.length > 0 && (
-          <>
-            <Divider />
-            <Box>
-              <Text fontWeight="semibold" mb={3}>Mapeamento de Colunas</Text>
-              <Text fontSize="sm" color="gray.500" mb={3}>
-                Associe cada campo do sistema a uma coluna retornada pela query.
-              </Text>
-              <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
-                {SYSTEM_FIELDS.map(f => (
-                  <FormControl key={f.key}>
-                    <FormLabel fontSize="xs">
-                      {f.label}
-                      {f.required && <Text as="span" color="red.400" ml={1}>*</Text>}
-                      <Text as="span" color="gray.400" ml={1}>({f.description})</Text>
-                    </FormLabel>
-                    <Select
-                      size="sm"
-                      value={form.columnMapping[f.key] || ""}
-                      onChange={(e) => updateMapping(f.key, e.target.value)}
-                      placeholder="-- Nenhum --"
-                    >
-                      {queryColumns.map(col => (
-                        <option key={col} value={col}>{col}</option>
-                      ))}
-                    </Select>
-                  </FormControl>
-                ))}
-              </SimpleGrid>
+        {/* 2. Query SQL */}
+        <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
+          <AccordionButton py={3} _expanded={{ bg: refBg }}>
+            <Box flex="1" textAlign="left">
+              <Text fontWeight="semibold">Query SQL</Text>
             </Box>
-          </>
-        )}
-
-        <Divider />
-
-        {/* Sync Config */}
-        <Box>
-          <Text fontWeight="semibold" mb={3}>Sincronizacao</Text>
-          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-            <FormControl>
-              <FormLabel fontSize="sm">Intervalo de sync (minutos)</FormLabel>
-              <Input
-                size="sm"
-                type="number"
-                min={1}
-                max={1440}
-                value={form.syncIntervalMinutes}
-                onChange={(e) => setForm(prev => ({
-                  ...prev,
-                  syncIntervalMinutes: parseInt(e.target.value) || 5
-                }))}
-              />
-            </FormControl>
-            <Box>
-              <Text fontSize="sm" fontWeight="medium" mb={1}>Status do ultimo sync</Text>
-              <HStack spacing={2}>
-                {syncStatus.lastSyncStatus && (
-                  <Badge colorScheme={syncStatus.lastSyncStatus === "success" ? "green" : "red"}>
-                    {syncStatus.lastSyncStatus === "success" ? "Sucesso" : "Erro"}
-                  </Badge>
-                )}
-                <Text fontSize="xs" color="gray.500">
-                  {formatSyncDate(syncStatus.lastSyncAt)}
-                </Text>
-              </HStack>
-              {syncStatus.lastSyncMessage && (
-                <Text fontSize="xs" color="gray.500" mt={1}>{syncStatus.lastSyncMessage}</Text>
-              )}
-              {syncStatus.lastSyncRows > 0 && (
-                <Text fontSize="xs" color="gray.500">{syncStatus.lastSyncRows} registros</Text>
-              )}
-            </Box>
-          </SimpleGrid>
-          <Button
-            mt={3}
-            size="sm"
-            colorScheme="teal"
-            variant="outline"
-            isLoading={syncing}
-            loadingText="Sincronizando..."
-            onClick={handleSync}
-          >
-            Sincronizar Agora
-          </Button>
-        </Box>
-
-        <Divider />
-
-        {/* Notas Fiscais */}
-        <Box>
-          <HStack justify="space-between" mb={3}>
-            <Text fontWeight="semibold">Notas Fiscais (NF-e)</Text>
-            <HStack>
-              <Text fontSize="sm">Ativo</Text>
-              <Switch
-                isChecked={form.nfActive}
-                onChange={(e) => setForm(prev => ({ ...prev, nfActive: e.target.checked }))}
-                colorScheme="green"
-              />
-            </HStack>
-          </HStack>
-
-          {form.nfActive && (
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel pb={4}>
             <VStack spacing={4} align="stretch">
-              {/* NF Local Path (mount point on Linux server) */}
-              <FormControl>
-                <FormLabel fontSize="sm">Caminho local dos PDFs no servidor</FormLabel>
-                <Input
-                  size="sm"
-                  value={form.nfLocalPath}
-                  onChange={(e) => setForm(prev => ({ ...prev, nfLocalPath: e.target.value }))}
-                  placeholder="/mnt/sisplan/NFe/LOG_001/DANFE"
-                />
-                <Text fontSize="xs" color="gray.500" mt={1}>
-                  Ponto de montagem CIFS no servidor Linux (ex: /mnt/sisplan/NFe/LOG_001/DANFE).
-                  Este caminho e usado para localizar e enviar os PDFs.
-                </Text>
-              </FormControl>
-
-              {/* NF Base Path (UNC reference) */}
-              <FormControl>
-                <FormLabel fontSize="sm">Caminho de rede (UNC) - referencia</FormLabel>
-                <Input
-                  size="sm"
-                  value={form.nfBasePath}
-                  onChange={(e) => setForm(prev => ({ ...prev, nfBasePath: e.target.value }))}
-                  placeholder="\\\\192.168.7.2\\Sisplan\\NFe\\LOG_001\\DANFE"
-                />
-                <Text fontSize="xs" color="gray.500" mt={1}>
-                  Caminho Windows/UNC para referencia. O caminho local acima tem prioridade para acesso aos arquivos.
-                </Text>
-              </FormControl>
-
-              {/* NF SQL Query */}
-              <Box>
-                <Box bg={refBg} p={4} borderRadius="md" mb={4} border="1px solid" borderColor={borderColor}>
-                  <Text fontSize="sm" fontWeight="semibold" mb={2}>Campos disponiveis para mapeamento NF:</Text>
-                  <SimpleGrid columns={{ base: 1, md: 2 }} spacing={1}>
-                    {NF_SYSTEM_FIELDS.map(f => (
-                      <Text key={f.key} fontSize="xs" fontFamily="mono">
-                        <Text as="span" fontWeight="bold" color={f.required ? "red.400" : "inherit"}>
-                          {f.label}
-                        </Text>
-                        {f.required && <Text as="span" color="red.400">*</Text>}
-                        {" - "}{f.description}
+              <Box bg={refBg} p={4} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                <Text fontSize="sm" fontWeight="semibold" mb={2}>Colunas disponiveis para mapeamento:</Text>
+                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={1}>
+                  {SYSTEM_FIELDS.map(f => (
+                    <Text key={f.key} fontSize="xs" fontFamily="mono">
+                      <Text as="span" fontWeight="bold" color={f.required ? "red.400" : "inherit"}>
+                        {f.label}
                       </Text>
-                    ))}
-                  </SimpleGrid>
-                  <Text fontSize="xs" color="gray.500" mt={2}>* Campos obrigatorios</Text>
-                </Box>
-
-                <FormControl>
-                  <FormLabel fontSize="sm">SQL para buscar notas fiscais do Sisplan</FormLabel>
-                  <Textarea
-                    size="sm"
-                    rows={5}
-                    fontFamily="mono"
-                    fontSize="sm"
-                    value={form.nfSqlQuery}
-                    onChange={(e) => setForm(prev => ({ ...prev, nfSqlQuery: e.target.value }))}
-                    placeholder="SELECT NR_NF, SERIE, CODCLI, NOME, VL_TOTAL, DT_EMISSAO FROM NOTA_FISCAL WHERE DT_EMISSAO >= '2024-01-01'"
-                  />
-                </FormControl>
-                <Button
-                  mt={3}
-                  size="sm"
-                  colorScheme="blue"
-                  variant="outline"
-                  isLoading={testingNfQuery}
-                  loadingText="Executando..."
-                  onClick={handleTestNfQuery}
-                >
-                  Testar Query NF
-                </Button>
+                      {f.required && <Text as="span" color="red.400">*</Text>}
+                      {" - "}{f.description}
+                    </Text>
+                  ))}
+                </SimpleGrid>
+                <Text fontSize="xs" color="gray.500" mt={2}>* Campos obrigatorios</Text>
               </Box>
 
-              {/* NF Preview */}
-              {nfPreviewRows.length > 0 && (
-                <Box>
-                  <Text fontWeight="semibold" mb={2} fontSize="sm">
-                    Preview NF ({nfPreviewRows.length} registros)
-                  </Text>
-                  <TableContainer maxH="300px" overflowY="auto">
-                    <Table size="sm" variant="simple">
-                      <Thead>
-                        <Tr>
-                          {nfQueryColumns.map(col => (
-                            <Th key={col} fontSize="xs">{col}</Th>
-                          ))}
-                        </Tr>
-                      </Thead>
-                      <Tbody>
-                        {nfPreviewRows.map((row, i) => (
-                          <Tr key={i}>
-                            {nfQueryColumns.map(col => (
-                              <Td key={col} fontSize="xs" maxW="200px" isTruncated>
-                                {row[col] !== null && row[col] !== undefined ? String(row[col]) : ""}
-                              </Td>
-                            ))}
-                          </Tr>
-                        ))}
-                      </Tbody>
-                    </Table>
-                  </TableContainer>
-                </Box>
-              )}
+              <FormControl>
+                <FormLabel fontSize="sm">SQL para buscar vendas do Sisplan</FormLabel>
+                <Textarea
+                  size="sm"
+                  rows={6}
+                  fontFamily="mono"
+                  fontSize="sm"
+                  value={form.sqlQuery}
+                  onChange={(e) => setForm(prev => ({ ...prev, sqlQuery: e.target.value }))}
+                  placeholder="SELECT NR_PEDIDO, DT_VENDA, VL_TOTAL, DS_PRODUTO, QT_ITEM FROM PEDIDOS WHERE DT_VENDA >= '2024-01-01'"
+                />
+              </FormControl>
+              <Button
+                size="sm"
+                colorScheme="blue"
+                variant="outline"
+                isLoading={testingQuery}
+                loadingText="Executando..."
+                onClick={handleTestQuery}
+                alignSelf="flex-start"
+              >
+                Testar Query
+              </Button>
 
-              {/* NF Column Mapping */}
-              {nfQueryColumns.length > 0 && (
+              {/* Preview */}
+              {previewRows.length > 0 && (
                 <>
                   <Divider />
                   <Box>
-                    <Text fontWeight="semibold" mb={3}>Mapeamento de Colunas NF</Text>
+                    <Text fontWeight="semibold" mb={2} fontSize="sm">
+                      Preview ({previewRows.length} registros)
+                    </Text>
+                    <TableContainer maxH="300px" overflowY="auto">
+                      <Table size="sm" variant="simple">
+                        <Thead>
+                          <Tr>
+                            {queryColumns.map(col => (
+                              <Th key={col} fontSize="xs">{col}</Th>
+                            ))}
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {previewRows.map((row, i) => (
+                            <Tr key={i}>
+                              {queryColumns.map(col => (
+                                <Td key={col} fontSize="xs" maxW="200px" isTruncated>
+                                  {row[col] !== null && row[col] !== undefined ? String(row[col]) : ""}
+                                </Td>
+                              ))}
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+                </>
+              )}
+
+              {/* Mapeamento de Colunas */}
+              {queryColumns.length > 0 && (
+                <>
+                  <Divider />
+                  <Box>
+                    <Text fontWeight="semibold" mb={3}>Mapeamento de Colunas</Text>
                     <Text fontSize="sm" color="gray.500" mb={3}>
                       Associe cada campo do sistema a uma coluna retornada pela query.
                     </Text>
                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
-                      {NF_SYSTEM_FIELDS.map(f => (
+                      {SYSTEM_FIELDS.map(f => (
                         <FormControl key={f.key}>
                           <FormLabel fontSize="xs">
                             {f.label}
@@ -673,11 +483,11 @@ const SisplanSettings = () => {
                           </FormLabel>
                           <Select
                             size="sm"
-                            value={form.nfColumnMapping[f.key] || ""}
-                            onChange={(e) => updateNfMapping(f.key, e.target.value)}
+                            value={form.columnMapping[f.key] || ""}
+                            onChange={(e) => updateMapping(f.key, e.target.value)}
                             placeholder="-- Nenhum --"
                           >
-                            {nfQueryColumns.map(col => (
+                            {queryColumns.map(col => (
                               <option key={col} value={col}>{col}</option>
                             ))}
                           </Select>
@@ -687,45 +497,261 @@ const SisplanSettings = () => {
                   </Box>
                 </>
               )}
+            </VStack>
+          </AccordionPanel>
+        </AccordionItem>
 
-              {/* NF Sync Status */}
+        {/* 3. Notas Fiscais (NF-e) */}
+        <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
+          <AccordionButton py={3} _expanded={{ bg: refBg }}>
+            <Box flex="1" textAlign="left">
+              <Text fontWeight="semibold">Notas Fiscais (NF-e)</Text>
+            </Box>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel pb={4}>
+            <HStack justify="space-between" mb={4}>
+              <Text fontSize="sm">Habilitar Notas Fiscais</Text>
+              <Switch
+                isChecked={form.nfActive}
+                onChange={(e) => setForm(prev => ({ ...prev, nfActive: e.target.checked }))}
+                colorScheme="green"
+              />
+            </HStack>
+
+            {form.nfActive && (
+              <VStack spacing={4} align="stretch">
+                <FormControl>
+                  <FormLabel fontSize="sm">Caminho local dos PDFs no servidor</FormLabel>
+                  <Input
+                    size="sm"
+                    value={form.nfLocalPath}
+                    onChange={(e) => setForm(prev => ({ ...prev, nfLocalPath: e.target.value }))}
+                    placeholder="/mnt/sisplan/NFe/LOG_001/DANFE"
+                  />
+                  <Text fontSize="xs" color="gray.500" mt={1}>
+                    Ponto de montagem CIFS no servidor Linux (ex: /mnt/sisplan/NFe/LOG_001/DANFE).
+                    Este caminho e usado para localizar e enviar os PDFs.
+                  </Text>
+                </FormControl>
+
+                <FormControl>
+                  <FormLabel fontSize="sm">Caminho de rede (UNC) - referencia</FormLabel>
+                  <Input
+                    size="sm"
+                    value={form.nfBasePath}
+                    onChange={(e) => setForm(prev => ({ ...prev, nfBasePath: e.target.value }))}
+                    placeholder="\\\\192.168.7.2\\Sisplan\\NFe\\LOG_001\\DANFE"
+                  />
+                  <Text fontSize="xs" color="gray.500" mt={1}>
+                    Caminho Windows/UNC para referencia. O caminho local acima tem prioridade para acesso aos arquivos.
+                  </Text>
+                </FormControl>
+
+                <Box>
+                  <Box bg={refBg} p={4} borderRadius="md" mb={4} border="1px solid" borderColor={borderColor}>
+                    <Text fontSize="sm" fontWeight="semibold" mb={2}>Campos disponiveis para mapeamento NF:</Text>
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={1}>
+                      {NF_SYSTEM_FIELDS.map(f => (
+                        <Text key={f.key} fontSize="xs" fontFamily="mono">
+                          <Text as="span" fontWeight="bold" color={f.required ? "red.400" : "inherit"}>
+                            {f.label}
+                          </Text>
+                          {f.required && <Text as="span" color="red.400">*</Text>}
+                          {" - "}{f.description}
+                        </Text>
+                      ))}
+                    </SimpleGrid>
+                    <Text fontSize="xs" color="gray.500" mt={2}>* Campos obrigatorios</Text>
+                  </Box>
+
+                  <FormControl>
+                    <FormLabel fontSize="sm">SQL para buscar notas fiscais do Sisplan</FormLabel>
+                    <Textarea
+                      size="sm"
+                      rows={5}
+                      fontFamily="mono"
+                      fontSize="sm"
+                      value={form.nfSqlQuery}
+                      onChange={(e) => setForm(prev => ({ ...prev, nfSqlQuery: e.target.value }))}
+                      placeholder="SELECT NR_NF, SERIE, CODCLI, NOME, VL_TOTAL, DT_EMISSAO FROM NOTA_FISCAL WHERE DT_EMISSAO >= '2024-01-01'"
+                    />
+                  </FormControl>
+                  <Button
+                    mt={3}
+                    size="sm"
+                    colorScheme="blue"
+                    variant="outline"
+                    isLoading={testingNfQuery}
+                    loadingText="Executando..."
+                    onClick={handleTestNfQuery}
+                  >
+                    Testar Query NF
+                  </Button>
+                </Box>
+
+                {/* NF Preview */}
+                {nfPreviewRows.length > 0 && (
+                  <Box>
+                    <Text fontWeight="semibold" mb={2} fontSize="sm">
+                      Preview NF ({nfPreviewRows.length} registros)
+                    </Text>
+                    <TableContainer maxH="300px" overflowY="auto">
+                      <Table size="sm" variant="simple">
+                        <Thead>
+                          <Tr>
+                            {nfQueryColumns.map(col => (
+                              <Th key={col} fontSize="xs">{col}</Th>
+                            ))}
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {nfPreviewRows.map((row, i) => (
+                            <Tr key={i}>
+                              {nfQueryColumns.map(col => (
+                                <Td key={col} fontSize="xs" maxW="200px" isTruncated>
+                                  {row[col] !== null && row[col] !== undefined ? String(row[col]) : ""}
+                                </Td>
+                              ))}
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </TableContainer>
+                  </Box>
+                )}
+
+                {/* NF Column Mapping */}
+                {nfQueryColumns.length > 0 && (
+                  <>
+                    <Divider />
+                    <Box>
+                      <Text fontWeight="semibold" mb={3}>Mapeamento de Colunas NF</Text>
+                      <Text fontSize="sm" color="gray.500" mb={3}>
+                        Associe cada campo do sistema a uma coluna retornada pela query.
+                      </Text>
+                      <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                        {NF_SYSTEM_FIELDS.map(f => (
+                          <FormControl key={f.key}>
+                            <FormLabel fontSize="xs">
+                              {f.label}
+                              {f.required && <Text as="span" color="red.400" ml={1}>*</Text>}
+                              <Text as="span" color="gray.400" ml={1}>({f.description})</Text>
+                            </FormLabel>
+                            <Select
+                              size="sm"
+                              value={form.nfColumnMapping[f.key] || ""}
+                              onChange={(e) => updateNfMapping(f.key, e.target.value)}
+                              placeholder="-- Nenhum --"
+                            >
+                              {nfQueryColumns.map(col => (
+                                <option key={col} value={col}>{col}</option>
+                              ))}
+                            </Select>
+                          </FormControl>
+                        ))}
+                      </SimpleGrid>
+                    </Box>
+                  </>
+                )}
+
+                {/* NF Sync Status */}
+                <Divider />
+                <Box>
+                  <Text fontSize="sm" fontWeight="medium" mb={1}>Status do ultimo sync NF</Text>
+                  <HStack spacing={2}>
+                    {nfSyncStatus.lastSyncStatus && (
+                      <Badge colorScheme={nfSyncStatus.lastSyncStatus === "success" ? "green" : "red"}>
+                        {nfSyncStatus.lastSyncStatus === "success" ? "Sucesso" : "Erro"}
+                      </Badge>
+                    )}
+                    <Text fontSize="xs" color="gray.500">
+                      {formatSyncDate(nfSyncStatus.lastSyncAt)}
+                    </Text>
+                  </HStack>
+                  {nfSyncStatus.lastSyncMessage && (
+                    <Text fontSize="xs" color="gray.500" mt={1}>{nfSyncStatus.lastSyncMessage}</Text>
+                  )}
+                  {nfSyncStatus.lastSyncRows > 0 && (
+                    <Text fontSize="xs" color="gray.500">{nfSyncStatus.lastSyncRows} registros</Text>
+                  )}
+                  <Button
+                    mt={3}
+                    size="sm"
+                    colorScheme="teal"
+                    variant="outline"
+                    isLoading={syncingNf}
+                    loadingText="Sincronizando..."
+                    onClick={handleNfSync}
+                  >
+                    Sincronizar NF Agora
+                  </Button>
+                </Box>
+              </VStack>
+            )}
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* 4. Agendamento (ultimo) */}
+        <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
+          <AccordionButton py={3} _expanded={{ bg: refBg }}>
+            <Box flex="1" textAlign="left">
+              <Text fontWeight="semibold">Agendamento</Text>
+            </Box>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel pb={4}>
+            <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+              <FormControl>
+                <FormLabel fontSize="sm">Intervalo de sync (minutos)</FormLabel>
+                <Input
+                  size="sm"
+                  type="number"
+                  min={1}
+                  max={1440}
+                  value={form.syncIntervalMinutes}
+                  onChange={(e) => setForm(prev => ({
+                    ...prev,
+                    syncIntervalMinutes: parseInt(e.target.value) || 5
+                  }))}
+                />
+              </FormControl>
               <Box>
-                <Text fontSize="sm" fontWeight="medium" mb={1}>Status do ultimo sync NF</Text>
+                <Text fontSize="sm" fontWeight="medium" mb={1}>Status do ultimo sync</Text>
                 <HStack spacing={2}>
-                  {nfSyncStatus.lastSyncStatus && (
-                    <Badge colorScheme={nfSyncStatus.lastSyncStatus === "success" ? "green" : "red"}>
-                      {nfSyncStatus.lastSyncStatus === "success" ? "Sucesso" : "Erro"}
+                  {syncStatus.lastSyncStatus && (
+                    <Badge colorScheme={syncStatus.lastSyncStatus === "success" ? "green" : "red"}>
+                      {syncStatus.lastSyncStatus === "success" ? "Sucesso" : "Erro"}
                     </Badge>
                   )}
                   <Text fontSize="xs" color="gray.500">
-                    {formatSyncDate(nfSyncStatus.lastSyncAt)}
+                    {formatSyncDate(syncStatus.lastSyncAt)}
                   </Text>
                 </HStack>
-                {nfSyncStatus.lastSyncMessage && (
-                  <Text fontSize="xs" color="gray.500" mt={1}>{nfSyncStatus.lastSyncMessage}</Text>
+                {syncStatus.lastSyncMessage && (
+                  <Text fontSize="xs" color="gray.500" mt={1}>{syncStatus.lastSyncMessage}</Text>
                 )}
-                {nfSyncStatus.lastSyncRows > 0 && (
-                  <Text fontSize="xs" color="gray.500">{nfSyncStatus.lastSyncRows} registros</Text>
+                {syncStatus.lastSyncRows > 0 && (
+                  <Text fontSize="xs" color="gray.500">{syncStatus.lastSyncRows} registros</Text>
                 )}
-                <Button
-                  mt={3}
-                  size="sm"
-                  colorScheme="teal"
-                  variant="outline"
-                  isLoading={syncingNf}
-                  loadingText="Sincronizando..."
-                  onClick={handleNfSync}
-                >
-                  Sincronizar NF Agora
-                </Button>
               </Box>
-            </VStack>
-          )}
-        </Box>
+            </SimpleGrid>
+            <Button
+              mt={3}
+              size="sm"
+              colorScheme="teal"
+              variant="outline"
+              isLoading={syncing}
+              loadingText="Sincronizando..."
+              onClick={handleSync}
+            >
+              Sincronizar Agora
+            </Button>
+          </AccordionPanel>
+        </AccordionItem>
+      </Accordion>
 
-        <Divider />
-
-        {/* Salvar */}
+      <VStack spacing={4} align="stretch" mt={4}>
         <Flex justify="flex-end" gap={3}>
           <Button
             colorScheme="blue"

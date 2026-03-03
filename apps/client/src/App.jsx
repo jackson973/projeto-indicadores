@@ -474,14 +474,14 @@ const App = () => {
                     alignItems="center"
                     justifyContent="flex-start"
                     gap={2}
-                    px={3}
-                    py={2}
+                    px={2}
+                    py={1.5}
                     borderRadius="md"
-                    fontSize="sm"
-                    fontWeight={activeView === subItem.view ? "semibold" : "normal"}
-                    color={activeView === subItem.view ? "blue.500" : navColor}
-                    bg={activeView === subItem.view ? navActiveBg : "transparent"}
-                    _hover={{ bg: navHoverBg }}
+                    fontSize="xs"
+                    fontWeight={activeView === subItem.view ? "600" : "normal"}
+                    color={activeView === subItem.view ? "blue.600" : navColor}
+                    bg="transparent"
+                    _hover={{ color: "blue.500" }}
                     cursor="pointer"
                     onClick={() => {
                       setActiveView(subItem.view);
@@ -491,7 +491,7 @@ const App = () => {
                     w="full"
                     whiteSpace="nowrap"
                   >
-                    <Box fontSize="xs" color="gray.400">•</Box>
+                    <Box w="4px" h="4px" borderRadius="full" bg={activeView === subItem.view ? "blue.500" : "gray.400"} flexShrink={0} />
                     {subItem.label}
                   </Box>
                 ))}

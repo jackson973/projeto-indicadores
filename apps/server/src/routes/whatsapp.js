@@ -52,7 +52,7 @@ router.get('/events', (req, res) => {
 // All routes below require JWT auth + admin role
 router.use(authenticate, requireAdmin);
 
-// GET /api/whatsapp - Retorna configurações (API key mascarada)
+// GET /api/whatsapp - Retorna configurações
 router.get('/', async (req, res) => {
   try {
     const settings = await whatsappRepo.getSettings();
@@ -60,10 +60,7 @@ router.get('/', async (req, res) => {
       return res.json({ active: false });
     }
 
-    return res.json({
-      ...settings,
-      llmApiKey: settings.llmApiKey ? '********' : ''
-    });
+    return res.json(settings);
   } catch (error) {
     console.error('Get whatsapp settings error:', error);
     return res.status(500).json({ message: 'Erro ao buscar configurações.' });
@@ -79,10 +76,12 @@ router.put('/', async (req, res) => {
       boletoPath, nfPath
     } = req.body;
 
+    // Preserve existing API key when masked placeholder is sent back
+    const existing = await whatsappRepo.getSettings();
     const result = await whatsappRepo.updateSettings({
       active: active || false,
       llmProvider: (llmProvider || 'groq').trim(),
-      llmApiKey: llmApiKey || '',
+      llmApiKey: llmApiKey === '********' ? (existing?.llmApiKey || '') : (llmApiKey || ''),
       llmModel: (llmModel || '').trim(),
       llmBaseUrl: (llmBaseUrl || '').trim(),
       systemPrompt: (systemPrompt || '').trim(),

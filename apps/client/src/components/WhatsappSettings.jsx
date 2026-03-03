@@ -15,6 +15,8 @@ import {
   IconButton,
   Image,
   Input,
+  InputGroup,
+  InputRightElement,
   Select,
   SimpleGrid,
   Spinner,
@@ -32,7 +34,7 @@ import {
   useColorModeValue,
   useToast
 } from "@chakra-ui/react";
-import { DeleteIcon } from "@chakra-ui/icons";
+import { DeleteIcon, ViewIcon, ViewOffIcon, CopyIcon } from "@chakra-ui/icons";
 import {
   fetchWhatsappSettings,
   updateWhatsappSettings,
@@ -99,6 +101,8 @@ const WhatsappSettings = () => {
   const [qrCode, setQrCode] = useState(null);
   const [liveStatus, setLiveStatus] = useState("disconnected");
   const [savedPhones, setSavedPhones] = useState([]);
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [lastUsedLlmConfig, setLastUsedLlmConfig] = useState(null);
   const eventSourceRef = useRef(null);
   const toast = useToast();
 
@@ -109,6 +113,10 @@ const WhatsappSettings = () => {
   useEffect(() => {
     loadSettings();
     loadSavedPhones();
+    try {
+      const saved = localStorage.getItem("indicadores_lastUsed_llmConfig");
+      if (saved) setLastUsedLlmConfig(JSON.parse(saved));
+    } catch { /* ignore */ }
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
@@ -194,6 +202,17 @@ const WhatsappSettings = () => {
       if (data.connected) {
         setLiveStatus("connected");
       }
+      // Persist LLM config to localStorage for history
+      if (data.llmApiKey) {
+        const config = {
+          provider: provider,
+          model: model,
+          apiKey: data.llmApiKey,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem("indicadores_lastUsed_llmConfig", JSON.stringify(config));
+        setLastUsedLlmConfig(config);
+      }
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
     } finally {
@@ -232,6 +251,16 @@ const WhatsappSettings = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
+      if (form.llmApiKey) {
+        const config = {
+          provider: form.llmProvider,
+          model: form.llmModel,
+          apiKey: form.llmApiKey,
+          savedAt: new Date().toISOString()
+        };
+        localStorage.setItem("indicadores_lastUsed_llmConfig", JSON.stringify(config));
+        setLastUsedLlmConfig(config);
+      }
       await updateWhatsappSettings(form);
       toast({ title: "Configuracoes salvas com sucesso!", status: "success", duration: 3000 });
       await loadSettings();
@@ -497,13 +526,25 @@ const WhatsappSettings = () => {
             {currentProvider?.needsKey && (
               <FormControl isRequired>
                 <FormLabel fontSize="sm">API Key</FormLabel>
-                <Input
-                  size="sm"
-                  type="password"
-                  value={form.llmApiKey}
-                  onChange={(e) => setForm(prev => ({ ...prev, llmApiKey: e.target.value }))}
-                  placeholder="Sua chave de API"
-                />
+                <InputGroup size="sm">
+                  <Input
+                    type={showApiKey ? "text" : "password"}
+                    value={form.llmApiKey}
+                    onChange={(e) => setForm(prev => ({ ...prev, llmApiKey: e.target.value }))}
+                    placeholder="Sua chave de API"
+                    pr="4.5rem"
+                  />
+                  <InputRightElement width="4.5rem">
+                    <IconButton
+                      h="1.5rem"
+                      size="xs"
+                      variant="ghost"
+                      icon={showApiKey ? <ViewOffIcon /> : <ViewIcon />}
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      aria-label={showApiKey ? "Ocultar" : "Mostrar"}
+                    />
+                  </InputRightElement>
+                </InputGroup>
               </FormControl>
             )}
             {form.llmProvider === "ollama" && (
@@ -535,6 +576,75 @@ const WhatsappSettings = () => {
               <Text fontSize="sm">{testResponse}</Text>
             </Box>
           )}
+
+          {/* Configuracao LLM anterior */}
+          <Box mt={4}>
+            <Text fontSize="sm" fontWeight="semibold" mb={2}>Configuracao LLM anterior</Text>
+            {lastUsedLlmConfig ? (
+              <TableContainer bg={refBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                <Table size="sm" variant="simple">
+                  <Thead>
+                    <Tr>
+                      <Th>Provedor</Th>
+                      <Th>Modelo</Th>
+                      <Th>Chave API</Th>
+                      <Th w="80px"></Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    <Tr>
+                      <Td>
+                        <Text fontSize="sm">
+                          {LLM_PROVIDERS.find(p => p.value === lastUsedLlmConfig.provider)?.label || lastUsedLlmConfig.provider}
+                        </Text>
+                      </Td>
+                      <Td>
+                        <Text fontSize="sm">
+                          {Object.values(LLM_MODELS).flat().find(m => m.value === lastUsedLlmConfig.model)?.label || lastUsedLlmConfig.model}
+                        </Text>
+                      </Td>
+                      <Td>
+                        <Text fontSize="xs" fontFamily="mono">
+                          {lastUsedLlmConfig.apiKey.slice(0, 8)}...{lastUsedLlmConfig.apiKey.slice(-4)}
+                        </Text>
+                      </Td>
+                      <Td>
+                        <HStack spacing={1}>
+                          <IconButton
+                            icon={<CopyIcon />}
+                            size="xs"
+                            variant="ghost"
+                            aria-label="Copiar chave"
+                            onClick={() => {
+                              navigator.clipboard.writeText(lastUsedLlmConfig.apiKey);
+                              toast({ title: "Chave copiada!", status: "success", duration: 2000 });
+                            }}
+                          />
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            colorScheme="blue"
+                            onClick={() => setForm(prev => ({
+                              ...prev,
+                              llmProvider: lastUsedLlmConfig.provider,
+                              llmModel: lastUsedLlmConfig.model,
+                              llmApiKey: lastUsedLlmConfig.apiKey
+                            }))}
+                          >
+                            Usar
+                          </Button>
+                        </HStack>
+                      </Td>
+                    </Tr>
+                  </Tbody>
+                </Table>
+              </TableContainer>
+            ) : (
+              <Text fontSize="xs" color="gray.500">
+                Nenhuma configuracao salva anteriormente.
+              </Text>
+            )}
+          </Box>
         </Box>
 
         <Divider />
@@ -619,34 +729,21 @@ const WhatsappSettings = () => {
         </Box>
 
         {/* Caminhos dos PDFs */}
-        {(form.featureBoleto || form.featureNf) && (
+        {form.featureBoleto && (
           <>
             <Divider />
             <Box>
               <Text fontWeight="semibold" mb={3}>Caminhos dos Arquivos (Servidor Sisplan)</Text>
               <SimpleGrid columns={{ base: 1, md: 1 }} spacing={4}>
-                {form.featureBoleto && (
-                  <FormControl>
-                    <FormLabel fontSize="sm">Pasta dos Boletos</FormLabel>
-                    <Input
-                      size="sm"
-                      value={form.boletoPath}
-                      onChange={(e) => setForm(prev => ({ ...prev, boletoPath: e.target.value }))}
-                      placeholder="\\\\servidor\\sisplan\\boletos"
-                    />
-                  </FormControl>
-                )}
-                {form.featureNf && (
-                  <FormControl>
-                    <FormLabel fontSize="sm">Pasta das Notas Fiscais</FormLabel>
-                    <Input
-                      size="sm"
-                      value={form.nfPath}
-                      onChange={(e) => setForm(prev => ({ ...prev, nfPath: e.target.value }))}
-                      placeholder="\\\\servidor\\sisplan\\nf"
-                    />
-                  </FormControl>
-                )}
+                <FormControl>
+                  <FormLabel fontSize="sm">Pasta dos Boletos</FormLabel>
+                  <Input
+                    size="sm"
+                    value={form.boletoPath}
+                    onChange={(e) => setForm(prev => ({ ...prev, boletoPath: e.target.value }))}
+                    placeholder="\\\\servidor\\sisplan\\boletos"
+                  />
+                </FormControl>
               </SimpleGrid>
             </Box>
           </>

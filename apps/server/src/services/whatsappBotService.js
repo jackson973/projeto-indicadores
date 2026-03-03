@@ -403,15 +403,6 @@ async function handleIncomingMessage(msg) {
       return;
     }
 
-    // Auto-enable NF feature if Sisplan NF sync is active
-    if (!settings.featureNf) {
-      const sisplanRepo = require('../db/sisplanRepository');
-      const sisplanSettings = await sisplanRepo.getSettings();
-      if (sisplanSettings?.nfActive) {
-        settings.featureNf = true;
-      }
-    }
-
     // Send typing indicator
     await sock.presenceSubscribe(jid);
     await sock.sendPresenceUpdate('composing', jid);
@@ -428,11 +419,18 @@ async function handleIncomingMessage(msg) {
     for (const file of result.files || []) {
       try {
         if (fs.existsSync(file.filePath)) {
+          console.log(`${LOG_PREFIX} Sending file: ${file.filePath}`);
           const fileBuffer = fs.readFileSync(file.filePath);
           await sock.sendMessage(jid, {
             document: fileBuffer,
             mimetype: 'application/pdf',
             fileName: file.fileName
+          });
+          console.log(`${LOG_PREFIX} File sent successfully: ${file.fileName}`);
+        } else {
+          console.error(`${LOG_PREFIX} File not found on disk: ${file.filePath}`);
+          await sock.sendMessage(jid, {
+            text: `Nao foi possivel enviar o arquivo ${file.fileName} - arquivo nao encontrado no servidor.`
           });
         }
       } catch (fileErr) {

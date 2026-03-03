@@ -81,7 +81,7 @@ router.post('/today-analytics/refresh', authenticate, async (req, res) => {
 // ── Rotas admin ─────────────────────────────────────────────────────────────
 router.use(authenticate, requireAdmin);
 
-// GET /api/upseller - Retorna configurações (senhas mascaradas)
+// GET /api/upseller - Retorna configurações (senhas de login mascaradas)
 router.get('/', async (req, res) => {
   try {
     const settings = await upsellerRepo.getSettings();
@@ -92,7 +92,6 @@ router.get('/', async (req, res) => {
     return res.json({
       ...settings,
       upsellerPassword: settings.upsellerPassword ? '********' : '',
-      anticaptchaKey: settings.anticaptchaKey ? '********' : '',
       imapPass: settings.imapPass ? '********' : '',
       sessionCookies: undefined,
       sessionSavedAt: undefined,
@@ -112,16 +111,18 @@ router.put('/', async (req, res) => {
       syncIntervalMinutes, defaultDays
     } = req.body;
 
+    // Preserve existing values when masked placeholder is sent back
+    const existing = await upsellerRepo.getSettings();
     const result = await upsellerRepo.updateSettings({
       active: active || false,
       upsellerEmail: (upsellerEmail || '').trim(),
-      upsellerPassword: upsellerPassword === '********' ? '' : (upsellerPassword || ''),
+      upsellerPassword: upsellerPassword === '********' ? (existing?.upsellerPassword || '') : (upsellerPassword || ''),
       upsellerUrl: (upsellerUrl || '').trim(),
-      anticaptchaKey: anticaptchaKey === '********' ? '' : (anticaptchaKey || ''),
+      anticaptchaKey: anticaptchaKey === '********' ? (existing?.anticaptchaKey || '') : (anticaptchaKey || ''),
       imapHost: (imapHost || '').trim(),
       imapPort: imapPort || 993,
       imapUser: (imapUser || '').trim(),
-      imapPass: imapPass === '********' ? '' : (imapPass || ''),
+      imapPass: imapPass === '********' ? (existing?.imapPass || '') : (imapPass || ''),
       syncIntervalMinutes: syncIntervalMinutes || 60,
       defaultDays: defaultDays || 90,
     });
