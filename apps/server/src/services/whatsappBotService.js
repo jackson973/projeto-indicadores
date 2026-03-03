@@ -1,3 +1,8 @@
+// Polyfill globalThis.crypto for Node 18 (required by Baileys)
+if (!globalThis.crypto) {
+  globalThis.crypto = require('crypto').webcrypto;
+}
+
 // Baileys is ESM-only, use dynamic import (cached after first load)
 let _baileys = null;
 async function getBaileys() {
