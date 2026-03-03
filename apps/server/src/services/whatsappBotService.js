@@ -226,8 +226,11 @@ async function startWhatsappBot() {
         if (msg.key.remoteJid.endsWith('@g.us')) continue;
 
         // Capture LID mapping from message metadata if available
-        if (msg.key.remoteJid?.endsWith('@lid') && msg.key.remoteJidAlt?.endsWith('@s.whatsapp.net')) {
-          storeLidMapping(msg.key.remoteJid, msg.key.remoteJidAlt);
+        if (msg.key.remoteJid?.endsWith('@lid')) {
+          const phoneJid = msg.key.senderPn || msg.key.remoteJidAlt;
+          if (phoneJid?.endsWith('@s.whatsapp.net')) {
+            storeLidMapping(msg.key.remoteJid, phoneJid);
+          }
         }
 
         await handleIncomingMessage(msg);
@@ -321,23 +324,28 @@ function resolvePhone(msg) {
 
   // 2. LID format - try multiple resolution strategies
   if (jid.endsWith('@lid')) {
-    // Strategy A: Check remoteJidAlt (Baileys v6.7+ may include phone JID here)
+    // Strategy A: Check senderPn (phone number associated with LID)
+    if (msg.key.senderPn?.endsWith('@s.whatsapp.net')) {
+      return msg.key.senderPn.replace('@s.whatsapp.net', '');
+    }
+
+    // Strategy B: Check remoteJidAlt (Baileys v6.7+ may include phone JID here)
     if (msg.key.remoteJidAlt?.endsWith('@s.whatsapp.net')) {
       return msg.key.remoteJidAlt.replace('@s.whatsapp.net', '');
     }
 
-    // Strategy B: Check participantAlt (sometimes available)
+    // Strategy C: Check participantAlt (sometimes available)
     if (msg.key.participantAlt?.endsWith('@s.whatsapp.net')) {
       return msg.key.participantAlt.replace('@s.whatsapp.net', '');
     }
 
-    // Strategy C: Use our persisted LID-to-phone map
+    // Strategy D: Use our persisted LID-to-phone map
     const mapped = lidToPhoneMap.get(jid);
     if (mapped) {
       return mapped;
     }
 
-    // Strategy D: Check if signalRepository has the mapping (Baileys internal)
+    // Strategy E: Check if signalRepository has the mapping (Baileys internal)
     try {
       if (sock?.authState?.keys?.get) {
         // Some Baileys versions store LID mappings in auth state
@@ -393,6 +401,15 @@ async function handleIncomingMessage(msg) {
     const settings = await whatsappRepo.getSettings();
     if (!settings || !settings.active) {
       return;
+    }
+
+    // Auto-enable NF feature if Sisplan NF sync is active
+    if (!settings.featureNf) {
+      const sisplanRepo = require('../db/sisplanRepository');
+      const sisplanSettings = await sisplanRepo.getSettings();
+      if (sisplanSettings?.nfActive) {
+        settings.featureNf = true;
+      }
     }
 
     // Send typing indicator

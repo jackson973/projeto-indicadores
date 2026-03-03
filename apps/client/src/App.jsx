@@ -56,6 +56,8 @@ import DatabaseMaintenance from "./components/DatabaseMaintenance";
 import SisplanSettings from "./components/SisplanSettings";
 import WhatsappSettings from "./components/WhatsappSettings";
 import UpsellerSettings from "./components/UpsellerSettings";
+import ConversationLogs from "./components/ConversationLogs";
+import DatabaseManager from "./components/DatabaseManager";
 import CashFlow from "./components/CashFlow";
 import CashFlowDashboard from "./components/CashFlowDashboard";
 import { getSaoPauloDate, getSaoPauloYear, getSaoPauloMonth } from "./utils/timezone";
@@ -377,8 +379,16 @@ const App = () => {
           view: "upseller-settings"
         },
         {
+          label: "Log do Bot",
+          view: "conversation-logs"
+        },
+        {
           label: "Manutenção de base",
           view: "database-maintenance"
+        },
+        {
+          label: "Gerenciador de Banco",
+          view: "database-manager"
         }
       ]
     }
@@ -673,7 +683,7 @@ const App = () => {
           </Alert>
         )}
 
-        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "database-maintenance" && (
+        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && (
           <Center py={10}>
             <Box maxW="680px" w="full">
               <UploadForm onUpload={handleUpload} />
@@ -689,6 +699,10 @@ const App = () => {
           <DatabaseMaintenance />
         )}
 
+        {activeView === "database-manager" && user?.role === "admin" && (
+          <DatabaseManager />
+        )}
+
         {activeView === "sisplan-settings" && user?.role === "admin" && (
           <SisplanSettings />
         )}
@@ -699,6 +713,10 @@ const App = () => {
 
         {activeView === "whatsapp-settings" && user?.role === "admin" && (
           <WhatsappSettings />
+        )}
+
+        {activeView === "conversation-logs" && user?.role === "admin" && (
+          <ConversationLogs />
         )}
 
         {activeView === "cashflow" && (

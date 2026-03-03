@@ -167,6 +167,14 @@ async function clearSessionCookies() {
   );
 }
 
+async function getLastSyncAt() {
+  const result = await db.query(
+    `SELECT last_sync_at AT TIME ZONE 'UTC' AS "lastSyncAt"
+     FROM upseller_settings WHERE id = 1 AND active = true`
+  );
+  return result.rows[0]?.lastSyncAt || null;
+}
+
 module.exports = {
   getSettings,
   updateSettings,
@@ -174,5 +182,6 @@ module.exports = {
   updateSyncStatus,
   getSessionCookies,
   saveSessionCookies,
-  clearSessionCookies
+  clearSessionCookies,
+  getLastSyncAt
 };

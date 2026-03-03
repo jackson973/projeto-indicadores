@@ -21,6 +21,13 @@ async function detectAppliedMigrations(client) {
     { file: '009_add_client_name_to_sales.sql',      sql: "SELECT 1 FROM information_schema.columns WHERE table_name = 'sales' AND column_name = 'client_name'" },
     { file: '010_create_whatsapp_phones.sql',        sql: "SELECT 1 FROM information_schema.tables WHERE table_name = 'whatsapp_phones'" },
     { file: '011_upseller_integration.sql',          sql: "SELECT 1 FROM information_schema.tables WHERE table_name = 'upseller_settings'" },
+    { file: '012_upseller_daily_analytics.sql',      sql: "SELECT 1 FROM information_schema.tables WHERE table_name = 'upseller_daily_analytics'" },
+    { file: '013_notas_fiscais.sql',                  sql: "SELECT 1 FROM information_schema.tables WHERE table_name = 'notas_fiscais'" },
+    { file: '014_fix_notas_fiscais_columns.sql',      sql: "SELECT 1 FROM information_schema.columns WHERE table_name = 'notas_fiscais' AND column_name = 'codcli' AND character_maximum_length >= 50" },
+    { file: '015_notas_fiscais_text_columns.sql',     sql: "SELECT 1 FROM information_schema.columns WHERE table_name = 'notas_fiscais' AND column_name = 'codcli' AND data_type = 'text'" },
+    { file: '016_add_cnpj_to_notas_fiscais.sql',       sql: "SELECT 1 FROM information_schema.columns WHERE table_name = 'notas_fiscais' AND column_name = 'cnpj'" },
+    { file: '017_add_nf_local_path.sql',                sql: "SELECT 1 FROM information_schema.columns WHERE table_name = 'sisplan_settings' AND column_name = 'nf_local_path'" },
+    { file: '018_whatsapp_conversations.sql',            sql: "SELECT 1 FROM information_schema.tables WHERE table_name = 'whatsapp_conversations'" },
   ];
 
   const alreadyApplied = [];

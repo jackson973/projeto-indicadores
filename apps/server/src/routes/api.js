@@ -312,11 +312,18 @@ router.get("/summary", async (req, res) => {
     let todayRevenue = salesTodayRevenue;
     let yesterdayRevenue = salesYesterdayRevenue;
     let upsellerFetchedAt = null;
+    let upsellerLastSyncAt = null;
     const storeFilter = req.query.store || '';
     const channelFilter = (req.query.sale_channel || '').toLowerCase();
     const isFabrica = storeFilter.toLowerCase() === 'fabrica';
     const isAtacado = channelFilter === 'atacado';
     const isOnline = channelFilter === 'online';
+
+    // Get UpSeller order sync timestamp
+    try {
+      const upsellerRepo = require('../db/upsellerRepository');
+      upsellerLastSyncAt = await upsellerRepo.getLastSyncAt();
+    } catch (_) { /* not available */ }
 
     // Atacado = only Fabrica/Sisplan data (already filtered by getDailyRevenue via sale_channel)
     // Online = only UpSeller data (no Fabrica addition)
@@ -355,7 +362,7 @@ router.get("/summary", async (req, res) => {
       } catch (_) { /* analytics not available, use sales data */ }
     }
 
-    return res.json({ ...getSummary(sales, req.query), lastUpdate, upsellerFetchedAt, todayRevenue, yesterdayRevenue });
+    return res.json({ ...getSummary(sales, req.query), lastUpdate, upsellerFetchedAt, upsellerLastSyncAt, todayRevenue, yesterdayRevenue });
   } catch (error) {
     console.error('Summary error:', error);
     return res.status(500).json({ error: error.message });

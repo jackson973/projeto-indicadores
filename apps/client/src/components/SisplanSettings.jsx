@@ -32,7 +32,8 @@ import {
   updateSisplanSettings,
   testSisplanConnection,
   testSisplanQuery,
-  triggerSisplanSync
+  triggerSisplanSync,
+  triggerSisplanNfSync
 } from "../api";
 
 const SYSTEM_FIELDS = [
@@ -54,6 +55,19 @@ const SYSTEM_FIELDS = [
   { key: "cnpj_cpf", label: "cnpj_cpf", description: "CNPJ/CPF", required: false }
 ];
 
+const NF_SYSTEM_FIELDS = [
+  { key: "numero_nf", label: "numero_nf", description: "Numero da NF", required: true },
+  { key: "data_emissao", label: "data_emissao", description: "Data de emissao", required: true },
+  { key: "serie", label: "serie", description: "Serie da NF", required: false },
+  { key: "ordem_id", label: "ordem_id", description: "Numero do pedido", required: false },
+  { key: "codcli", label: "codcli", description: "Codigo do cliente", required: false },
+  { key: "nome_cliente", label: "nome_cliente", description: "Nome do cliente", required: false },
+  { key: "nome_fantasia", label: "nome_fantasia", description: "Nome fantasia do cliente", required: false },
+  { key: "valor", label: "valor", description: "Valor total da NF", required: false },
+  { key: "chave_acesso", label: "chave_acesso", description: "Chave de acesso NFe", required: false },
+  { key: "cnpj", label: "cnpj", description: "CNPJ do cliente", required: false }
+];
+
 const SisplanSettings = () => {
   const [form, setForm] = useState({
     active: false,
@@ -64,16 +78,26 @@ const SisplanSettings = () => {
     fbPassword: "",
     sqlQuery: "",
     columnMapping: {},
-    syncIntervalMinutes: 5
+    syncIntervalMinutes: 5,
+    nfActive: false,
+    nfSqlQuery: "",
+    nfColumnMapping: {},
+    nfBasePath: "",
+    nfLocalPath: ""
   });
   const [syncStatus, setSyncStatus] = useState({});
+  const [nfSyncStatus, setNfSyncStatus] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testingQuery, setTestingQuery] = useState(false);
+  const [testingNfQuery, setTestingNfQuery] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncingNf, setSyncingNf] = useState(false);
   const [queryColumns, setQueryColumns] = useState([]);
   const [previewRows, setPreviewRows] = useState([]);
+  const [nfQueryColumns, setNfQueryColumns] = useState([]);
+  const [nfPreviewRows, setNfPreviewRows] = useState([]);
   const toast = useToast();
 
   const panelBg = useColorModeValue("white", "gray.800");
@@ -96,13 +120,24 @@ const SisplanSettings = () => {
         fbPassword: data.fbPassword || "",
         sqlQuery: data.sqlQuery || "",
         columnMapping: data.columnMapping || {},
-        syncIntervalMinutes: data.syncIntervalMinutes || 5
+        syncIntervalMinutes: data.syncIntervalMinutes || 5,
+        nfActive: data.nfActive || false,
+        nfSqlQuery: data.nfSqlQuery || "",
+        nfColumnMapping: data.nfColumnMapping || {},
+        nfBasePath: data.nfBasePath || "",
+        nfLocalPath: data.nfLocalPath || ""
       });
       setSyncStatus({
         lastSyncAt: data.lastSyncAt,
         lastSyncStatus: data.lastSyncStatus,
         lastSyncMessage: data.lastSyncMessage,
         lastSyncRows: data.lastSyncRows
+      });
+      setNfSyncStatus({
+        lastSyncAt: data.nfLastSyncAt,
+        lastSyncStatus: data.nfLastSyncStatus,
+        lastSyncMessage: data.nfLastSyncMessage,
+        lastSyncRows: data.nfLastSyncRows
       });
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
@@ -185,6 +220,54 @@ const SisplanSettings = () => {
       ...prev,
       columnMapping: {
         ...prev.columnMapping,
+        [systemField]: sourceColumn || undefined
+      }
+    }));
+  };
+
+  const handleTestNfQuery = async () => {
+    setTestingNfQuery(true);
+    try {
+      const result = await testSisplanQuery({
+        host: form.host,
+        port: form.port,
+        databasePath: form.databasePath,
+        fbUser: form.fbUser,
+        fbPassword: form.fbPassword,
+        sqlQuery: form.nfSqlQuery
+      });
+      setNfQueryColumns(result.columns || []);
+      setNfPreviewRows(result.rows || []);
+      toast({
+        title: `Query executada: ${result.totalPreview} registros retornados`,
+        status: "success",
+        duration: 3000
+      });
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setTestingNfQuery(false);
+    }
+  };
+
+  const handleNfSync = async () => {
+    setSyncingNf(true);
+    try {
+      const result = await triggerSisplanNfSync();
+      toast({ title: result.message, status: "success", duration: 4000 });
+      await loadSettings();
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setSyncingNf(false);
+    }
+  };
+
+  const updateNfMapping = (systemField, sourceColumn) => {
+    setForm(prev => ({
+      ...prev,
+      nfColumnMapping: {
+        ...prev.nfColumnMapping,
         [systemField]: sourceColumn || undefined
       }
     }));
@@ -448,6 +531,196 @@ const SisplanSettings = () => {
           >
             Sincronizar Agora
           </Button>
+        </Box>
+
+        <Divider />
+
+        {/* Notas Fiscais */}
+        <Box>
+          <HStack justify="space-between" mb={3}>
+            <Text fontWeight="semibold">Notas Fiscais (NF-e)</Text>
+            <HStack>
+              <Text fontSize="sm">Ativo</Text>
+              <Switch
+                isChecked={form.nfActive}
+                onChange={(e) => setForm(prev => ({ ...prev, nfActive: e.target.checked }))}
+                colorScheme="green"
+              />
+            </HStack>
+          </HStack>
+
+          {form.nfActive && (
+            <VStack spacing={4} align="stretch">
+              {/* NF Local Path (mount point on Linux server) */}
+              <FormControl>
+                <FormLabel fontSize="sm">Caminho local dos PDFs no servidor</FormLabel>
+                <Input
+                  size="sm"
+                  value={form.nfLocalPath}
+                  onChange={(e) => setForm(prev => ({ ...prev, nfLocalPath: e.target.value }))}
+                  placeholder="/mnt/sisplan/NFe/LOG_001/DANFE"
+                />
+                <Text fontSize="xs" color="gray.500" mt={1}>
+                  Ponto de montagem CIFS no servidor Linux (ex: /mnt/sisplan/NFe/LOG_001/DANFE).
+                  Este caminho e usado para localizar e enviar os PDFs.
+                </Text>
+              </FormControl>
+
+              {/* NF Base Path (UNC reference) */}
+              <FormControl>
+                <FormLabel fontSize="sm">Caminho de rede (UNC) - referencia</FormLabel>
+                <Input
+                  size="sm"
+                  value={form.nfBasePath}
+                  onChange={(e) => setForm(prev => ({ ...prev, nfBasePath: e.target.value }))}
+                  placeholder="\\\\192.168.7.2\\Sisplan\\NFe\\LOG_001\\DANFE"
+                />
+                <Text fontSize="xs" color="gray.500" mt={1}>
+                  Caminho Windows/UNC para referencia. O caminho local acima tem prioridade para acesso aos arquivos.
+                </Text>
+              </FormControl>
+
+              {/* NF SQL Query */}
+              <Box>
+                <Box bg={refBg} p={4} borderRadius="md" mb={4} border="1px solid" borderColor={borderColor}>
+                  <Text fontSize="sm" fontWeight="semibold" mb={2}>Campos disponiveis para mapeamento NF:</Text>
+                  <SimpleGrid columns={{ base: 1, md: 2 }} spacing={1}>
+                    {NF_SYSTEM_FIELDS.map(f => (
+                      <Text key={f.key} fontSize="xs" fontFamily="mono">
+                        <Text as="span" fontWeight="bold" color={f.required ? "red.400" : "inherit"}>
+                          {f.label}
+                        </Text>
+                        {f.required && <Text as="span" color="red.400">*</Text>}
+                        {" - "}{f.description}
+                      </Text>
+                    ))}
+                  </SimpleGrid>
+                  <Text fontSize="xs" color="gray.500" mt={2}>* Campos obrigatorios</Text>
+                </Box>
+
+                <FormControl>
+                  <FormLabel fontSize="sm">SQL para buscar notas fiscais do Sisplan</FormLabel>
+                  <Textarea
+                    size="sm"
+                    rows={5}
+                    fontFamily="mono"
+                    fontSize="sm"
+                    value={form.nfSqlQuery}
+                    onChange={(e) => setForm(prev => ({ ...prev, nfSqlQuery: e.target.value }))}
+                    placeholder="SELECT NR_NF, SERIE, CODCLI, NOME, VL_TOTAL, DT_EMISSAO FROM NOTA_FISCAL WHERE DT_EMISSAO >= '2024-01-01'"
+                  />
+                </FormControl>
+                <Button
+                  mt={3}
+                  size="sm"
+                  colorScheme="blue"
+                  variant="outline"
+                  isLoading={testingNfQuery}
+                  loadingText="Executando..."
+                  onClick={handleTestNfQuery}
+                >
+                  Testar Query NF
+                </Button>
+              </Box>
+
+              {/* NF Preview */}
+              {nfPreviewRows.length > 0 && (
+                <Box>
+                  <Text fontWeight="semibold" mb={2} fontSize="sm">
+                    Preview NF ({nfPreviewRows.length} registros)
+                  </Text>
+                  <TableContainer maxH="300px" overflowY="auto">
+                    <Table size="sm" variant="simple">
+                      <Thead>
+                        <Tr>
+                          {nfQueryColumns.map(col => (
+                            <Th key={col} fontSize="xs">{col}</Th>
+                          ))}
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {nfPreviewRows.map((row, i) => (
+                          <Tr key={i}>
+                            {nfQueryColumns.map(col => (
+                              <Td key={col} fontSize="xs" maxW="200px" isTruncated>
+                                {row[col] !== null && row[col] !== undefined ? String(row[col]) : ""}
+                              </Td>
+                            ))}
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </TableContainer>
+                </Box>
+              )}
+
+              {/* NF Column Mapping */}
+              {nfQueryColumns.length > 0 && (
+                <>
+                  <Divider />
+                  <Box>
+                    <Text fontWeight="semibold" mb={3}>Mapeamento de Colunas NF</Text>
+                    <Text fontSize="sm" color="gray.500" mb={3}>
+                      Associe cada campo do sistema a uma coluna retornada pela query.
+                    </Text>
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                      {NF_SYSTEM_FIELDS.map(f => (
+                        <FormControl key={f.key}>
+                          <FormLabel fontSize="xs">
+                            {f.label}
+                            {f.required && <Text as="span" color="red.400" ml={1}>*</Text>}
+                            <Text as="span" color="gray.400" ml={1}>({f.description})</Text>
+                          </FormLabel>
+                          <Select
+                            size="sm"
+                            value={form.nfColumnMapping[f.key] || ""}
+                            onChange={(e) => updateNfMapping(f.key, e.target.value)}
+                            placeholder="-- Nenhum --"
+                          >
+                            {nfQueryColumns.map(col => (
+                              <option key={col} value={col}>{col}</option>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      ))}
+                    </SimpleGrid>
+                  </Box>
+                </>
+              )}
+
+              {/* NF Sync Status */}
+              <Box>
+                <Text fontSize="sm" fontWeight="medium" mb={1}>Status do ultimo sync NF</Text>
+                <HStack spacing={2}>
+                  {nfSyncStatus.lastSyncStatus && (
+                    <Badge colorScheme={nfSyncStatus.lastSyncStatus === "success" ? "green" : "red"}>
+                      {nfSyncStatus.lastSyncStatus === "success" ? "Sucesso" : "Erro"}
+                    </Badge>
+                  )}
+                  <Text fontSize="xs" color="gray.500">
+                    {formatSyncDate(nfSyncStatus.lastSyncAt)}
+                  </Text>
+                </HStack>
+                {nfSyncStatus.lastSyncMessage && (
+                  <Text fontSize="xs" color="gray.500" mt={1}>{nfSyncStatus.lastSyncMessage}</Text>
+                )}
+                {nfSyncStatus.lastSyncRows > 0 && (
+                  <Text fontSize="xs" color="gray.500">{nfSyncStatus.lastSyncRows} registros</Text>
+                )}
+                <Button
+                  mt={3}
+                  size="sm"
+                  colorScheme="teal"
+                  variant="outline"
+                  isLoading={syncingNf}
+                  loadingText="Sincronizando..."
+                  onClick={handleNfSync}
+                >
+                  Sincronizar NF Agora
+                </Button>
+              </Box>
+            </VStack>
+          )}
         </Box>
 
         <Divider />

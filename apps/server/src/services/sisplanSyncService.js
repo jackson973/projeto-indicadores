@@ -3,6 +3,7 @@ const Firebird = require('node-firebird');
 const { XdrReader, BlrReader } = require('node-firebird/lib/wire/serialize');
 const sisplanRepo = require('../db/sisplanRepository');
 const salesRepo = require('../db/salesRepository');
+const notasFiscaisRepo = require('../db/notasFiscaisRepository');
 
 // node-firebird exporta o objeto de constantes como Object.freeze(), então não é
 // possível alterar DEFAULT_ENCODING. A solução é sobrescrever os métodos de leitura
@@ -28,15 +29,75 @@ const SISPLAN_LOG = false; // set true to enable Sisplan sync logs
 const slog = (...args) => SISPLAN_LOG && console.log(...args);
 const serr = (...args) => SISPLAN_LOG && console.error(...args);
 
+function resolveBlobValue(blobFn, transaction) {
+  return new Promise((resolve, reject) => {
+    const cb = (err, _name, eventEmitter) => {
+      if (err) return reject(err);
+      const chunks = [];
+      eventEmitter.on('data', (chunk) => chunks.push(chunk));
+      eventEmitter.on('end', () => {
+        resolve(Buffer.concat(chunks).toString('latin1'));
+      });
+      eventEmitter.on('error', (e) => reject(e));
+    };
+    // Pass transaction to keep BLOB ID valid
+    if (transaction) {
+      blobFn(transaction, cb);
+    } else {
+      blobFn(cb);
+    }
+  });
+}
+
+async function resolveRowBlobs(row, transaction) {
+  const resolved = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (typeof value === 'function') {
+      try {
+        resolved[key] = await resolveBlobValue(value, transaction);
+      } catch (err) {
+        console.error(`[Firebird BLOB] Failed to read column "${key}":`, err.message);
+        resolved[key] = null;
+      }
+    } else {
+      resolved[key] = value;
+    }
+  }
+  return resolved;
+}
+
 function queryFirebird(options, sql) {
   return new Promise((resolve, reject) => {
     Firebird.attach(options, (err, db) => {
       if (err) return reject(err);
 
-      db.query(sql, (err, result) => {
-        db.detach();
-        if (err) return reject(err);
-        resolve(result || []);
+      // Use explicit transaction to keep BLOB references valid during read
+      db.transaction(Firebird.ISOLATION_READ_COMMITTED, (err, transaction) => {
+        if (err) {
+          db.detach();
+          return reject(err);
+        }
+
+        transaction.query(sql, async (err, result) => {
+          if (err) {
+            transaction.rollback(() => db.detach());
+            return reject(err);
+          }
+
+          try {
+            const rows = result || [];
+            const resolved = [];
+            for (const row of rows) {
+              resolved.push(await resolveRowBlobs(row, transaction));
+            }
+            transaction.commit(() => db.detach());
+            resolve(resolved);
+          } catch (blobErr) {
+            console.error('[Firebird BLOB] Error resolving blobs:', blobErr.message);
+            transaction.rollback(() => db.detach());
+            reject(blobErr);
+          }
+        });
       });
     });
   });
@@ -155,6 +216,87 @@ async function runSync() {
   }
 }
 
+function mapNfRow(row, columnMapping) {
+  const fieldKeys = Object.keys(row);
+
+  const getValue = (systemField) => {
+    const sourceColumn = columnMapping[systemField];
+    if (!sourceColumn) return null;
+    const key = fieldKeys.find(k => k.toUpperCase() === sourceColumn.toUpperCase());
+    if (key === undefined) return null;
+    const val = row[key];
+    return val !== null && val !== undefined ? val : null;
+  };
+
+  return {
+    numeroNf: parseInt(getValue('numero_nf')) || 0,
+    serie: parseInt(getValue('serie')) || 1,
+    ordemId: getValue('ordem_id') ? String(getValue('ordem_id')).trim() : null,
+    codcli: getValue('codcli') ? String(getValue('codcli')).trim() : null,
+    nomeCliente: getValue('nome_cliente') ? String(getValue('nome_cliente')).trim() : null,
+    nomeFantasia: getValue('nome_fantasia') ? String(getValue('nome_fantasia')).trim() : null,
+    valor: parseFloat(getValue('valor')) || null,
+    dataEmissao: getValue('data_emissao') || null,
+    chaveAcesso: getValue('chave_acesso') ? String(getValue('chave_acesso')).trim() : null,
+    cnpj: getValue('cnpj') ? String(getValue('cnpj')).trim() : null
+  };
+}
+
+async function runNfSync() {
+  slog('[Sisplan NF Sync] Starting NF sync...');
+
+  try {
+    const settings = await sisplanRepo.getSettings();
+    if (!settings || !settings.nfActive) {
+      slog('[Sisplan NF Sync] NF integration not active, skipping.');
+      return { success: false, message: 'Sincronizacao de NF nao ativa.' };
+    }
+
+    if (!settings.host || !settings.databasePath || !settings.fbUser || !settings.fbPassword || !settings.nfSqlQuery) {
+      slog('[Sisplan NF Sync] Incomplete NF configuration, skipping.');
+      await sisplanRepo.updateNfSyncStatus('error', 'Configuracao NF incompleta.', 0);
+      return { success: false, message: 'Configuracao NF incompleta.' };
+    }
+
+    const fbOptions = {
+      host: settings.host,
+      port: settings.port || 3050,
+      database: settings.databasePath,
+      user: settings.fbUser,
+      password: settings.fbPassword
+    };
+
+    slog('[Sisplan NF Sync] Connecting to Firebird...');
+    const rows = await queryFirebird(fbOptions, settings.nfSqlQuery);
+
+    console.log(`[Sisplan NF Sync] Query returned ${rows.length} rows`);
+
+    if (!rows.length) {
+      await sisplanRepo.updateNfSyncStatus('success', 'Nenhum registro encontrado.', 0);
+      return { success: true, message: 'Nenhum registro encontrado.', rows: 0 };
+    }
+
+    const columnMapping = settings.nfColumnMapping || {};
+    const mappedRows = rows.map(row => mapNfRow(row, columnMapping));
+
+    const validRows = mappedRows.filter(r => r.numeroNf > 0 && r.dataEmissao);
+    console.log(`[Sisplan NF Sync] ${validRows.length} valid rows after mapping`);
+
+    const { inserted, updated } = await notasFiscaisRepo.batchUpsertNotas(validRows);
+
+    const message = `Sincronizado: ${inserted} inseridos, ${updated} atualizados.`;
+    console.log(`[Sisplan NF Sync] ${message}`);
+    await sisplanRepo.updateNfSyncStatus('success', message, validRows.length);
+
+    return { success: true, message, rows: validRows.length, inserted, updated };
+  } catch (error) {
+    const message = error.message || 'Erro desconhecido';
+    serr('[Sisplan NF Sync] Error:', message);
+    await sisplanRepo.updateNfSyncStatus('error', message, 0);
+    return { success: false, message };
+  }
+}
+
 async function startSisplanSyncScheduler() {
   slog('[Sisplan Sync] Initializing scheduler...');
 
@@ -170,6 +312,7 @@ async function startSisplanSyncScheduler() {
 
     currentJob = cron.schedule(schedule, async () => {
       await runSync();
+      await runNfSync();
     }, {
       scheduled: true,
       timezone: 'America/Sao_Paulo'
@@ -209,6 +352,7 @@ module.exports = {
   stopSisplanSyncScheduler,
   restartSisplanSyncScheduler,
   runSync,
+  runNfSync,
   testFirebirdConnection,
   queryFirebird,
   getFirebirdOptions

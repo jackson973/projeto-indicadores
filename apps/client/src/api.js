@@ -396,6 +396,11 @@ export const triggerSisplanSync = async () => {
   return handleResponse(response);
 };
 
+export const triggerSisplanNfSync = async () => {
+  const response = await authFetch("/api/sisplan/nf-sync", { method: "POST" });
+  return handleResponse(response);
+};
+
 export const refreshSisplanData = async () => {
   const response = await authFetch("/api/sisplan/refresh", { method: "POST" });
   return handleResponse(response);
@@ -487,6 +492,32 @@ export const updateWhatsappPhoneLabel = async (id, label) => {
 
 export const deleteWhatsappPhone = async (id) => {
   const response = await authFetch(`/api/whatsapp/phones/${id}`, { method: "DELETE" });
+  return handleResponse(response);
+};
+
+// WhatsApp Conversation Logs API (Admin)
+export const fetchWhatsappConversations = async (params) => {
+  const response = await authFetch(`/api/whatsapp/conversations?${params}`);
+  return handleResponse(response);
+};
+
+export const fetchWhatsappConversationUsers = async () => {
+  const response = await authFetch("/api/whatsapp/conversations/users");
+  return handleResponse(response);
+};
+
+// Database Manager API (Admin Only)
+export const fetchDatabaseSchema = async () => {
+  const response = await authFetch("/api/database/schema");
+  return handleResponse(response);
+};
+
+export const executeDatabaseQuery = async (sql) => {
+  const response = await authFetch("/api/database/query", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sql })
+  });
   return handleResponse(response);
 };
 

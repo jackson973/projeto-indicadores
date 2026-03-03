@@ -3,6 +3,7 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 const sisplanRepo = require('../db/sisplanRepository');
 const {
   runSync,
+  runNfSync,
   restartSisplanSyncScheduler,
   testFirebirdConnection,
   queryFirebird,
@@ -54,7 +55,8 @@ router.put('/', async (req, res) => {
   try {
     const {
       active, host, port, databasePath, fbUser, fbPassword,
-      sqlQuery, columnMapping, syncIntervalMinutes
+      sqlQuery, columnMapping, syncIntervalMinutes,
+      nfActive, nfSqlQuery, nfColumnMapping, nfBasePath, nfLocalPath
     } = req.body;
 
     const result = await sisplanRepo.updateSettings({
@@ -66,7 +68,12 @@ router.put('/', async (req, res) => {
       fbPassword: fbPassword === '********' ? '' : (fbPassword || ''),
       sqlQuery: (sqlQuery || '').trim(),
       columnMapping: columnMapping || {},
-      syncIntervalMinutes: syncIntervalMinutes || 5
+      syncIntervalMinutes: syncIntervalMinutes || 5,
+      nfActive: nfActive || false,
+      nfSqlQuery: (nfSqlQuery || '').trim(),
+      nfColumnMapping: nfColumnMapping || {},
+      nfBasePath: (nfBasePath || '').trim(),
+      nfLocalPath: (nfLocalPath || '').trim()
     });
 
     // Reiniciar scheduler com novas configurações
@@ -165,6 +172,20 @@ router.post('/sync', async (req, res) => {
     return res.status(400).json(result);
   } catch (error) {
     console.error('Manual sync error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/sisplan/nf-sync - Sync manual de NF
+router.post('/nf-sync', async (req, res) => {
+  try {
+    const result = await runNfSync();
+    if (result.success) {
+      return res.json(result);
+    }
+    return res.status(400).json(result);
+  } catch (error) {
+    console.error('Manual NF sync error:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 });

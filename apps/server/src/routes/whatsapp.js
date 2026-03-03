@@ -251,4 +251,37 @@ router.delete('/phones/:id', async (req, res) => {
   }
 });
 
+// --- Conversation Logs ---
+const conversationsRepo = require('../db/whatsappConversationsRepository');
+
+// GET /api/whatsapp/conversations - Listar conversas com paginação e filtros
+router.get('/conversations', async (req, res) => {
+  try {
+    const { page, limit, userId, search, startDate, endDate } = req.query;
+    const result = await conversationsRepo.getConversations({
+      page: parseInt(page) || 1,
+      limit: Math.min(parseInt(limit) || 50, 100),
+      userId: userId || null,
+      search: search || null,
+      startDate: startDate || null,
+      endDate: endDate || null
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Get conversations error:', error);
+    res.status(500).json({ message: 'Erro ao buscar conversas.' });
+  }
+});
+
+// GET /api/whatsapp/conversations/users - Listar usuários que conversaram
+router.get('/conversations/users', async (req, res) => {
+  try {
+    const users = await conversationsRepo.getConversationUsers();
+    res.json(users);
+  } catch (error) {
+    console.error('Get conversation users error:', error);
+    res.status(500).json({ message: 'Erro ao buscar usuários.' });
+  }
+});
+
 module.exports = router;

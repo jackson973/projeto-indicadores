@@ -11,7 +11,8 @@ const emailRouter = require("./routes/email");
 const sisplanRouter = require("./routes/sisplan");
 const whatsappRouter = require("./routes/whatsapp");
 const upsellerRouter = require("./routes/upseller");
-const { authenticate } = require("./middleware/auth");
+const databaseRouter = require("./routes/database");
+const { authenticate, requireAdmin } = require("./middleware/auth");
 
 // Initialize database connection (will test connection on import)
 require('./db/connection');
@@ -71,6 +72,7 @@ async function start() {
   app.use("/api/sisplan", sisplanRouter);
   app.use("/api/whatsapp", whatsappRouter);
   app.use("/api/upseller", upsellerRouter);
+  app.use("/api/database", authenticate, requireAdmin, databaseRouter);
   app.use("/api", authenticate, apiRouter);
 
   app.get("/health", (_req, res) => {

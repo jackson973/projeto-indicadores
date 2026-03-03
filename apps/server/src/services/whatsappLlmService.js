@@ -1,5 +1,6 @@
 const db = require('../db/connection');
 const cashflowRepo = require('../db/cashflowRepository');
+const conversationsRepo = require('../db/whatsappConversationsRepository');
 const fs = require('fs');
 const path = require('path');
 
@@ -152,6 +153,17 @@ Tabela: cashflow_categories (categorias)
 Tabela: cashflow_boxes (caixas)
   id BIGINT, name VARCHAR, active BOOLEAN
 
+Tabela: notas_fiscais (notas fiscais eletronicas)
+  numero_nf INTEGER - numero da nota fiscal
+  serie INTEGER - serie da nota fiscal (default 1)
+  ordem_id VARCHAR - codigo do pedido (vinculo com sales.order_id)
+  codcli VARCHAR - codigo do cliente
+  nome_cliente VARCHAR - nome do cliente
+  valor NUMERIC - valor total da nota fiscal
+  data_emissao DATE - data de emissao da nota
+  chave_acesso VARCHAR - chave de acesso da NFe
+  cnpj TEXT - CNPJ do cliente
+
 REGRAS OBRIGATORIAS DE SQL:
 
 1. DATAS: O campo "date" e TIMESTAMP. SEMPRE use date::date para comparar datas.
@@ -172,7 +184,14 @@ REGRAS OBRIGATORIAS DE SQL:
    CORRETO: WHERE date::date = '2026-02-18' AND (status IS NULL OR status = '')
    ERRADO:  WHERE date::date = '2026-02-18' AND status IS NULL OR status = ''
 
-5. BUSCA TEXTUAL: Use ILIKE com %termo% para busca case-insensitive.
+5. BUSCA TEXTUAL: Use unaccent() com ILIKE para busca sem acentos e case-insensitive.
+   CORRETO: WHERE unaccent(client_name) ILIKE unaccent('%termo%')
+   ERRADO:  WHERE client_name ILIKE '%termo%' (NAO ignora acentos!)
+   SEMPRE aplique unaccent() nos DOIS lados: na coluna E no termo de busca.
+   NUMEROS vs PALAVRAS: Quando o termo de busca contiver numeros por extenso (um, dois, tres, quatro, cinco, seis, sete, oito, nove, dez),
+   adicione OR com o algarismo correspondente (1,2,3,4,5,6,7,8,9,10). E vice-versa.
+   Exemplo: busca por "tres rios" deve gerar:
+     WHERE (unaccent(campo) ILIKE unaccent('%tres rios%') OR campo ILIKE '%3 rios%')
 
 6. DATAS RELATIVAS: Para "ate agora", "ate hoje", "neste mes", use a data de hoje fornecida acima.
    NUNCA use 2026-02-29 — fevereiro de 2026 tem 28 dias (NAO e ano bissexto).
@@ -189,7 +208,7 @@ REGRAS OBRIGATORIAS DE SQL:
    Exemplos reais: "Kids 2 (Shopee)", "Kids Dois (Shein)", "Pula Pula Pipoquinha Moda Kids (Mercado Livre)".
    NUNCA use igualdade exata (store = 'nome'). O usuario nunca digita o nome completo.
    Quando o usuario mencionar uma loja, PRIMEIRO faca uma consulta para descobrir o nome exato:
-     SELECT DISTINCT store FROM sales WHERE store ILIKE '%termo%'
+     SELECT DISTINCT store FROM sales WHERE unaccent(store) ILIKE unaccent('%termo%')
    - Se retornar 1 loja: use o nome exato retornado na consulta seguinte.
    - Se retornar varias lojas: pergunte ao usuario qual loja ele quer e liste as opcoes.
    - Se retornar 0: informe que nao encontrou loja com esse nome.
@@ -201,12 +220,26 @@ SELECT order_id, client_name, product, total FROM sales WHERE date::date = '2026
 -- Top 10 produtos mais vendidos:
 SELECT product, SUM(quantity) as qtd, SUM(total) as receita FROM sales WHERE date::date BETWEEN '2026-01-01' AND '2026-01-31' AND (status IS NULL OR status = '' OR (LOWER(status) NOT LIKE '%cancelado%' AND LOWER(status) NOT LIKE '%devolver%' AND LOWER(status) NOT LIKE '%pos-venda%')) GROUP BY product ORDER BY receita DESC LIMIT 10
 
--- Buscar cliente por nome:
-SELECT DISTINCT client_name, nome_fantasia, cnpj_cpf FROM sales WHERE client_name ILIKE '%termo%' OR nome_fantasia ILIKE '%termo%'
+-- Buscar cliente por nome (com unaccent para ignorar acentos):
+SELECT DISTINCT client_name, codcli, nome_fantasia, cnpj_cpf FROM sales WHERE unaccent(client_name) ILIKE unaccent('%termo%') OR unaccent(nome_fantasia) ILIKE unaccent('%termo%')
+
+-- Buscar cliente com numero por extenso (ex: "tres rios" pode ser "3 rios"):
+SELECT DISTINCT client_name, codcli, nome_fantasia, cnpj_cpf FROM sales WHERE (unaccent(client_name) ILIKE unaccent('%tres rios%') OR client_name ILIKE '%3 rios%') OR (unaccent(nome_fantasia) ILIKE unaccent('%tres rios%') OR nome_fantasia ILIKE '%3 rios%')
+
+-- Buscar notas fiscais de um cliente:
+SELECT numero_nf, serie, nome_cliente, valor, data_emissao FROM notas_fiscais WHERE unaccent(nome_cliente) ILIKE unaccent('%termo%') ORDER BY data_emissao DESC
+
+-- Notas fiscais de um periodo:
+SELECT numero_nf, serie, nome_cliente, valor, data_emissao FROM notas_fiscais WHERE data_emissao BETWEEN '2026-02-01' AND '2026-02-28' ORDER BY data_emissao DESC
+
+-- Total faturado em notas por cliente:
+SELECT codcli, nome_cliente, COUNT(*) as qtd_notas, SUM(valor) as total FROM notas_fiscais WHERE data_emissao BETWEEN '2026-01-01' AND '2026-01-31' GROUP BY codcli, nome_cliente ORDER BY total DESC
+
+10. NOTAS FISCAIS (PDF): Quando o usuario pedir para ENVIAR, MANDAR ou VER o PDF/arquivo de uma nota fiscal, use SEMPRE a ferramenta find_nota_fiscal com o numero da NF. NAO diga que nao pode enviar arquivos - voce PODE enviar PDFs usando essa ferramenta. Ao listar notas fiscais, informe que pode enviar o PDF se o usuario quiser.
 `.trim();
 
 // --- SQL Validation ---
-const ALLOWED_TABLES = ['sales', 'cashflow_entries', 'cashflow_categories', 'cashflow_boxes', 'cashflow_balances'];
+const ALLOWED_TABLES = ['sales', 'cashflow_entries', 'cashflow_categories', 'cashflow_boxes', 'cashflow_balances', 'notas_fiscais'];
 const FORBIDDEN_PATTERNS = [
   /\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE|GRANT|REVOKE|EXECUTE|EXEC)\b/i,
   /\b(INTO)\s+\w/i,
@@ -306,11 +339,12 @@ const TOOL_DEFINITIONS = {
     requiredFeature: 'featureBoleto'
   },
   find_nota_fiscal: {
-    description: 'Buscar PDF de nota fiscal por numero ou nome.',
+    description: 'Buscar e enviar PDF de nota fiscal por numero. Use quando o usuario pedir para ENVIAR ou VER o arquivo PDF de uma nota. Para apenas LISTAR ou CONSULTAR notas, use query_database na tabela notas_fiscais.',
     parameters: {
-      search_term: { type: 'string', description: 'Termo de busca' }
+      numero_nf: { type: 'number', description: 'Numero da nota fiscal' },
+      serie: { type: 'number', description: 'Serie da nota fiscal (opcional)' }
     },
-    required: ['search_term'],
+    required: ['numero_nf'],
     requiredFeature: 'featureNf'
   }
 };
@@ -405,7 +439,109 @@ async function executeTool(toolName, args, settings) {
     }
 
     case 'find_nota_fiscal': {
-      return findPdfFile(settings.nfPath, args.search_term);
+      const notasFiscaisRepo = require('../db/notasFiscaisRepository');
+      const sisplanRepo = require('../db/sisplanRepository');
+
+      const numeroNf = args.numero_nf;
+      const serie = args.serie || null;
+
+      // Look up in database
+      const notas = await notasFiscaisRepo.findByNumero(numeroNf, serie);
+
+      if (notas.length === 0) {
+        // Fallback: try file search if nfPath is configured
+        if (settings.nfPath) {
+          return findPdfFile(settings.nfPath, String(numeroNf));
+        }
+        return { found: false, message: `Nota fiscal ${numeroNf} nao encontrada.` };
+      }
+
+      // Get base path from sisplan settings
+      // nfLocalPath = real filesystem path on the server (Linux/macOS mount point)
+      // nfBasePath = display path (can be UNC for reference)
+      const sisplanSettings = await sisplanRepo.getSettings();
+      const basePath = sisplanSettings?.nfLocalPath || sisplanSettings?.nfBasePath || settings.nfPath;
+
+      if (!basePath) {
+        return {
+          found: true,
+          message: 'Nota encontrada, mas caminho dos arquivos nao configurado.',
+          notas: notas.map(nf => ({
+            numero: nf.numero_nf, serie: nf.serie, cliente: nf.nome_cliente,
+            cnpj: nf.cnpj, valor: nf.valor, data_emissao: nf.data_emissao
+          }))
+        };
+      }
+
+      // On Linux/macOS, UNC paths (\\server\share) don't work with fs.
+      // Convert to forward-slash POSIX path if it looks like a UNC path on a non-Windows OS.
+      let fsBasePath = basePath;
+      if (process.platform !== 'win32' && basePath.startsWith('\\\\')) {
+        // \\192.168.7.2\Sisplan\NFe\... -> /mnt/sisplan/NFe/... is ideal,
+        // but we can't guess the mount point. Try converting to //server/share/path format
+        // which some CIFS-mounted systems resolve, or warn in logs.
+        const posixPath = basePath.replace(/\\/g, '/');
+        console.log(`${LOG_PREFIX} find_nota_fiscal: WARNING - UNC path detected on ${process.platform}. UNC paths don't work on Linux/macOS. Configure "nfLocalPath" in Sisplan settings with the local mount point path (e.g. /mnt/sisplan/NFe/...). Trying POSIX conversion: "${posixPath}"`);
+        fsBasePath = posixPath;
+      }
+
+      // Build file paths and check existence (try multiple naming patterns)
+      console.log(`${LOG_PREFIX} find_nota_fiscal: basePath="${basePath}", fsBasePath="${fsBasePath}", notas found: ${notas.length}`);
+      const results = [];
+      for (const nf of notas) {
+        const num = String(nf.numero_nf);
+        const serie = String(nf.serie || 1);
+        // Try multiple filename patterns used by Sisplan
+        const candidates = [
+          `nfe${num.padStart(6, '0')}${serie}.pdf`,       // nfe0137522.pdf (pad6 + serie)
+          `Nfe${num.padStart(6, '0')}${serie}.pdf`,       // Nfe0137522.pdf
+          `nfe${num.padStart(7, '0')}.pdf`,                // nfe0013752.pdf (pad7, no serie)
+          `Nfe${num.padStart(7, '0')}.pdf`,                // Nfe0013752.pdf
+          `nfe${num}.pdf`,                                  // nfe13752.pdf (no padding)
+          `Nfe${num}.pdf`,                                  // Nfe13752.pdf
+        ];
+
+        console.log(`${LOG_PREFIX} find_nota_fiscal: NF ${num} serie ${serie}, trying candidates:`, candidates.join(', '));
+
+        let foundFile = null;
+        for (const candidate of candidates) {
+          const filePath = path.join(fsBasePath, candidate);
+          try {
+            const exists = fs.existsSync(filePath);
+            console.log(`${LOG_PREFIX} find_nota_fiscal: checking "${filePath}" -> ${exists}`);
+            if (exists) {
+              foundFile = { fileName: candidate, filePath };
+              break;
+            }
+          } catch (err) {
+            console.log(`${LOG_PREFIX} find_nota_fiscal: error checking "${filePath}":`, err.message);
+          }
+        }
+
+        results.push({
+          numero: nf.numero_nf, serie: nf.serie, cliente: nf.nome_cliente,
+          cnpj: nf.cnpj, valor: nf.valor, data_emissao: nf.data_emissao,
+          fileName: foundFile?.fileName || candidates[0],
+          filePath: foundFile?.filePath || path.join(fsBasePath, candidates[0]),
+          fileExists: !!foundFile
+        });
+      }
+
+      const existingFiles = results.filter(r => r.fileExists);
+
+      if (existingFiles.length === 0) {
+        return {
+          found: true,
+          message: `Nota fiscal ${numeroNf} encontrada no banco, mas o arquivo PDF nao foi localizado no servidor.`,
+          notas: results.map(({ fileName, filePath, ...rest }) => rest)
+        };
+      }
+
+      return {
+        found: true,
+        files: existingFiles.map(f => ({ fileName: f.fileName, filePath: f.filePath })),
+        notas: existingFiles.map(({ filePath, fileName, ...rest }) => rest)
+      };
     }
 
     default:
@@ -560,7 +696,7 @@ function parseFailedToolCall(failedGeneration) {
     (text) => {
       const nameMatch = text.match(/query_database|get_cashflow_summary|find_boleto|find_nota_fiscal/);
       if (!nameMatch) return null;
-      const jsonMatch = text.match(/\{[\s\S]*"sql"[\s\S]*\}/);
+      const jsonMatch = text.match(/\{[\s\S]*"(?:sql|numero_nf|search_term)"[\s\S]*\}/);
       if (!jsonMatch) return null;
       return { name: nameMatch[0], arguments: JSON.parse(jsonMatch[0]) };
     }
@@ -621,6 +757,7 @@ async function callLlm(settings, messages, tools) {
             recoveredToolCall: parsed,
             data: { choices: [{ message: { content: null, tool_calls: [{
               id: `recovered_${Date.now()}`,
+              type: 'function',
               function: { name: parsed.name, arguments: JSON.stringify(parsed.arguments) }
             }] } }] }
           };
@@ -795,6 +932,7 @@ function appendToolResults(provider, messages, toolCalls, results) {
 
 // --- Main Message Processing ---
 async function processMessage(messageText, user, settings) {
+  const startTime = Date.now();
   const enabledTools = getEnabledTools(settings);
   console.log(`${LOG_PREFIX} Processing message from ${user.name}. Provider: ${settings.llmProvider}, Model: ${settings.llmModel}, Tools: ${enabledTools.length} (${enabledTools.map(t => t.name).join(', ')})`);
 
@@ -875,6 +1013,11 @@ Regras OBRIGATORIAS:
         const finalText = text || 'Desculpe, nao consegui gerar uma resposta.';
         saveHistory(user.id, messageText, finalText);
         logConversation({ user: user.name, question: messageText, toolCalls: loggedTools, response: finalText });
+        conversationsRepo.saveConversation({
+          userId: user.id, userName: user.name, userPhone: user.whatsapp,
+          question: messageText, response: finalText, toolCalls: loggedTools,
+          durationMs: Date.now() - startTime
+        }).catch(e => console.error(`${LOG_PREFIX} Failed to save conversation:`, e.message));
         return { text: finalText, files: filesToSend };
       }
 
@@ -909,10 +1052,20 @@ Regras OBRIGATORIAS:
     const fallback = 'Desculpe, nao consegui processar sua solicitacao. Tente reformular.';
     saveHistory(user.id, messageText, fallback);
     logConversation({ user: user.name, question: messageText, toolCalls: loggedTools, response: fallback });
+    conversationsRepo.saveConversation({
+      userId: user.id, userName: user.name, userPhone: user.whatsapp,
+      question: messageText, response: fallback, toolCalls: loggedTools,
+      durationMs: Date.now() - startTime
+    }).catch(e => console.error(`${LOG_PREFIX} Failed to save conversation:`, e.message));
     return { text: fallback, files: filesToSend };
   } catch (err) {
     console.error(`${LOG_PREFIX} Error processing message:`, err);
     logConversation({ user: user.name, question: messageText, toolCalls: loggedTools, error: err.message });
+    conversationsRepo.saveConversation({
+      userId: user.id, userName: user.name, userPhone: user.whatsapp,
+      question: messageText, error: err.message, toolCalls: loggedTools,
+      durationMs: Date.now() - startTime
+    }).catch(e => console.error(`${LOG_PREFIX} Failed to save conversation:`, e.message));
     return { text: `Erro ao processar: ${err.message}`, files: [] };
   }
 }
