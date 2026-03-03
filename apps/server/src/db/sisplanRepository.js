@@ -7,16 +7,16 @@ async function getSettings() {
             fb_user AS "fbUser", fb_password_encrypted AS "fbPasswordEncrypted",
             sql_query AS "sqlQuery", column_mapping AS "columnMapping",
             sync_interval_minutes AS "syncIntervalMinutes",
-            last_sync_at AT TIME ZONE 'UTC' AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
+            last_sync_at AT TIME ZONE 'America/Sao_Paulo' AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
             last_sync_message AS "lastSyncMessage", last_sync_rows AS "lastSyncRows",
             nf_active AS "nfActive", nf_sql_query AS "nfSqlQuery",
             nf_column_mapping AS "nfColumnMapping", nf_base_path AS "nfBasePath",
             nf_local_path AS "nfLocalPath",
-            nf_last_sync_at AT TIME ZONE 'UTC' AS "nfLastSyncAt",
+            nf_last_sync_at AT TIME ZONE 'America/Sao_Paulo' AS "nfLastSyncAt",
             nf_last_sync_status AS "nfLastSyncStatus",
             nf_last_sync_message AS "nfLastSyncMessage",
             nf_last_sync_rows AS "nfLastSyncRows",
-            created_at AT TIME ZONE 'UTC' AS "createdAt", updated_at AT TIME ZONE 'UTC' AS "updatedAt"
+            created_at AT TIME ZONE 'America/Sao_Paulo' AS "createdAt", updated_at AT TIME ZONE 'America/Sao_Paulo' AS "updatedAt"
      FROM sisplan_settings WHERE id = 1`
   );
 
@@ -73,12 +73,12 @@ async function updateSettings({
                fb_user AS "fbUser", sql_query AS "sqlQuery",
                column_mapping AS "columnMapping",
                sync_interval_minutes AS "syncIntervalMinutes",
-               last_sync_at AT TIME ZONE 'UTC' AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
+               last_sync_at AT TIME ZONE 'America/Sao_Paulo' AS "lastSyncAt", last_sync_status AS "lastSyncStatus",
                last_sync_message AS "lastSyncMessage", last_sync_rows AS "lastSyncRows",
                nf_active AS "nfActive", nf_sql_query AS "nfSqlQuery",
                nf_column_mapping AS "nfColumnMapping", nf_base_path AS "nfBasePath",
                nf_local_path AS "nfLocalPath",
-               nf_last_sync_at AT TIME ZONE 'UTC' AS "nfLastSyncAt",
+               nf_last_sync_at AT TIME ZONE 'America/Sao_Paulo' AS "nfLastSyncAt",
                nf_last_sync_status AS "nfLastSyncStatus",
                nf_last_sync_message AS "nfLastSyncMessage",
                nf_last_sync_rows AS "nfLastSyncRows"`,

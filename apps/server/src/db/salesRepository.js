@@ -270,7 +270,7 @@ async function getStates() {
  */
 async function getLastUpdate() {
   const result = await db.query(
-    "SELECT MAX(updated_at) AT TIME ZONE 'UTC' as last_update FROM sales"
+    "SELECT MAX(updated_at) AT TIME ZONE 'America/Sao_Paulo' as last_update FROM sales"
   );
   return result.rows[0]?.last_update || null;
 }

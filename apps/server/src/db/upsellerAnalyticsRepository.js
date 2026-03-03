@@ -55,8 +55,8 @@ async function getDailyAnalytics(referenceDate) {
             yesterday_period_order_num AS "yesterdayPeriodOrderNum",
             yesterday_period_sale_amount AS "yesterdayPeriodSaleAmount",
             currency,
-            fetched_at AT TIME ZONE 'UTC' AS "fetchedAt",
-            created_at AT TIME ZONE 'UTC' AS "createdAt"
+            fetched_at AT TIME ZONE 'America/Sao_Paulo' AS "fetchedAt",
+            created_at AT TIME ZONE 'America/Sao_Paulo' AS "createdAt"
      FROM upseller_daily_analytics
      WHERE reference_date = $1`,
     [referenceDate]
