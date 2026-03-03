@@ -1,5 +1,6 @@
 const db = require('../db/connection');
 const cashflowRepo = require('../db/cashflowRepository');
+const analyticsRepo = require('../db/upsellerAnalyticsRepository');
 const conversationsRepo = require('../db/whatsappConversationsRepository');
 const fs = require('fs');
 const path = require('path');
@@ -159,6 +160,7 @@ Tabela: notas_fiscais (notas fiscais eletronicas)
   ordem_id VARCHAR - codigo do pedido (vinculo com sales.order_id)
   codcli VARCHAR - codigo do cliente
   nome_cliente VARCHAR - nome do cliente
+  nome_fantasia VARCHAR - nome fantasia do cliente
   valor NUMERIC - valor total da nota fiscal
   data_emissao DATE - data de emissao da nota
   chave_acesso VARCHAR - chave de acesso da NFe
@@ -227,15 +229,15 @@ SELECT DISTINCT client_name, codcli, nome_fantasia, cnpj_cpf FROM sales WHERE un
 SELECT DISTINCT client_name, codcli, nome_fantasia, cnpj_cpf FROM sales WHERE (unaccent(client_name) ILIKE unaccent('%tres rios%') OR client_name ILIKE '%3 rios%') OR (unaccent(nome_fantasia) ILIKE unaccent('%tres rios%') OR nome_fantasia ILIKE '%3 rios%')
 
 -- Buscar notas fiscais de um cliente:
-SELECT numero_nf, serie, nome_cliente, valor, data_emissao FROM notas_fiscais WHERE unaccent(nome_cliente) ILIKE unaccent('%termo%') ORDER BY data_emissao DESC
+SELECT numero_nf, serie, nome_cliente, nome_fantasia, valor, data_emissao FROM notas_fiscais WHERE unaccent(nome_cliente) ILIKE unaccent('%termo%') OR unaccent(nome_fantasia) ILIKE unaccent('%termo%') ORDER BY data_emissao DESC
 
 -- Notas fiscais de um periodo:
-SELECT numero_nf, serie, nome_cliente, valor, data_emissao FROM notas_fiscais WHERE data_emissao BETWEEN '2026-02-01' AND '2026-02-28' ORDER BY data_emissao DESC
+SELECT numero_nf, serie, nome_cliente, nome_fantasia, valor, data_emissao FROM notas_fiscais WHERE data_emissao BETWEEN '2026-02-01' AND '2026-02-28' ORDER BY data_emissao DESC
 
 -- Total faturado em notas por cliente:
-SELECT codcli, nome_cliente, COUNT(*) as qtd_notas, SUM(valor) as total FROM notas_fiscais WHERE data_emissao BETWEEN '2026-01-01' AND '2026-01-31' GROUP BY codcli, nome_cliente ORDER BY total DESC
+SELECT codcli, nome_cliente, nome_fantasia, COUNT(*) as qtd_notas, SUM(valor) as total FROM notas_fiscais WHERE data_emissao BETWEEN '2026-01-01' AND '2026-01-31' GROUP BY codcli, nome_cliente, nome_fantasia ORDER BY total DESC
 
-10. NOTAS FISCAIS (PDF): Quando o usuario pedir para ENVIAR, MANDAR ou VER o PDF/arquivo de uma nota fiscal, use SEMPRE a ferramenta find_nota_fiscal com o numero da NF. NAO diga que nao pode enviar arquivos - voce PODE enviar PDFs usando essa ferramenta. Ao listar notas fiscais, informe que pode enviar o PDF se o usuario quiser.
+10. NOTAS FISCAIS (PDF): Quando o usuario pedir para ENVIAR, MANDAR ou VER o PDF/arquivo de uma nota fiscal, use SEMPRE a ferramenta find_nota_fiscal com o numero da NF. Voce PODE enviar PDFs usando essa ferramenta. IMPORTANTE: verifique o resultado da ferramenta - se o campo "files" estiver presente, o PDF sera enviado automaticamente e voce pode confirmar. Se o resultado tiver "message" dizendo que o PDF nao foi localizado, informe o usuario que a nota existe no sistema mas o arquivo PDF nao foi encontrado no servidor. NAO diga "enviada com sucesso" se o resultado nao contiver "files". Ao listar notas fiscais, informe que pode enviar o PDF se o usuario quiser.
 `.trim();
 
 // --- SQL Validation ---
@@ -346,6 +348,12 @@ const TOOL_DEFINITIONS = {
     },
     required: ['numero_nf'],
     requiredFeature: 'featureNf'
+  },
+  get_today_analytics: {
+    description: 'Obter dados de vendas de HOJE em tempo real (mesma fonte do dashboard). Retorna: total de pedidos, receita total, ranking de lojas e ranking de produtos. Use SEMPRE esta ferramenta para perguntas sobre vendas de HOJE (ex: "quanto vendeu hoje", "ranking de lojas hoje", "vendas por loja hoje"). Para vendas de outros dias/periodos, use query_database.',
+    parameters: {},
+    required: [],
+    requiredFeature: 'featureSales'
   }
 };
 
@@ -468,7 +476,7 @@ async function executeTool(toolName, args, settings) {
           message: 'Nota encontrada, mas caminho dos arquivos nao configurado.',
           notas: notas.map(nf => ({
             numero: nf.numero_nf, serie: nf.serie, cliente: nf.nome_cliente,
-            cnpj: nf.cnpj, valor: nf.valor, data_emissao: nf.data_emissao
+            nome_fantasia: nf.nome_fantasia, cnpj: nf.cnpj, valor: nf.valor, data_emissao: nf.data_emissao
           }))
         };
       }
@@ -520,7 +528,7 @@ async function executeTool(toolName, args, settings) {
 
         results.push({
           numero: nf.numero_nf, serie: nf.serie, cliente: nf.nome_cliente,
-          cnpj: nf.cnpj, valor: nf.valor, data_emissao: nf.data_emissao,
+          nome_fantasia: nf.nome_fantasia, cnpj: nf.cnpj, valor: nf.valor, data_emissao: nf.data_emissao,
           fileName: foundFile?.fileName || candidates[0],
           filePath: foundFile?.filePath || path.join(fsBasePath, candidates[0]),
           fileExists: !!foundFile
@@ -530,18 +538,63 @@ async function executeTool(toolName, args, settings) {
       const existingFiles = results.filter(r => r.fileExists);
 
       if (existingFiles.length === 0) {
+        console.log(`${LOG_PREFIX} find_nota_fiscal: NF ${numeroNf} found in DB but no PDF file on disk. Tried paths for ${results.length} nota(s).`);
         return {
           found: true,
-          message: `Nota fiscal ${numeroNf} encontrada no banco, mas o arquivo PDF nao foi localizado no servidor.`,
+          pdfDisponivel: false,
+          message: `Nota fiscal ${numeroNf} encontrada no banco de dados, porem o arquivo PDF NAO foi localizado no servidor de arquivos. Informe o usuario que a nota existe mas o PDF nao esta disponivel.`,
           notas: results.map(({ fileName, filePath, ...rest }) => rest)
         };
       }
 
+      console.log(`${LOG_PREFIX} find_nota_fiscal: NF ${numeroNf} - ${existingFiles.length} PDF(s) found, will be sent.`);
       return {
         found: true,
+        pdfDisponivel: true,
         files: existingFiles.map(f => ({ fileName: f.fileName, filePath: f.filePath })),
+        message: `Nota fiscal ${numeroNf} encontrada e o PDF sera enviado automaticamente.`,
         notas: existingFiles.map(({ filePath, fileName, ...rest }) => rest)
       };
+    }
+
+    case 'get_today_analytics': {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      const data = await analyticsRepo.getDailyAnalytics(today);
+
+      if (!data) {
+        return { resultado: 'Dados de vendas de hoje ainda nao disponiveis. O painel de analytics pode nao ter sido atualizado ainda.' };
+      }
+
+      const result = {
+        data: today,
+        pedidos: data.todayOrderNum || 0,
+        receita: parseFloat(data.todaySaleAmount) || 0,
+        atualizadoEm: data.fetchedAt ? new Date(data.fetchedAt).toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : null
+      };
+
+      // Store ranking
+      if (data.shopTops && Array.isArray(data.shopTops)) {
+        result.rankingLojas = data.shopTops.map((s, i) => ({
+          posicao: i + 1,
+          loja: s.shopName || s.shop_name,
+          plataforma: s.platform || '',
+          pedidos: s.validOrders || s.valid_orders || 0,
+          receita: parseFloat(s.validSales || s.valid_sales || 0)
+        }));
+      }
+
+      // Product ranking
+      if (data.productTops && Array.isArray(data.productTops)) {
+        result.rankingProdutos = data.productTops.slice(0, 10).map((p, i) => ({
+          posicao: i + 1,
+          produto: p.productName || p.product_name || p.name,
+          loja: p.shopName || p.shop_name || '',
+          unidades: p.validOrders || p.valid_orders || 0,
+          receita: parseFloat(p.validSales || p.valid_sales || 0)
+        }));
+      }
+
+      return result;
     }
 
     default:
@@ -906,6 +959,76 @@ function extractSqlFromText(text) {
   return null;
 }
 
+// Post-process LLM text for WhatsApp compatibility
+function formatForWhatsApp(text) {
+  if (!text) return text;
+
+  // 1. Convert Markdown tables to compact list format
+  const lines = text.split('\n');
+  const result = [];
+  let inTable = false;
+  let headers = [];
+  const dataRows = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^\|.*\|$/.test(trimmed)) {
+      // Skip separator rows (|---|---|)
+      if (/^\|[\s\-:|]+\|$/.test(trimmed)) {
+        if (!inTable) inTable = true;
+        continue;
+      }
+      const cells = trimmed.split('|').filter(c => c.trim() !== '').map(c => c.trim());
+      if (!inTable) {
+        inTable = true;
+        headers = cells;
+      } else {
+        dataRows.push(cells);
+      }
+    } else {
+      if (inTable && dataRows.length > 0) {
+        flushTable(result, headers, dataRows);
+        headers = [];
+        dataRows.length = 0;
+        inTable = false;
+      } else if (inTable) {
+        // Had headers but no data rows yet - they were actually data
+        if (headers.length > 0) {
+          dataRows.push(headers);
+          headers = [];
+        }
+        inTable = false;
+      }
+      result.push(line);
+    }
+  }
+
+  if (inTable && dataRows.length > 0) {
+    flushTable(result, headers, dataRows);
+  }
+
+  let output = result.join('\n');
+
+  // 2. Convert **bold** to *bold* (WhatsApp format)
+  output = output.replace(/\*\*(.+?)\*\*/g, '*$1*');
+
+  return output;
+}
+
+function flushTable(result, headers, dataRows) {
+  for (const row of dataRows) {
+    // Join header:value pairs with " | "
+    const parts = row.map((cell, i) => {
+      if (headers[i]) {
+        // Bold the first column value as identifier
+        return i === 0 ? `*${headers[i]} ${cell}*` : `${headers[i]}: ${cell}`;
+      }
+      return cell;
+    });
+    result.push(parts.join(' | '));
+  }
+}
+
 function appendToolResults(provider, messages, toolCalls, results) {
   if (provider === 'groq' || provider === 'ollama') {
     for (let i = 0; i < toolCalls.length; i++) {
@@ -947,7 +1070,9 @@ Usuario: ${user.name} (${user.role})
 ${DB_SCHEMA}
 
 Regras OBRIGATORIAS:
-- SEMPRE use a ferramenta query_database para responder QUALQUER pergunta sobre dados, vendas, clientes, produtos, financeiro. NUNCA invente dados. NUNCA responda sobre dados de memoria ou contexto anterior sem consultar o banco. Mesmo que voce ache que sabe a resposta, SEMPRE consulte o banco.
+- VENDAS DE HOJE: Para perguntas sobre vendas de HOJE (ex: "quanto vendeu hoje", "vendas por loja", "ranking hoje", "pedidos de hoje"), use SEMPRE a ferramenta get_today_analytics. Ela retorna dados em tempo real (mesma fonte do dashboard). NAO use query_database para vendas de hoje — a tabela sales pode estar desatualizada.
+- Para vendas de OUTROS dias/periodos (ontem, semana, mes), use query_database normalmente.
+- SEMPRE use a ferramenta query_database para responder QUALQUER pergunta sobre dados historicos, vendas passadas, clientes, produtos, financeiro. NUNCA invente dados. NUNCA responda sobre dados de memoria ou contexto anterior sem consultar o banco. Mesmo que voce ache que sabe a resposta, SEMPRE consulte o banco.
 - NUNCA escreva SQL na resposta ao usuario. NUNCA mostre codigo SQL. SEMPRE use a ferramenta query_database para executar consultas.
 - NUNCA diga "vou consultar" ou "aguarde". Execute a ferramenta diretamente e responda com os dados.
 - Se um campo esta vazio ou NULL no resultado, diga "nao informado" ou "nao disponivel".
@@ -957,6 +1082,19 @@ Regras OBRIGATORIAS:
 - Formate valores monetarios com R$ e duas casas decimais.
 - Para listar pedidos, mostre: numero, data, loja, cliente, valor e produtos.
 - Para resumos, mostre: periodo, total de pedidos, receita e ticket medio.
+- FORMATACAO WHATSAPP: Voce esta respondendo via WhatsApp em tela de celular (estreita). Regras:
+  - Negrito: *texto* (asterisco simples). NUNCA use **texto** (asterisco duplo).
+  - Italico: _texto_ (underline).
+  - NUNCA use tabelas Markdown (| col | col |) e NUNCA use blocos monoespaco (\`\`\`) para dados — eles quebram a linha no celular.
+  - Para listar dados (notas, pedidos, produtos), use formato de lista compacta com emojis/bullet. Exemplo:
+    📄 *NF 1364* | Serie 2 | 24/02/2026 | R$ 1.023,75
+    📄 *NF 1260* | Serie 2 | 05/11/2025 | R$ 1.110,00
+  - Para resumos, use linhas simples:
+    *Pedidos:* 110
+    *Receita:* R$ 7.372,24
+    *Ticket Medio:* R$ 67,02
+  - Mantenha as respostas curtas e verticais (uma info por linha). Evite linhas longas.
+- PERSONALIZACAO: O nome do usuario e ${user.name}. Use o primeiro nome dele de forma natural e amigavel quando fizer sentido (saudacoes, confirmacoes, despedidas). Nao force o uso em toda frase — seja natural.
 - REFERENCIAS CONTEXTUAIS: Quando o usuario usar "esses", "estes", "aqueles", "eles", "deles", "os mesmos" referindo-se a dados de uma consulta anterior, use o CONTEXTO DA CONSULTA ANTERIOR (fornecido abaixo) para filtrar com precisao. Exemplo: se a consulta anterior listou 10 clientes com cnpj_cpf, e o usuario perguntar "quanto esses compraram", use WHERE cnpj_cpf IN ('valor1', 'valor2', ...) para filtrar apenas esses registros.`
   };
 
@@ -1018,7 +1156,7 @@ Regras OBRIGATORIAS:
           question: messageText, response: finalText, toolCalls: loggedTools,
           durationMs: Date.now() - startTime
         }).catch(e => console.error(`${LOG_PREFIX} Failed to save conversation:`, e.message));
-        return { text: finalText, files: filesToSend };
+        return { text: formatForWhatsApp(finalText), files: filesToSend };
       }
 
       const results = [];
@@ -1035,7 +1173,7 @@ Regras OBRIGATORIAS:
         const logEntry = { name: tc.name, args: tc.arguments };
         if (tc.name === 'query_database') {
           logEntry.sql = tc.arguments.sql;
-          logEntry.rowCount = result.linhas ?? result.erro ? 0 : undefined;
+          logEntry.rowCount = result.linhas ?? (result.erro ? 0 : undefined);
           if (result.erro) logEntry.error = result.erro;
         }
         loggedTools.push(logEntry);
@@ -1057,7 +1195,7 @@ Regras OBRIGATORIAS:
       question: messageText, response: fallback, toolCalls: loggedTools,
       durationMs: Date.now() - startTime
     }).catch(e => console.error(`${LOG_PREFIX} Failed to save conversation:`, e.message));
-    return { text: fallback, files: filesToSend };
+    return { text: formatForWhatsApp(fallback), files: filesToSend };
   } catch (err) {
     console.error(`${LOG_PREFIX} Error processing message:`, err);
     logConversation({ user: user.name, question: messageText, toolCalls: loggedTools, error: err.message });
@@ -1066,7 +1204,7 @@ Regras OBRIGATORIAS:
       question: messageText, error: err.message, toolCalls: loggedTools,
       durationMs: Date.now() - startTime
     }).catch(e => console.error(`${LOG_PREFIX} Failed to save conversation:`, e.message));
-    return { text: `Erro ao processar: ${err.message}`, files: [] };
+    return { text: formatForWhatsApp(`Erro ao processar: ${err.message}`), files: [] };
   }
 }
 
