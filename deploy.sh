@@ -61,17 +61,57 @@ else
     print_step "Dependências do Chrome já instaladas."
 fi
 
-# 6. Backup do banco antes de reiniciar
+# 6. Montar share de rede Sisplan (Notas Fiscais)
+SISPLAN_SHARE="//192.168.7.2/Sisplan"
+SISPLAN_MOUNT="/mnt/sisplan"
+SMB_CREDENTIALS="/etc/smbcredentials"
+
+if mountpoint -q "$SISPLAN_MOUNT" 2>/dev/null; then
+    print_step "Share Sisplan já montado em $SISPLAN_MOUNT"
+else
+    print_step "Montando share Sisplan ($SISPLAN_SHARE -> $SISPLAN_MOUNT)..."
+
+    # Verificar se cifs-utils está instalado
+    if ! dpkg -s cifs-utils >/dev/null 2>&1; then
+        print_step "Instalando cifs-utils..."
+        sudo apt-get install -y cifs-utils
+    fi
+
+    # Verificar se o arquivo de credenciais existe
+    if [ ! -f "$SMB_CREDENTIALS" ]; then
+        print_error "Arquivo de credenciais não encontrado: $SMB_CREDENTIALS"
+        print_warning "Crie o arquivo com:"
+        echo "  sudo bash -c 'cat > $SMB_CREDENTIALS << EOF"
+        echo "  username=SEU_USUARIO"
+        echo "  password=SUA_SENHA"
+        echo "  EOF'"
+        echo "  sudo chmod 600 $SMB_CREDENTIALS"
+        print_warning "Continuando deploy sem montar o share..."
+    else
+        # Criar ponto de montagem se não existir
+        sudo mkdir -p "$SISPLAN_MOUNT"
+
+        # Montar o share CIFS
+        if sudo mount -t cifs "$SISPLAN_SHARE" "$SISPLAN_MOUNT" \
+            -o credentials="$SMB_CREDENTIALS",iocharset=utf8,file_mode=0644,dir_mode=0755,vers=3.0; then
+            print_step "Share montado com sucesso!"
+        else
+            print_warning "Falha ao montar share (continuando deploy...)"
+        fi
+    fi
+fi
+
+# 7. Backup do banco antes de reiniciar
 print_step "Fazendo backup do banco de dados..."
 bash scripts/backup-db.sh || print_warning "Backup falhou (continuando deploy...)"
 
-# 7. Migrations rodam automaticamente ao iniciar o servidor
+# 8. Migrations rodam automaticamente ao iniciar o servidor
 
-# 8. Restart PM2
+# 9. Restart PM2
 print_step "Reiniciando servidor API..."
 pm2 restart api
 
-# 9. Verificar status
+# 10. Verificar status
 print_step "Verificando status..."
 pm2 status
 
