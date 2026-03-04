@@ -19,11 +19,13 @@ import {
   Th,
   Thead,
   Tr,
+  Image,
   Text,
   useColorModeValue
 } from "@chakra-ui/react";
 import { fetchCanceledDetails, fetchCanceledSummary } from "../api";
 import { formatCurrency, formatNumber } from "../utils/format";
+import { getPlatformMeta } from "../utils/platforms";
 
 const downloadCsv = (rows, filename) => {
   if (!rows.length) return;
@@ -164,11 +166,12 @@ const CanceledReportDrawer = ({ isOpen, onClose, filters }) => {
               </SimpleGrid>
               <Box flex="1" minH={0}>
                 <TableContainer borderRadius="lg" overflowX="auto" border="1px solid" borderColor="gray.200">
-                  <Table size="sm" minW="960px">
+                  <Table size="sm" minW="1140px">
                     <Thead bg={headerBg} position="sticky" top={0} zIndex={1}>
                       <Tr>
                         <Th minW="140px">Nº do pedido</Th>
                         <Th minW="140px">Data/Hora</Th>
+                        <Th minW="180px">Loja</Th>
                         <Th minW="240px">Produto</Th>
                         <Th isNumeric>Quantidade</Th>
                         <Th isNumeric>Valor</Th>
@@ -186,6 +189,20 @@ const CanceledReportDrawer = ({ isOpen, onClose, filters }) => {
                             </Badge>
                           </Td>
                           <Td>{formatDateTime(row.date)}</Td>
+                          <Td>
+                            <Flex align="center" gap={2}>
+                              {getPlatformMeta(row.platform).logo && (
+                                <Image
+                                  src={getPlatformMeta(row.platform).logo}
+                                  alt={getPlatformMeta(row.platform).label}
+                                  boxSize="18px"
+                                  objectFit="contain"
+                                  flexShrink={0}
+                                />
+                              )}
+                              <Text fontSize="sm">{row.store}</Text>
+                            </Flex>
+                          </Td>
                           <Td>{row.product}</Td>
                           <Td isNumeric>{formatNumber(row.quantity)}</Td>
                           <Td isNumeric>{formatCurrency(row.total)}</Td>

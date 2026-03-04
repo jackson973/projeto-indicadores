@@ -204,6 +204,8 @@ const getCanceledDetails = (sales, { start, end, store, state }) => {
     .map((sale) => ({
       orderId: sale.orderId || "Não informado",
       date: sale.date,
+      store: sale.store || "Não informado",
+      platform: sale.platform || "Não informado",
       product: sale.product || "Não informado",
       quantity: sale.quantity,
       total: getUnitPrice(sale) * sale.quantity,
