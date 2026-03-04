@@ -1,6 +1,8 @@
 import { useEffect, useState, useMemo } from "react";
 import {
   Box,
+  Button,
+  ButtonGroup,
   Drawer,
   DrawerBody,
   DrawerCloseButton,
@@ -94,6 +96,8 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [showOnline, setShowOnline] = useState(true);
+  const [showFabrica, setShowFabrica] = useState(false);
 
   const cardBg = useColorModeValue("white", "gray.800");
   const cardBorder = useColorModeValue("gray.200", "gray.700");
@@ -133,40 +137,101 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
     fetchData();
   }, [isOpen]);
 
-  // Build chart data merging today + yesterday hours
+  // Build chart data from selected sources (online / fabrica / both)
   const chartData = useMemo(() => {
     if (!data) return [];
-    const perHour = data.perHour || [];
-    const yesPerHour = data.yesPerHour || [];
 
-    // Use max 24 entries (00-23)
+    const onlinePerHour = data.online?.perHour || data.perHour || [];
+    const onlineYesPerHour = data.online?.yesPerHour || data.yesPerHour || [];
+    const fabricaPerHour = data.fabrica?.perHour || [];
+    const fabricaYesPerHour = data.fabrica?.yesPerHour || [];
+
     const hours = [];
     for (let i = 0; i < 24; i++) {
-      const today = perHour[i] || {};
-      const yesterday = yesPerHour[i] || {};
+      let todayAmount = 0, yesterdayAmount = 0, todayOrders = 0, yesterdayOrders = 0;
+
+      if (showOnline) {
+        const t = onlinePerHour[i] || {};
+        const y = onlineYesPerHour[i] || {};
+        todayAmount += t.amount || 0;
+        yesterdayAmount += y.amount || 0;
+        todayOrders += t.validOrders || 0;
+        yesterdayOrders += y.validOrders || 0;
+      }
+      if (showFabrica) {
+        const t = fabricaPerHour[i] || {};
+        const y = fabricaYesPerHour[i] || {};
+        todayAmount += t.amount || 0;
+        yesterdayAmount += y.amount || 0;
+        todayOrders += t.validOrders || 0;
+        yesterdayOrders += y.validOrders || 0;
+      }
+
       hours.push({
         hour: `${String(i).padStart(2, "0")}h`,
-        todayAmount: today.amount || 0,
-        yesterdayAmount: yesterday.amount || 0,
-        todayOrders: today.validOrders || 0,
-        yesterdayOrders: yesterday.validOrders || 0,
+        todayAmount,
+        yesterdayAmount,
+        todayOrders,
+        yesterdayOrders,
       });
     }
     return hours;
-  }, [data]);
+  }, [data, showOnline, showFabrica]);
+
+  // Derive active KPI values based on toggle selection
+  const activeData = useMemo(() => {
+    if (!data) return null;
+    const online = data.online || {};
+    const fabrica = data.fabrica || {};
+    const sum = (field) => {
+      let val = 0;
+      if (showOnline) val += parseFloat(online[field] || 0);
+      if (showFabrica) val += parseFloat(fabrica[field] || 0);
+      return val;
+    };
+    return {
+      todaySaleAmount: sum("todaySaleAmount"),
+      todayOrderNum: sum("todayOrderNum"),
+      yesterdaySaleAmount: sum("yesterdaySaleAmount"),
+      yesterdayOrderNum: sum("yesterdayOrderNum"),
+      yesterdayPeriodSaleAmount: sum("yesterdayPeriodSaleAmount"),
+      yesterdayPeriodOrderNum: sum("yesterdayPeriodOrderNum"),
+    };
+  }, [data, showOnline, showFabrica]);
+
+  // Filtered rankings based on toggle
+  const filteredShopTops = useMemo(() => {
+    if (!data) return [];
+    if (showOnline && showFabrica) return data.shopTops || [];
+    if (showOnline) return data.online?.shopTops || [];
+    if (showFabrica) return data.fabrica?.shopTops || [];
+    return [];
+  }, [data, showOnline, showFabrica]);
+
+  const filteredProductTops = useMemo(() => {
+    if (!data) return [];
+    const onlineProducts = showOnline ? (data.online?.productTops || data.productTops || []) : [];
+    const fabricaProducts = showFabrica ? (data.fabrica?.productTops || []) : [];
+    if (showOnline && showFabrica) {
+      return [...onlineProducts, ...fabricaProducts]
+        .sort((a, b) => parseFloat(b.sales || 0) - parseFloat(a.sales || 0))
+        .slice(0, 10);
+    }
+    return onlineProducts.length ? onlineProducts : fabricaProducts;
+  }, [data, showOnline, showFabrica]);
 
   const pctChange = (current, previous) => {
     if (!previous || previous === 0) return null;
     return ((current - previous) / previous) * 100;
   };
 
-  const todayPct = data ? pctChange(
-    Number(data.todaySaleAmount),
-    Number(data.yesterdayPeriodSaleAmount)
+  const todayPct = activeData ? pctChange(
+    activeData.todaySaleAmount,
+    activeData.yesterdayPeriodSaleAmount
   ) : null;
-  const ordersPct = data ? pctChange(
-    Number(data.todayOrderNum),
-    Number(data.yesterdayPeriodOrderNum)
+  const ordersPct = activeData ? pctChange(
+    activeData.todayOrderNum,
+    activeData.yesterdayPeriodOrderNum
   ) : null;
 
   const CustomTooltipSales = ({ active, payload, label }) => {
@@ -212,14 +277,32 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
                 </Text>
               )}
             </Flex>
-            <IconButton
-              icon={<RepeatIcon />}
-              size="sm"
-              variant="ghost"
-              aria-label="Atualizar"
-              isLoading={refreshing}
-              onClick={handleRefresh}
-            />
+            <Flex align="center" gap={2}>
+              <IconButton
+                icon={<RepeatIcon />}
+                size="sm"
+                variant="ghost"
+                aria-label="Atualizar"
+                isLoading={refreshing}
+                onClick={handleRefresh}
+              />
+              <ButtonGroup isAttached size="sm">
+                <Button
+                  colorScheme={showOnline ? "blue" : "gray"}
+                  variant={showOnline ? "solid" : "outline"}
+                  onClick={() => { if (!showOnline || showFabrica) setShowOnline(!showOnline); }}
+                >
+                  Online
+                </Button>
+                <Button
+                  colorScheme={showFabrica ? "orange" : "gray"}
+                  variant={showFabrica ? "solid" : "outline"}
+                  onClick={() => { if (!showFabrica || showOnline) setShowFabrica(!showFabrica); }}
+                >
+                  Fábrica
+                </Button>
+              </ButtonGroup>
+            </Flex>
           </Flex>
         </DrawerHeader>
 
@@ -243,7 +326,7 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
                   <Stat>
                     <StatLabel fontSize="xs" color={cardLabel} textTransform="uppercase">Vendas Hoje</StatLabel>
                     <StatNumber fontSize={{ base: "xl", md: "2xl" }} color="blue.500">
-                      {formatCurrency(data.todaySaleAmount)}
+                      {formatCurrency(activeData?.todaySaleAmount ?? data.todaySaleAmount)}
                     </StatNumber>
                     {todayPct !== null && (
                       <StatHelpText mb={0}>
@@ -257,7 +340,7 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
                   <Stat>
                     <StatLabel fontSize="xs" color={cardLabel} textTransform="uppercase">Pedidos Hoje</StatLabel>
                     <StatNumber fontSize={{ base: "xl", md: "2xl" }}>
-                      {formatNumber(data.todayOrderNum)}
+                      {formatNumber(activeData?.todayOrderNum ?? data.todayOrderNum)}
                     </StatNumber>
                     {ordersPct !== null && (
                       <StatHelpText mb={0}>
@@ -271,7 +354,7 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
                   <Stat>
                     <StatLabel fontSize="xs" color={cardLabel} textTransform="uppercase">Vendas Ontem (total)</StatLabel>
                     <StatNumber fontSize={{ base: "xl", md: "2xl" }}>
-                      {formatCurrency(data.yesterdaySaleAmount)}
+                      {formatCurrency(activeData?.yesterdaySaleAmount ?? data.yesterdaySaleAmount)}
                     </StatNumber>
                   </Stat>
                 </Box>
@@ -279,7 +362,7 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
                   <Stat>
                     <StatLabel fontSize="xs" color={cardLabel} textTransform="uppercase">Pedidos Ontem (total)</StatLabel>
                     <StatNumber fontSize={{ base: "xl", md: "2xl" }}>
-                      {formatNumber(data.yesterdayOrderNum)}
+                      {formatNumber(activeData?.yesterdayOrderNum ?? data.yesterdayOrderNum)}
                     </StatNumber>
                   </Stat>
                 </Box>
@@ -340,11 +423,11 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
               {/* ── Rankings ── */}
               <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>
                 {/* Shop ranking */}
-                {data.shopTops?.length > 0 && (
+                {filteredShopTops?.length > 0 && (
                   <Box bg={panelBg} p={{ base: 3, md: 5 }} borderRadius="lg" boxShadow="sm" border="1px solid" borderColor={cardBorder}>
                     <Text fontSize="md" fontWeight="bold" mb={3}>Ranking de Lojas</Text>
                     <Flex direction="column" gap={0}>
-                      {data.shopTops.map((shop, i) => (
+                      {filteredShopTops.map((shop, i) => (
                         <Flex
                           key={`${shop.shopId}-${i}`}
                           align="center"
@@ -373,11 +456,11 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
                 )}
 
                 {/* Product ranking */}
-                {data.productTops?.length > 0 && (
+                {filteredProductTops?.length > 0 && (
                   <Box bg={panelBg} p={{ base: 3, md: 5 }} borderRadius="lg" boxShadow="sm" border="1px solid" borderColor={cardBorder}>
                     <Text fontSize="md" fontWeight="bold" mb={3}>Ranking de Produtos</Text>
                     <Flex direction="column" gap={0}>
-                      {data.productTops.map((prod, i) => (
+                      {filteredProductTops.map((prod, i) => (
                         <Flex
                           key={`${prod.productName}-${i}`}
                           align="center"

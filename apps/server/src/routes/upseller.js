@@ -37,26 +37,83 @@ async function mergeSisplanData(data) {
     const { getSaoPauloDate } = require('../lib/timezone');
     const spToday = getSaoPauloDate();
     const spYesterday = getSaoPauloDate(-1);
-    const [fabricaToday, fabricaYesterday, fabricaTodayDetails] = await Promise.all([
+
+    const [
+      fabricaTodayRevenue,
+      fabricaYesterdayRevenue,
+      fabricaTodayDetails,
+      fabricaYesterdayDetails,
+      fabricaTodayHourly,
+      fabricaYesterdayHourly,
+      fabricaProductTops,
+    ] = await Promise.all([
       salesRepository.getDailyRevenue(spToday, { store: 'Fabrica' }),
       salesRepository.getDailyRevenue(spYesterday, { store: 'Fabrica' }),
       salesRepository.getDailySalesDetails(spToday, { store: 'Fabrica' }),
+      salesRepository.getDailySalesDetails(spYesterday, { store: 'Fabrica' }),
+      salesRepository.getHourlySales(spToday, { store: 'Fabrica' }),
+      salesRepository.getHourlySales(spYesterday, { store: 'Fabrica' }),
+      salesRepository.getTopProducts(spToday, { store: 'Fabrica' }),
     ]);
-    if (fabricaToday > 0 || (fabricaTodayDetails && fabricaTodayDetails.summary.orders > 0)) {
-      data.todaySaleAmount = parseFloat(data.todaySaleAmount || 0) + fabricaToday;
-      data.yesterdaySaleAmount = parseFloat(data.yesterdaySaleAmount || 0) + fabricaYesterday;
-      data.todayOrderNum = parseInt(data.todayOrderNum || 0) + (fabricaTodayDetails?.summary?.orders || 0);
-      const shopTops = data.shopTops || [];
-      shopTops.push({
+
+    // Save original UpSeller-only values
+    data.online = {
+      todaySaleAmount: parseFloat(data.todaySaleAmount || 0),
+      todayOrderNum: parseInt(data.todayOrderNum || 0),
+      yesterdaySaleAmount: parseFloat(data.yesterdaySaleAmount || 0),
+      yesterdayOrderNum: parseInt(data.yesterdayOrderNum || 0),
+      yesterdayPeriodSaleAmount: parseFloat(data.yesterdayPeriodSaleAmount || 0),
+      yesterdayPeriodOrderNum: parseInt(data.yesterdayPeriodOrderNum || 0),
+      perHour: data.perHour || [],
+      yesPerHour: data.yesPerHour || [],
+      shopTops: data.shopTops || [],
+      productTops: data.productTops || [],
+    };
+
+    // Compute Fábrica "period" values (sum up to current SP hour)
+    const currentHourSP = new Date().toLocaleString('en-US', {
+      timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false,
+    });
+    const currentHour = parseInt(currentHourSP) || 0;
+    let fabricaYesPeriodAmount = 0;
+    let fabricaYesPeriodOrders = 0;
+    for (let h = 0; h <= currentHour && h < 24; h++) {
+      fabricaYesPeriodAmount += fabricaYesterdayHourly[h]?.amount || 0;
+      fabricaYesPeriodOrders += fabricaYesterdayHourly[h]?.validOrders || 0;
+    }
+
+    // Build Fábrica data object
+    data.fabrica = {
+      todaySaleAmount: fabricaTodayRevenue,
+      todayOrderNum: fabricaTodayDetails?.summary?.orders || 0,
+      yesterdaySaleAmount: fabricaYesterdayRevenue,
+      yesterdayOrderNum: fabricaYesterdayDetails?.summary?.orders || 0,
+      yesterdayPeriodSaleAmount: fabricaYesPeriodAmount,
+      yesterdayPeriodOrderNum: fabricaYesPeriodOrders,
+      perHour: fabricaTodayHourly,
+      yesPerHour: fabricaYesterdayHourly,
+      shopTops: (fabricaTodayRevenue > 0 || (fabricaTodayDetails?.summary?.orders || 0) > 0) ? [{
         shopId: 'fabrica',
         shopName: 'Fábrica',
         platform: 'Sisplan',
         validOrders: fabricaTodayDetails?.summary?.orders || 0,
-        validSales: fabricaToday,
-      });
-      shopTops.sort((a, b) => parseFloat(b.validSales || 0) - parseFloat(a.validSales || 0));
-      data.shopTops = shopTops;
-    }
+        validSales: fabricaTodayRevenue,
+      }] : [],
+      productTops: fabricaProductTops || [],
+    };
+
+    // Keep merged top-level values for backward compatibility
+    data.todaySaleAmount = data.online.todaySaleAmount + data.fabrica.todaySaleAmount;
+    data.todayOrderNum = data.online.todayOrderNum + data.fabrica.todayOrderNum;
+    data.yesterdaySaleAmount = data.online.yesterdaySaleAmount + data.fabrica.yesterdaySaleAmount;
+    data.yesterdayOrderNum = data.online.yesterdayOrderNum + data.fabrica.yesterdayOrderNum;
+    data.yesterdayPeriodSaleAmount = data.online.yesterdayPeriodSaleAmount + data.fabrica.yesterdayPeriodSaleAmount;
+    data.yesterdayPeriodOrderNum = data.online.yesterdayPeriodOrderNum + data.fabrica.yesterdayPeriodOrderNum;
+
+    // Merge shopTops
+    const allShops = [...(data.online.shopTops || []), ...data.fabrica.shopTops];
+    allShops.sort((a, b) => parseFloat(b.validSales || 0) - parseFloat(a.validSales || 0));
+    data.shopTops = allShops;
   } catch (e) {
     console.error('Error merging Sisplan data into today analytics:', e.message);
   }

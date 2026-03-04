@@ -395,6 +395,96 @@ async function getDailySalesDetails(date, filters = {}) {
   };
 }
 
+/**
+ * Get hourly sales breakdown for a specific date (excluding canceled orders).
+ * Returns an array of 24 elements [{amount, validOrders}, ...] indexed by hour (0-23).
+ */
+async function getHourlySales(date, filters = {}) {
+  const params = [date];
+  let extraConditions = '';
+  let paramIdx = 2;
+  if (filters.store) {
+    extraConditions += ` AND store = $${paramIdx++}`;
+    params.push(filters.store);
+  }
+  if (filters.sale_channel) {
+    extraConditions += ` AND sale_channel = $${paramIdx++}`;
+    params.push(filters.sale_channel);
+  }
+
+  const result = await db.query(
+    `SELECT
+       EXTRACT(HOUR FROM date AT TIME ZONE 'America/Sao_Paulo') AS hour,
+       COALESCE(SUM(total), 0) AS amount,
+       COUNT(DISTINCT order_id) AS "validOrders"
+     FROM sales
+     WHERE date::date = $1::date${extraConditions}
+       AND (
+         status IS NULL OR status = ''
+         OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
+           NOT SIMILAR TO '%(cancelado)%'
+       )
+     GROUP BY EXTRACT(HOUR FROM date AT TIME ZONE 'America/Sao_Paulo')
+     ORDER BY hour`,
+    params
+  );
+
+  const hourly = Array.from({ length: 24 }, () => ({ amount: 0, validOrders: 0 }));
+  for (const row of result.rows) {
+    const h = parseInt(row.hour);
+    hourly[h] = {
+      amount: parseFloat(row.amount) || 0,
+      validOrders: parseInt(row.validOrders) || 0,
+    };
+  }
+  return hourly;
+}
+
+/**
+ * Get top products for a specific date (excluding canceled orders).
+ * Returns array of {productName, shopName, sales, unitsSold, productImg}.
+ */
+async function getTopProducts(date, filters = {}, limit = 10) {
+  const params = [date];
+  let extraConditions = '';
+  let paramIdx = 2;
+  if (filters.store) {
+    extraConditions += ` AND store = $${paramIdx++}`;
+    params.push(filters.store);
+  }
+  if (filters.sale_channel) {
+    extraConditions += ` AND sale_channel = $${paramIdx++}`;
+    params.push(filters.sale_channel);
+  }
+  params.push(limit);
+
+  const result = await db.query(
+    `SELECT
+       product AS "productName",
+       store AS "shopName",
+       COALESCE(SUM(total), 0) AS sales,
+       COALESCE(SUM(quantity), 0) AS "unitsSold",
+       MAX(image) AS "productImg"
+     FROM sales
+     WHERE date::date = $1::date${extraConditions}
+       AND (
+         status IS NULL OR status = ''
+         OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
+           NOT SIMILAR TO '%(cancelado)%'
+       )
+     GROUP BY product, store
+     ORDER BY sales DESC
+     LIMIT $${paramIdx}`,
+    params
+  );
+
+  return result.rows.map(r => ({
+    ...r,
+    sales: parseFloat(r.sales) || 0,
+    unitsSold: parseFloat(r.unitsSold) || 0,
+  }));
+}
+
 module.exports = {
   batchUpsertSales,
   getSales,
@@ -405,5 +495,7 @@ module.exports = {
   getStates,
   getLastUpdate,
   getDailyRevenue,
-  getDailySalesDetails
+  getDailySalesDetails,
+  getHourlySales,
+  getTopProducts
 };
