@@ -55,13 +55,13 @@ const LLM_PROVIDERS = [
 const LLM_MODELS = {
   groq: [
     { value: "llama-3.3-70b-versatile", label: "Llama 3.3 70B" },
-    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (rapido)" },
+    { value: "llama-3.1-8b-instant", label: "Llama 3.1 8B (rápido)" },
     { value: "meta-llama/llama-4-scout-17b-16e-instruct", label: "Llama 4 Scout 17B" },
     { value: "qwen/qwen-3-32b", label: "Qwen 3 32B" }
   ],
   claude: [
     { value: "claude-sonnet-4-5-20250929", label: "Claude Sonnet 4.5" },
-    { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (economico)" }
+    { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5 (econômico)" }
   ],
   ollama: [
     { value: "llama3.1", label: "Llama 3.1" },
@@ -70,7 +70,7 @@ const LLM_MODELS = {
   ]
 };
 
-const DEFAULT_PROMPT = `Voce e um assistente interno da fabrica. Ajude os usuarios com informacoes sobre vendas, financeiro, boletos e notas fiscais. Seja objetivo e amigavel.`;
+const DEFAULT_PROMPT = `Você é um assistente interno da fábrica. Ajude os usuários com informações sobre vendas, financeiro, boletos e notas fiscais. Seja objetivo e amigável.`;
 
 const API_BASE = window.location.hostname === "localhost"
   ? `http://localhost:4000`
@@ -262,7 +262,7 @@ const WhatsappSettings = () => {
         setLastUsedLlmConfig(config);
       }
       await updateWhatsappSettings(form);
-      toast({ title: "Configuracoes salvas com sucesso!", status: "success", duration: 3000 });
+      toast({ title: "Configurações salvas com sucesso!", status: "success", duration: 3000 });
       await loadSettings();
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
@@ -295,7 +295,7 @@ const WhatsappSettings = () => {
     setQrCode(null);
     try {
       await connectWhatsapp();
-      toast({ title: "Conexao iniciada. Aguarde o QR Code.", status: "info", duration: 3000 });
+      toast({ title: "Conexão iniciada. Aguarde o QR Code.", status: "info", duration: 3000 });
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
       setConnecting(false);
@@ -366,7 +366,7 @@ const WhatsappSettings = () => {
   return (
     <Box className="panel" bg={panelBg} p={6} borderRadius="lg" boxShadow="sm" maxW="960px" mx="auto" mt={8}>
       <HStack justify="space-between" mb={6}>
-        <Text fontSize="lg" fontWeight="bold">Configuracao WhatsApp</Text>
+        <Text fontSize="lg" fontWeight="bold">Configuração WhatsApp</Text>
         <HStack>
           <Text fontSize="sm">Ativo</Text>
           <Switch
@@ -378,9 +378,9 @@ const WhatsappSettings = () => {
       </HStack>
 
       <VStack spacing={6} align="stretch">
-        {/* Conexao WhatsApp */}
+        {/* Conexão WhatsApp */}
         <Box>
-          <Text fontWeight="semibold" mb={3}>Conexao WhatsApp</Text>
+          <Text fontWeight="semibold" mb={3}>Conexão WhatsApp</Text>
           <Box bg={refBg} p={4} borderRadius="md" border="1px solid" borderColor={borderColor}>
             <HStack spacing={3} mb={3}>
               {getStatusBadge()}
@@ -406,7 +406,7 @@ const WhatsappSettings = () => {
               <Center py={4}>
                 <VStack spacing={2}>
                   <Spinner size="md" color="blue.500" />
-                  <Text fontSize="sm" color="gray.500">Iniciando conexao...</Text>
+                  <Text fontSize="sm" color="gray.500">Iniciando conexão...</Text>
                 </VStack>
               </Center>
             )}
@@ -455,7 +455,7 @@ const WhatsappSettings = () => {
                   <Thead>
                     <Tr>
                       <Th>Telefone</Th>
-                      <Th>Ultima conexao</Th>
+                      <Th>Última conexão</Th>
                       <Th w="50px"></Th>
                     </Tr>
                   </Thead>
@@ -577,9 +577,9 @@ const WhatsappSettings = () => {
             </Box>
           )}
 
-          {/* Configuracao LLM anterior */}
+          {/* Configuração LLM anterior */}
           <Box mt={4}>
-            <Text fontSize="sm" fontWeight="semibold" mb={2}>Configuracao LLM anterior</Text>
+            <Text fontSize="sm" fontWeight="semibold" mb={2}>Configuração LLM anterior</Text>
             {lastUsedLlmConfig ? (
               <TableContainer bg={refBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
                 <Table size="sm" variant="simple">
@@ -641,7 +641,7 @@ const WhatsappSettings = () => {
               </TableContainer>
             ) : (
               <Text fontSize="xs" color="gray.500">
-                Nenhuma configuracao salva anteriormente.
+                Nenhuma configuração salva anteriormente.
               </Text>
             )}
           </Box>
@@ -653,7 +653,7 @@ const WhatsappSettings = () => {
         <Box>
           <Text fontWeight="semibold" mb={3}>System Prompt</Text>
           <FormControl>
-            <FormLabel fontSize="sm">Instrucoes do assistente</FormLabel>
+            <FormLabel fontSize="sm">Instruções do assistente</FormLabel>
             <Textarea
               size="sm"
               rows={5}
@@ -671,7 +671,7 @@ const WhatsappSettings = () => {
             variant="ghost"
             onClick={() => setForm(prev => ({ ...prev, systemPrompt: DEFAULT_PROMPT }))}
           >
-            Restaurar padrao
+            Restaurar padrão
           </Button>
         </Box>
 
@@ -756,15 +756,15 @@ const WhatsappSettings = () => {
           <Text fontWeight="semibold" mb={3}>Status</Text>
           <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
             <Box>
-              <Text fontSize="xs" color="gray.500">Ultima mensagem</Text>
+              <Text fontSize="xs" color="gray.500">Última mensagem</Text>
               <Text fontSize="sm">{formatDate(status.lastMessageAt)}</Text>
             </Box>
             <Box>
-              <Text fontSize="xs" color="gray.500">Total de interacoes</Text>
+              <Text fontSize="xs" color="gray.500">Total de interações</Text>
               <Text fontSize="sm">{status.totalInteractions || 0}</Text>
             </Box>
             <Box>
-              <Text fontSize="xs" color="gray.500">Conexao</Text>
+              <Text fontSize="xs" color="gray.500">Conexão</Text>
               {getStatusBadge()}
             </Box>
           </SimpleGrid>
@@ -780,15 +780,15 @@ const WhatsappSettings = () => {
             loadingText="Salvando..."
             onClick={handleSave}
           >
-            Salvar Configuracoes
+            Salvar Configurações
           </Button>
         </Flex>
 
         <Alert status="info" borderRadius="md">
           <AlertIcon />
           <Text fontSize="sm">
-            Apenas usuarios com numero de WhatsApp cadastrado na tela de
-            <strong> Gerenciar usuarios</strong> poderao interagir com o bot.
+            Apenas usuários com número de WhatsApp cadastrado na tela de
+            <strong> Gerenciar usuários</strong> poderão interagir com o bot.
           </Text>
         </Alert>
       </VStack>

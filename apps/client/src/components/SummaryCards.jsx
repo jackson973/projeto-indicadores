@@ -47,7 +47,7 @@ const AnimatedValue = ({ value, formatter }) => {
   return <>{display}</>;
 };
 
-const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick, onRefresh, onRefreshFabrica, onRefreshOnline }) => {
+const SummaryCards = ({ summary, sisplanActive, onCanceledClick, onTodayClick, onYesterdayClick, onRefresh, onRefreshFabrica, onRefreshOnline }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingFabrica, setRefreshingFabrica] = useState(false);
   const [refreshingOnline, setRefreshingOnline] = useState(false);
@@ -97,10 +97,10 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
 
   return (
     <>
-      {(sisplanUpdate || upsellerUpdate) && (
+      {((sisplanActive && sisplanUpdate) || upsellerUpdate) && (
         <HStack fontSize="xs" color={mutedColor} mb={2} justify="flex-end" spacing={1} whiteSpace="nowrap">
           <Text>Atualização:</Text>
-          {sisplanUpdate && (
+          {sisplanActive && sisplanUpdate && (
             <>
               <Text>Fábrica {sisplanUpdate}</Text>
               {onRefreshFabrica && (
@@ -110,7 +110,7 @@ const SummaryCards = ({ summary, onCanceledClick, onTodayClick, onYesterdayClick
               )}
             </>
           )}
-          {sisplanUpdate && upsellerUpdate && <Text mx={1}>|</Text>}
+          {sisplanActive && sisplanUpdate && upsellerUpdate && <Text mx={1}>|</Text>}
           {upsellerUpdate && (
             <>
               <Text>Online {upsellerUpdate}</Text>

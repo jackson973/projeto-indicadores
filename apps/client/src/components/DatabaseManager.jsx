@@ -57,7 +57,7 @@ const ResultsPanel = memo(function ResultsPanel({ result, error, executing, hove
       <Alert status="error" variant="left-accent" m={3} borderRadius="md">
         <AlertIcon />
         <Box>
-          <Text fontWeight="bold" fontSize="sm">Erro na execucao</Text>
+          <Text fontWeight="bold" fontSize="sm">Erro na execução</Text>
           <Text fontSize="sm" fontFamily="mono" whiteSpace="pre-wrap">{error}</Text>
         </Box>
       </Alert>

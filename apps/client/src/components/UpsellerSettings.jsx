@@ -109,7 +109,7 @@ const UpsellerSettings = () => {
         setLastUsedCaptchaKey(form.anticaptchaKey);
       }
       await updateUpsellerSettings(form);
-      toast({ title: "Configuracoes salvas com sucesso!", status: "success", duration: 3000 });
+      toast({ title: "Configurações salvas com sucesso!", status: "success", duration: 3000 });
       await loadSettings();
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
@@ -151,7 +151,7 @@ const UpsellerSettings = () => {
   return (
     <Box className="panel" bg={panelBg} p={6} borderRadius="lg" boxShadow="sm" maxW="960px" mx="auto" mt={8}>
       <HStack justify="space-between" mb={6}>
-        <Text fontSize="lg" fontWeight="bold">Integracao UpSeller</Text>
+        <Text fontSize="lg" fontWeight="bold">Integração UpSeller</Text>
         <HStack>
           <Text fontSize="sm">Ativo</Text>
           <Switch
@@ -201,7 +201,7 @@ const UpsellerSettings = () => {
 
         {/* CAPTCHA */}
         <Box>
-          <Text fontWeight="semibold" mb={3}>Resolucao de CAPTCHA</Text>
+          <Text fontWeight="semibold" mb={3}>Resolução de CAPTCHA</Text>
           <FormControl isRequired>
             <FormLabel fontSize="sm">Chave API AntiCaptcha</FormLabel>
             <InputGroup size="sm">
@@ -226,7 +226,7 @@ const UpsellerSettings = () => {
           </FormControl>
           <Box bg={sectionBg} p={3} borderRadius="md" mt={2} border="1px solid" borderColor={borderColor}>
             <Text fontSize="xs" color="gray.500">
-              O UpSeller exige resolucao de CAPTCHA por imagem no login.
+              O UpSeller exige resolução de CAPTCHA por imagem no login.
               Cadastre-se em anti-captcha.com para obter uma chave de API.
             </Text>
           </Box>
@@ -288,7 +288,7 @@ const UpsellerSettings = () => {
 
         {/* IMAP */}
         <Box>
-          <Text fontWeight="semibold" mb={3}>Email IMAP (Verificacao 2FA)</Text>
+          <Text fontWeight="semibold" mb={3}>Email IMAP (Verificação 2FA)</Text>
           <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
             <FormControl>
               <FormLabel fontSize="sm">Servidor IMAP</FormLabel>
@@ -309,7 +309,7 @@ const UpsellerSettings = () => {
               />
             </FormControl>
             <FormControl isRequired>
-              <FormLabel fontSize="sm">Usuario IMAP</FormLabel>
+              <FormLabel fontSize="sm">Usuário IMAP</FormLabel>
               <Input
                 size="sm"
                 value={form.imapUser}
@@ -330,8 +330,8 @@ const UpsellerSettings = () => {
           </SimpleGrid>
           <Box bg={sectionBg} p={3} borderRadius="md" mt={2} border="1px solid" borderColor={borderColor}>
             <Text fontSize="xs" color="gray.500">
-              O UpSeller envia um codigo de verificacao por email apos o login.
-              Configure uma senha de app do Gmail (Configuracoes {'>'} Seguranca {'>'} Senhas de app).
+              O UpSeller envia um código de verificação por email após o login.
+              Configure uma senha de app do Gmail (Configurações {'>'} Segurança {'>'} Senhas de app).
             </Text>
           </Box>
         </Box>
@@ -340,7 +340,7 @@ const UpsellerSettings = () => {
 
         {/* Sync Config */}
         <Box>
-          <Text fontWeight="semibold" mb={3}>Sincronizacao</Text>
+          <Text fontWeight="semibold" mb={3}>Sincronização</Text>
           <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
             <FormControl>
               <FormLabel fontSize="sm">Intervalo de sync (minutos)</FormLabel>
@@ -357,7 +357,7 @@ const UpsellerSettings = () => {
               />
             </FormControl>
             <FormControl>
-              <FormLabel fontSize="sm">Periodo padrao (dias)</FormLabel>
+              <FormLabel fontSize="sm">Período padrão (dias)</FormLabel>
               <Input
                 size="sm"
                 type="number"
@@ -373,7 +373,7 @@ const UpsellerSettings = () => {
           </SimpleGrid>
 
           <Box mt={4}>
-            <Text fontSize="sm" fontWeight="medium" mb={1}>Status do ultimo sync</Text>
+            <Text fontSize="sm" fontWeight="medium" mb={1}>Status do último sync</Text>
             <HStack spacing={2}>
               {syncStatus.lastSyncStatus && (
                 <Badge colorScheme={syncStatus.lastSyncStatus === "success" ? "green" : "red"}>
@@ -415,14 +415,14 @@ const UpsellerSettings = () => {
             loadingText="Salvando..."
             onClick={handleSave}
           >
-            Salvar Configuracoes
+            Salvar Configurações
           </Button>
         </Flex>
 
         <Alert status="info" borderRadius="md">
           <AlertIcon />
           <Text fontSize="sm">
-            As vendas importadas do UpSeller serao categorizadas automaticamente
+            As vendas importadas do UpSeller serão categorizadas automaticamente
             por plataforma (<strong>Mercado Livre</strong>, <strong>Shopee</strong>, <strong>Shein</strong>)
             conforme a origem de cada pedido.
           </Text>

@@ -823,6 +823,7 @@ const App = () => {
 
             <SummaryCards
               summary={summary}
+              sisplanActive={sisplanActive}
               onCanceledClick={canceledDrawer.onOpen}
               onTodayClick={() => {
                 upsellerTodayDrawer.onOpen();
@@ -857,6 +858,7 @@ const App = () => {
             <UpsellerTodayDrawer
               isOpen={upsellerTodayDrawer.isOpen}
               onClose={upsellerTodayDrawer.onClose}
+              sisplanActive={sisplanActive}
             />
             <SalesByPeriodChart data={salesByPeriod} period={filters.period} onPeriodChange={(value) => setFilters(f => ({ ...f, period: value }))} autoplay={autoplay} />
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>

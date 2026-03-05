@@ -91,7 +91,7 @@ const formatFetchedAt = (value) => {
   });
 };
 
-const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
+const UpsellerTodayDrawer = ({ isOpen, onClose, sisplanActive }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -286,22 +286,24 @@ const UpsellerTodayDrawer = ({ isOpen, onClose }) => {
                 isLoading={refreshing}
                 onClick={handleRefresh}
               />
-              <ButtonGroup isAttached size="sm">
-                <Button
-                  colorScheme={showOnline ? "blue" : "gray"}
-                  variant={showOnline ? "solid" : "outline"}
-                  onClick={() => { if (!showOnline || showFabrica) setShowOnline(!showOnline); }}
-                >
-                  Online
-                </Button>
-                <Button
-                  colorScheme={showFabrica ? "orange" : "gray"}
-                  variant={showFabrica ? "solid" : "outline"}
-                  onClick={() => { if (!showFabrica || showOnline) setShowFabrica(!showFabrica); }}
-                >
-                  Fábrica
-                </Button>
-              </ButtonGroup>
+              {sisplanActive && (
+                <ButtonGroup isAttached size="sm">
+                  <Button
+                    colorScheme={showOnline ? "blue" : "gray"}
+                    variant={showOnline ? "solid" : "outline"}
+                    onClick={() => { if (!showOnline || showFabrica) setShowOnline(!showOnline); }}
+                  >
+                    Online
+                  </Button>
+                  <Button
+                    colorScheme={showFabrica ? "orange" : "gray"}
+                    variant={showFabrica ? "solid" : "outline"}
+                    onClick={() => { if (!showFabrica || showOnline) setShowFabrica(!showFabrica); }}
+                  >
+                    Fábrica
+                  </Button>
+                </ButtonGroup>
+              )}
             </Flex>
           </Flex>
         </DrawerHeader>

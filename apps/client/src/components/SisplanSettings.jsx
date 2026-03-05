@@ -42,30 +42,30 @@ import {
 } from "../api";
 
 const SYSTEM_FIELDS = [
-  { key: "order_id", label: "order_id", description: "Numero do pedido", required: true },
+  { key: "order_id", label: "order_id", description: "Número do pedido", required: true },
   { key: "date", label: "date", description: "Data da venda", required: true },
   { key: "total", label: "total", description: "Valor total", required: true },
   { key: "product", label: "product", description: "Nome do produto", required: false },
   { key: "quantity", label: "quantity", description: "Quantidade", required: false },
-  { key: "unit_price", label: "unit_price", description: "Preco unitario", required: false },
+  { key: "unit_price", label: "unit_price", description: "Preço unitário", required: false },
   { key: "sku", label: "sku", description: "SKU do produto", required: false },
-  { key: "variation", label: "variation", description: "Variacao do produto", required: false },
+  { key: "variation", label: "variation", description: "Variação do produto", required: false },
   { key: "state", label: "state", description: "Estado (UF)", required: false },
   { key: "status", label: "status", description: "Status do pedido", required: false },
-  { key: "ad_name", label: "ad_name", description: "Nome do anuncio", required: false },
+  { key: "ad_name", label: "ad_name", description: "Nome do anúncio", required: false },
   { key: "image", label: "image", description: "Link da imagem", required: false },
   { key: "client_name", label: "client_name", description: "Nome do comprador", required: false },
-  { key: "codcli", label: "codcli", description: "Codigo do cliente", required: false },
+  { key: "codcli", label: "codcli", description: "Código do cliente", required: false },
   { key: "nome_fantasia", label: "nome_fantasia", description: "Nome fantasia", required: false },
   { key: "cnpj_cpf", label: "cnpj_cpf", description: "CNPJ/CPF", required: false }
 ];
 
 const NF_SYSTEM_FIELDS = [
-  { key: "numero_nf", label: "numero_nf", description: "Numero da NF", required: true },
-  { key: "data_emissao", label: "data_emissao", description: "Data de emissao", required: true },
-  { key: "serie", label: "serie", description: "Serie da NF", required: false },
-  { key: "ordem_id", label: "ordem_id", description: "Numero do pedido", required: false },
-  { key: "codcli", label: "codcli", description: "Codigo do cliente", required: false },
+  { key: "numero_nf", label: "numero_nf", description: "Número da NF", required: true },
+  { key: "data_emissao", label: "data_emissao", description: "Data de emissão", required: true },
+  { key: "serie", label: "serie", description: "Série da NF", required: false },
+  { key: "ordem_id", label: "ordem_id", description: "Número do pedido", required: false },
+  { key: "codcli", label: "codcli", description: "Código do cliente", required: false },
   { key: "nome_cliente", label: "nome_cliente", description: "Nome do cliente", required: false },
   { key: "nome_fantasia", label: "nome_fantasia", description: "Nome fantasia do cliente", required: false },
   { key: "valor", label: "valor", description: "Valor total da NF", required: false },
@@ -155,7 +155,7 @@ const SisplanSettings = () => {
     setSaving(true);
     try {
       await updateSisplanSettings(form);
-      toast({ title: "Configuracoes salvas com sucesso!", status: "success", duration: 3000 });
+      toast({ title: "Configurações salvas com sucesso!", status: "success", duration: 3000 });
       await loadSettings();
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
@@ -298,7 +298,7 @@ const SisplanSettings = () => {
   return (
     <Box className="panel" bg={panelBg} p={6} borderRadius="lg" boxShadow="sm" maxW="960px" mx="auto" mt={8}>
       <HStack justify="space-between" mb={6}>
-        <Text fontSize="lg" fontWeight="bold">Conexao Sisplan ERP</Text>
+        <Text fontSize="lg" fontWeight="bold">Conexão Sisplan ERP</Text>
         <HStack>
           <Text fontSize="sm">Ativo</Text>
           <Switch
@@ -310,11 +310,11 @@ const SisplanSettings = () => {
       </HStack>
 
       <Accordion allowMultiple defaultIndex={[0]}>
-        {/* 1. Dados de Conexao */}
+        {/* 1. Dados de Conexão */}
         <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
           <AccordionButton py={3} _expanded={{ bg: refBg }}>
             <Box flex="1" textAlign="left">
-              <Text fontWeight="semibold">Dados de Conexao</Text>
+              <Text fontWeight="semibold">Dados de Conexão</Text>
             </Box>
             <AccordionIcon />
           </AccordionButton>
@@ -348,7 +348,7 @@ const SisplanSettings = () => {
                 />
               </FormControl>
               <FormControl isRequired>
-                <FormLabel fontSize="sm">Usuario</FormLabel>
+                <FormLabel fontSize="sm">Usuário</FormLabel>
                 <Input
                   size="sm"
                   value={form.fbUser}
@@ -375,7 +375,7 @@ const SisplanSettings = () => {
               loadingText="Testando..."
               onClick={handleTestConnection}
             >
-              Testar Conexao
+              Testar Conexão
             </Button>
           </AccordionPanel>
         </AccordionItem>
@@ -391,7 +391,7 @@ const SisplanSettings = () => {
           <AccordionPanel pb={4}>
             <VStack spacing={4} align="stretch">
               <Box bg={refBg} p={4} borderRadius="md" border="1px solid" borderColor={borderColor}>
-                <Text fontSize="sm" fontWeight="semibold" mb={2}>Colunas disponiveis para mapeamento:</Text>
+                <Text fontSize="sm" fontWeight="semibold" mb={2}>Colunas disponíveis para mapeamento:</Text>
                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={1}>
                   {SYSTEM_FIELDS.map(f => (
                     <Text key={f.key} fontSize="xs" fontFamily="mono">
@@ -403,7 +403,7 @@ const SisplanSettings = () => {
                     </Text>
                   ))}
                 </SimpleGrid>
-                <Text fontSize="xs" color="gray.500" mt={2}>* Campos obrigatorios</Text>
+                <Text fontSize="xs" color="gray.500" mt={2}>* Campos obrigatórios</Text>
               </Box>
 
               <FormControl>
@@ -531,12 +531,12 @@ const SisplanSettings = () => {
                   />
                   <Text fontSize="xs" color="gray.500" mt={1}>
                     Ponto de montagem CIFS no servidor Linux (ex: /mnt/sisplan/NFe/LOG_001/DANFE).
-                    Este caminho e usado para localizar e enviar os PDFs.
+                    Este caminho é usado para localizar e enviar os PDFs.
                   </Text>
                 </FormControl>
 
                 <FormControl>
-                  <FormLabel fontSize="sm">Caminho de rede (UNC) - referencia</FormLabel>
+                  <FormLabel fontSize="sm">Caminho de rede (UNC) - referência</FormLabel>
                   <Input
                     size="sm"
                     value={form.nfBasePath}
@@ -544,13 +544,13 @@ const SisplanSettings = () => {
                     placeholder="\\\\192.168.7.2\\Sisplan\\NFe\\LOG_001\\DANFE"
                   />
                   <Text fontSize="xs" color="gray.500" mt={1}>
-                    Caminho Windows/UNC para referencia. O caminho local acima tem prioridade para acesso aos arquivos.
+                    Caminho Windows/UNC para referência. O caminho local acima tem prioridade para acesso aos arquivos.
                   </Text>
                 </FormControl>
 
                 <Box>
                   <Box bg={refBg} p={4} borderRadius="md" mb={4} border="1px solid" borderColor={borderColor}>
-                    <Text fontSize="sm" fontWeight="semibold" mb={2}>Campos disponiveis para mapeamento NF:</Text>
+                    <Text fontSize="sm" fontWeight="semibold" mb={2}>Campos disponíveis para mapeamento NF:</Text>
                     <SimpleGrid columns={{ base: 1, md: 2 }} spacing={1}>
                       {NF_SYSTEM_FIELDS.map(f => (
                         <Text key={f.key} fontSize="xs" fontFamily="mono">
@@ -562,7 +562,7 @@ const SisplanSettings = () => {
                         </Text>
                       ))}
                     </SimpleGrid>
-                    <Text fontSize="xs" color="gray.500" mt={2}>* Campos obrigatorios</Text>
+                    <Text fontSize="xs" color="gray.500" mt={2}>* Campos obrigatórios</Text>
                   </Box>
 
                   <FormControl>
@@ -658,7 +658,7 @@ const SisplanSettings = () => {
                 {/* NF Sync Status */}
                 <Divider />
                 <Box>
-                  <Text fontSize="sm" fontWeight="medium" mb={1}>Status do ultimo sync NF</Text>
+                  <Text fontSize="sm" fontWeight="medium" mb={1}>Status do último sync NF</Text>
                   <HStack spacing={2}>
                     {nfSyncStatus.lastSyncStatus && (
                       <Badge colorScheme={nfSyncStatus.lastSyncStatus === "success" ? "green" : "red"}>
@@ -717,7 +717,7 @@ const SisplanSettings = () => {
                 />
               </FormControl>
               <Box>
-                <Text fontSize="sm" fontWeight="medium" mb={1}>Status do ultimo sync</Text>
+                <Text fontSize="sm" fontWeight="medium" mb={1}>Status do último sync</Text>
                 <HStack spacing={2}>
                   {syncStatus.lastSyncStatus && (
                     <Badge colorScheme={syncStatus.lastSyncStatus === "success" ? "green" : "red"}>
@@ -759,15 +759,15 @@ const SisplanSettings = () => {
             loadingText="Salvando..."
             onClick={handleSave}
           >
-            Salvar Configuracoes
+            Salvar Configurações
           </Button>
         </Flex>
 
         <Alert status="info" borderRadius="md">
           <AlertIcon />
           <Text fontSize="sm">
-            As vendas importadas do Sisplan serao categorizadas automaticamente como
-            <strong> Atacado</strong>, com plataforma <strong>Sisplan</strong> e loja <strong>Fabrica</strong>.
+            As vendas importadas do Sisplan serão categorizadas automaticamente como
+            <strong> Atacado</strong>, com plataforma <strong>Sisplan</strong> e loja <strong>Fábrica</strong>.
           </Text>
         </Alert>
       </VStack>
