@@ -141,27 +141,17 @@ const CashFlowDashboard = () => {
     return data.totals.netResult / data.totals.totalIncome;
   }, [data]);
 
-  if (loading && !data) {
-    return <Center py={20}><Spinner size="xl" color="blue.500" /></Center>;
-  }
-
-  const totals = data?.totals || { openingBalance: 0, totalIncome: 0, totalExpense: 0, netResult: 0, closingBalance: 0 };
-  const periods = data?.periods || [];
   const expensesByCategory = data?.expensesByCategory || [];
   const incomeByCategory = data?.incomeByCategory || [];
-  const expensesByCategoryPeriod = data?.expensesByCategoryPeriod || [];
-  const expenseCategories = data?.expenseCategories || [];
-
   const expTotal = expensesByCategory.reduce((s, e) => s + e.total, 0) || 1;
   const incTotal = incomeByCategory.reduce((s, e) => s + e.total, 0) || 1;
 
-  // Group small categories (< 2%) into "Outros"
-  const groupSmallCategories = (items, total) => {
+  const groupedExpenses = useMemo(() => {
     const threshold = 0.02;
     const main = [];
     let othersTotal = 0;
-    for (const item of items) {
-      if (item.total / total >= threshold) {
+    for (const item of expensesByCategory) {
+      if (item.total / expTotal >= threshold) {
         main.push(item);
       } else {
         othersTotal += item.total;
@@ -171,10 +161,33 @@ const CashFlowDashboard = () => {
       main.push({ category: "Outros", total: Number(othersTotal.toFixed(2)) });
     }
     return main;
-  };
+  }, [expensesByCategory, expTotal]);
 
-  const groupedExpenses = useMemo(() => groupSmallCategories(expensesByCategory, expTotal), [expensesByCategory, expTotal]);
-  const groupedIncome = useMemo(() => groupSmallCategories(incomeByCategory, incTotal), [incomeByCategory, incTotal]);
+  const groupedIncome = useMemo(() => {
+    const threshold = 0.02;
+    const main = [];
+    let othersTotal = 0;
+    for (const item of incomeByCategory) {
+      if (item.total / incTotal >= threshold) {
+        main.push(item);
+      } else {
+        othersTotal += item.total;
+      }
+    }
+    if (othersTotal > 0) {
+      main.push({ category: "Outros", total: Number(othersTotal.toFixed(2)) });
+    }
+    return main;
+  }, [incomeByCategory, incTotal]);
+
+  if (loading && !data) {
+    return <Center py={20}><Spinner size="xl" color="blue.500" /></Center>;
+  }
+
+  const totals = data?.totals || { openingBalance: 0, totalIncome: 0, totalExpense: 0, netResult: 0, closingBalance: 0 };
+  const periods = data?.periods || [];
+  const expensesByCategoryPeriod = data?.expensesByCategoryPeriod || [];
+  const expenseCategories = data?.expenseCategories || [];
 
   return (
     <Box>
