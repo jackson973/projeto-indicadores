@@ -23,6 +23,9 @@ import {
   HStack,
   Tooltip,
   Input,
+  InputGroup,
+  InputLeftElement,
+  InputRightElement,
   Select,
   Spinner,
   Center,
@@ -32,7 +35,7 @@ import {
   useToast,
   useColorModeValue
 } from "@chakra-ui/react";
-import { AddIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon } from "@chakra-ui/icons";
+import { AddIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, SearchIcon, CloseIcon } from "@chakra-ui/icons";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import CashFlowEntryModal from "./CashFlowEntryModal";
 import CashFlowCategoriesModal from "./CashFlowCategoriesModal";
@@ -94,6 +97,7 @@ const CashFlow = () => {
     upcomingItems: []
   });
   const [activeFilter, setActiveFilter] = useState(null); // null, 'overdue', 'upcoming'
+  const [searchTerm, setSearchTerm] = useState("");
 
   const entryModal = useDisclosure();
   const categoriesModal = useDisclosure();
@@ -284,8 +288,19 @@ const CashFlow = () => {
       result = result.filter(e => upcomingIds.has(e.id));
     }
 
+    // Apply search filter
+    if (searchTerm.trim()) {
+      const term = searchTerm.trim().toLowerCase();
+      result = result.filter(e =>
+        (e.description && e.description.toLowerCase().includes(term)) ||
+        (e.categoryName && e.categoryName.toLowerCase().includes(term)) ||
+        formatCurrency(e.amount).toLowerCase().includes(term) ||
+        formatDateBR(e.date).includes(term)
+      );
+    }
+
     return result;
-  }, [entries, summary, activeFilter, alerts]);
+  }, [entries, summary, activeFilter, alerts, searchTerm]);
 
   // Chart data
   const chartData = useMemo(() => {
@@ -508,7 +523,7 @@ const CashFlow = () => {
       {/* Entries */}
       {isMobile ? (
         <>
-          <Flex justify="space-between" align="center" mb={3}>
+          <Flex justify="space-between" align="center" mb={2}>
             <HStack>
               <Text fontWeight="bold" fontSize="sm">Lançamentos</Text>
               {activeFilter && (
@@ -518,6 +533,30 @@ const CashFlow = () => {
               )}
             </HStack>
           </Flex>
+          <Box mb={3}>
+            <InputGroup size="sm">
+              <InputLeftElement pointerEvents="none">
+                <SearchIcon color="gray.400" />
+              </InputLeftElement>
+              <Input
+                placeholder="Buscar lançamento..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                borderRadius="md"
+              />
+              {searchTerm && (
+                <InputRightElement>
+                  <IconButton
+                    icon={<CloseIcon />}
+                    size="xs"
+                    variant="ghost"
+                    aria-label="Limpar busca"
+                    onClick={() => setSearchTerm("")}
+                  />
+                </InputRightElement>
+              )}
+            </InputGroup>
+          </Box>
 
           {entriesWithBalance.length === 0 ? (
             <Box bg={tableBg} borderRadius="lg" borderWidth="1px" py={8} textAlign="center">
@@ -611,13 +650,35 @@ const CashFlow = () => {
       ) : (
         <Box bg={tableBg} borderRadius="lg" boxShadow="sm" borderWidth="1px" overflow="hidden">
           <Flex justify="space-between" align="center" px={4} py={3}>
-            <HStack>
+            <HStack spacing={3}>
               <Text fontWeight="bold" fontSize="sm">Lançamentos</Text>
               {activeFilter && (
                 <Button size="xs" colorScheme="gray" variant="outline" onClick={clearFilter}>
                   Limpar filtro
                 </Button>
               )}
+              <InputGroup size="sm" w="280px">
+                <InputLeftElement pointerEvents="none">
+                  <SearchIcon color="gray.400" />
+                </InputLeftElement>
+                <Input
+                  placeholder="Buscar por descrição, categoria, valor..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  borderRadius="md"
+                />
+                {searchTerm && (
+                  <InputRightElement>
+                    <IconButton
+                      icon={<CloseIcon />}
+                      size="xs"
+                      variant="ghost"
+                      aria-label="Limpar busca"
+                      onClick={() => setSearchTerm("")}
+                    />
+                  </InputRightElement>
+                )}
+              </InputGroup>
             </HStack>
             <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openNewEntry}>
               Novo lançamento
