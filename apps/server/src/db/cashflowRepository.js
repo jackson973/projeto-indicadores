@@ -54,11 +54,18 @@ async function updateCategory(id, name) {
 }
 
 async function deleteCategory(id) {
+  const usage = await db.query(
+    `SELECT COUNT(*)::int AS count FROM cashflow_entries WHERE category_id = $1`,
+    [id]
+  );
+  if (usage.rows[0].count > 0) {
+    return { inUse: true, count: usage.rows[0].count };
+  }
   const result = await db.query(
     `UPDATE cashflow_categories SET active = false WHERE id = $1 AND preset = false RETURNING id`,
     [id]
   );
-  return result.rowCount > 0;
+  return result.rowCount > 0 ? { deleted: true } : { deleted: false };
 }
 
 // ── Boxes ──
@@ -494,7 +501,7 @@ async function getDashboardData(startDate, endDate, grouping, boxId) {
   for (const row of result.rows) {
     const amount = parseFloat(row.amount);
     const periodKey = getPeriodKey(row.date, grouping);
-    const cat = row.category_name;
+    const cat = row.category_name.normalize('NFC').trim();
 
     if (!periodsMap[periodKey]) {
       periodsMap[periodKey] = { income: 0, expense: 0 };

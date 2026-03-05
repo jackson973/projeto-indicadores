@@ -90,6 +90,8 @@ const CashFlowDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [boxes, setBoxes] = useState([]);
   const [selectedBoxId, setSelectedBoxId] = useState(null);
+  const [activeExpCategory, setActiveExpCategory] = useState(null);
+  const [activeIncCategory, setActiveIncCategory] = useState(null);
   const toast = useToast();
 
   const cardBg = useColorModeValue("white", "gray.800");
@@ -152,6 +154,27 @@ const CashFlowDashboard = () => {
 
   const expTotal = expensesByCategory.reduce((s, e) => s + e.total, 0) || 1;
   const incTotal = incomeByCategory.reduce((s, e) => s + e.total, 0) || 1;
+
+  // Group small categories (< 2%) into "Outros"
+  const groupSmallCategories = (items, total) => {
+    const threshold = 0.02;
+    const main = [];
+    let othersTotal = 0;
+    for (const item of items) {
+      if (item.total / total >= threshold) {
+        main.push(item);
+      } else {
+        othersTotal += item.total;
+      }
+    }
+    if (othersTotal > 0) {
+      main.push({ category: "Outros", total: Number(othersTotal.toFixed(2)) });
+    }
+    return main;
+  };
+
+  const groupedExpenses = useMemo(() => groupSmallCategories(expensesByCategory, expTotal), [expensesByCategory, expTotal]);
+  const groupedIncome = useMemo(() => groupSmallCategories(incomeByCategory, incTotal), [incomeByCategory, incTotal]);
 
   return (
     <Box>
@@ -280,45 +303,68 @@ const CashFlowDashboard = () => {
         {/* Expenses by category */}
         <Box bg={panelBg} p={6} borderRadius="lg" boxShadow="sm">
           <Text fontSize="lg" fontWeight="bold" mb={4}>Despesas por categoria</Text>
-          {expensesByCategory.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie data={expensesByCategory} dataKey="total" nameKey="category" innerRadius={60} outerRadius={100}>
-                  {expensesByCategory.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const entry = payload[0];
-                    const pct = expTotal > 0 ? entry.value / expTotal : 0;
-                    return (
-                      <Box bg={tooltipBg} p={3} borderRadius="md" boxShadow="md" border="1px solid" borderColor={tooltipBorder}>
-                        <Text fontWeight="semibold" color={tooltipText}>{entry.name}</Text>
-                        <Text fontSize="sm" color={tooltipSubText}>Total: {formatCurrency(entry.value)}</Text>
-                        <Text fontSize="sm" color={tooltipSubText}>Participação: {formatPercent(pct, 1)}</Text>
-                      </Box>
-                    );
-                  }}
-                />
-                <Legend
-                  content={({ payload }) => (
-                    <Flex wrap="wrap" gap={2} justify="center" mt={2}>
-                      {(payload || []).map((entry) => {
-                        const pct = expTotal > 0 ? (entry.payload?.total || 0) / expTotal : 0;
-                        return (
-                          <Flex key={entry.value} align="center" gap={1} fontSize="xs" color={legendText}>
-                            <Box w="8px" h="8px" borderRadius="full" bg={entry.color} flexShrink={0} />
-                            <Text>{entry.value} {formatPercent(pct, 1)}</Text>
-                          </Flex>
-                        );
-                      })}
+          {groupedExpenses.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={groupedExpenses} dataKey="total" nameKey="category" innerRadius={60} outerRadius={100}>
+                    {groupedExpenses.map((item, i) => (
+                      <Cell
+                        key={i}
+                        fill={PIE_COLORS[i % PIE_COLORS.length]}
+                        opacity={activeExpCategory !== null && activeExpCategory !== item.category ? 0.25 : 1}
+                        stroke={activeExpCategory === item.category ? PIE_COLORS[i % PIE_COLORS.length] : "none"}
+                        strokeWidth={activeExpCategory === item.category ? 3 : 0}
+                        style={{ transition: "opacity 0.2s", cursor: "pointer" }}
+                        onClick={() => setActiveExpCategory(activeExpCategory === item.category ? null : item.category)}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const entry = payload[0];
+                      const pct = expTotal > 0 ? entry.value / expTotal : 0;
+                      return (
+                        <Box bg={tooltipBg} p={3} borderRadius="md" boxShadow="md" border="1px solid" borderColor={tooltipBorder}>
+                          <Text fontWeight="semibold" color={tooltipText}>{entry.name}</Text>
+                          <Text fontSize="sm" color={tooltipSubText}>Total: {formatCurrency(entry.value)}</Text>
+                          <Text fontSize="sm" color={tooltipSubText}>Participação: {formatPercent(pct, 1)}</Text>
+                        </Box>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <SimpleGrid columns={2} spacing={1} mt={3}>
+                {groupedExpenses.map((item, i) => {
+                  const pct = expTotal > 0 ? item.total / expTotal : 0;
+                  const isActive = activeExpCategory === item.category;
+                  return (
+                    <Flex
+                      key={item.category}
+                      align="center"
+                      gap={1.5}
+                      fontSize="xs"
+                      color={legendText}
+                      py={0.5}
+                      px={1}
+                      cursor="pointer"
+                      borderRadius="md"
+                      bg={isActive ? "whiteAlpha.200" : "transparent"}
+                      fontWeight={isActive ? "bold" : "normal"}
+                      opacity={activeExpCategory !== null && !isActive ? 0.5 : 1}
+                      _hover={{ bg: "whiteAlpha.100" }}
+                      onClick={() => setActiveExpCategory(isActive ? null : item.category)}
+                      transition="all 0.2s"
+                    >
+                      <Box w="8px" h="8px" borderRadius="full" bg={PIE_COLORS[i % PIE_COLORS.length]} flexShrink={0} />
+                      <Text noOfLines={1}>{item.category} {formatPercent(pct, 1)}</Text>
                     </Flex>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+                  );
+                })}
+              </SimpleGrid>
+            </>
           ) : (
             <Center py={10} color="gray.500"><Text>Sem dados de despesas no período.</Text></Center>
           )}
@@ -327,45 +373,68 @@ const CashFlowDashboard = () => {
         {/* Income by category */}
         <Box bg={panelBg} p={6} borderRadius="lg" boxShadow="sm">
           <Text fontSize="lg" fontWeight="bold" mb={4}>Receitas por categoria</Text>
-          {incomeByCategory.length > 0 ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <PieChart>
-                <Pie data={incomeByCategory} dataKey="total" nameKey="category" innerRadius={60} outerRadius={100}>
-                  {incomeByCategory.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  content={({ active, payload }) => {
-                    if (!active || !payload?.length) return null;
-                    const entry = payload[0];
-                    const pct = incTotal > 0 ? entry.value / incTotal : 0;
-                    return (
-                      <Box bg={tooltipBg} p={3} borderRadius="md" boxShadow="md" border="1px solid" borderColor={tooltipBorder}>
-                        <Text fontWeight="semibold" color={tooltipText}>{entry.name}</Text>
-                        <Text fontSize="sm" color={tooltipSubText}>Total: {formatCurrency(entry.value)}</Text>
-                        <Text fontSize="sm" color={tooltipSubText}>Participação: {formatPercent(pct, 1)}</Text>
-                      </Box>
-                    );
-                  }}
-                />
-                <Legend
-                  content={({ payload }) => (
-                    <Flex wrap="wrap" gap={2} justify="center" mt={2}>
-                      {(payload || []).map((entry) => {
-                        const pct = incTotal > 0 ? (entry.payload?.total || 0) / incTotal : 0;
-                        return (
-                          <Flex key={entry.value} align="center" gap={1} fontSize="xs" color={legendText}>
-                            <Box w="8px" h="8px" borderRadius="full" bg={entry.color} flexShrink={0} />
-                            <Text>{entry.value} {formatPercent(pct, 1)}</Text>
-                          </Flex>
-                        );
-                      })}
+          {groupedIncome.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={250}>
+                <PieChart>
+                  <Pie data={groupedIncome} dataKey="total" nameKey="category" innerRadius={60} outerRadius={100}>
+                    {groupedIncome.map((item, i) => (
+                      <Cell
+                        key={i}
+                        fill={PIE_COLORS[i % PIE_COLORS.length]}
+                        opacity={activeIncCategory !== null && activeIncCategory !== item.category ? 0.25 : 1}
+                        stroke={activeIncCategory === item.category ? PIE_COLORS[i % PIE_COLORS.length] : "none"}
+                        strokeWidth={activeIncCategory === item.category ? 3 : 0}
+                        style={{ transition: "opacity 0.2s", cursor: "pointer" }}
+                        onClick={() => setActiveIncCategory(activeIncCategory === item.category ? null : item.category)}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const entry = payload[0];
+                      const pct = incTotal > 0 ? entry.value / incTotal : 0;
+                      return (
+                        <Box bg={tooltipBg} p={3} borderRadius="md" boxShadow="md" border="1px solid" borderColor={tooltipBorder}>
+                          <Text fontWeight="semibold" color={tooltipText}>{entry.name}</Text>
+                          <Text fontSize="sm" color={tooltipSubText}>Total: {formatCurrency(entry.value)}</Text>
+                          <Text fontSize="sm" color={tooltipSubText}>Participação: {formatPercent(pct, 1)}</Text>
+                        </Box>
+                      );
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              <SimpleGrid columns={2} spacing={1} mt={3}>
+                {groupedIncome.map((item, i) => {
+                  const pct = incTotal > 0 ? item.total / incTotal : 0;
+                  const isActive = activeIncCategory === item.category;
+                  return (
+                    <Flex
+                      key={item.category}
+                      align="center"
+                      gap={1.5}
+                      fontSize="xs"
+                      color={legendText}
+                      py={0.5}
+                      px={1}
+                      cursor="pointer"
+                      borderRadius="md"
+                      bg={isActive ? "whiteAlpha.200" : "transparent"}
+                      fontWeight={isActive ? "bold" : "normal"}
+                      opacity={activeIncCategory !== null && !isActive ? 0.5 : 1}
+                      _hover={{ bg: "whiteAlpha.100" }}
+                      onClick={() => setActiveIncCategory(isActive ? null : item.category)}
+                      transition="all 0.2s"
+                    >
+                      <Box w="8px" h="8px" borderRadius="full" bg={PIE_COLORS[i % PIE_COLORS.length]} flexShrink={0} />
+                      <Text noOfLines={1}>{item.category} {formatPercent(pct, 1)}</Text>
                     </Flex>
-                  )}
-                />
-              </PieChart>
-            </ResponsiveContainer>
+                  );
+                })}
+              </SimpleGrid>
+            </>
           ) : (
             <Center py={10} color="gray.500"><Text>Sem dados de receitas no período.</Text></Center>
           )}

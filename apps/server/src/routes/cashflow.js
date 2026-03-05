@@ -98,8 +98,11 @@ router.put('/categories/:id', async (req, res) => {
 
 router.delete('/categories/:id', async (req, res) => {
   try {
-    const deleted = await repo.deleteCategory(req.params.id);
-    if (!deleted) return res.status(404).json({ message: 'Categoria não encontrada ou é pré-definida.' });
+    const result = await repo.deleteCategory(req.params.id);
+    if (result.inUse) {
+      return res.status(409).json({ message: `Categoria em uso por ${result.count} lançamento${result.count !== 1 ? 's' : ''}. Remova os lançamentos antes de excluir.` });
+    }
+    if (!result.deleted) return res.status(404).json({ message: 'Categoria não encontrada ou é pré-definida.' });
     return res.json({ message: 'Categoria desativada.' });
   } catch (error) {
     console.error('Delete category error:', error);
