@@ -179,11 +179,11 @@ const TerceirosSupplierPrices = () => {
         if (data.length > 0) {
           setBulkRows(data.map((p) => ({ part: p.code, partLabel: `${p.code}${p.name ? ` - ${p.name}` : ""}`, price: 0, _key: p.code })));
         } else {
-          setBulkRows([{ part: "", partLabel: "Todas", price: 0, _key: "all" }]);
+          setBulkRows([]);
         }
       } catch {
         setBulkParts([]);
-        setBulkRows([{ part: "", partLabel: "Todas", price: 0, _key: "all" }]);
+        setBulkRows([]);
       } finally {
         setLoadingBulkParts(false);
       }
@@ -880,7 +880,7 @@ const TerceirosSupplierPrices = () => {
                 </Center>
               ) : !loadingBulkParts && bulkRows.length === 0 ? (
                 <Center py={6}>
-                  <Text fontSize="sm" color="gray.500">Nenhuma parte encontrada para este fornecedor/grupo.</Text>
+                  <Text fontSize="sm" color="orange.500" fontWeight="medium">Nenhuma parte/OF encontrada para este fornecedor/grupo. Não é possível cadastrar preços.</Text>
                 </Center>
               ) : (
                 /* Grid */
