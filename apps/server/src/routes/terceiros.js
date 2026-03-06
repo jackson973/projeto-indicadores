@@ -235,6 +235,185 @@ router.delete('/supplier-prices/:id', async (req, res) => {
   }
 });
 
+// ── Supplier Prices Export ────────────────────────────────────────────────────
+
+const formatPriceCur = (v) => {
+  const num = parseFloat(v) || 0;
+  return num.toLocaleString('pt-BR', { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+};
+
+const formatDateBR = (val) => {
+  if (!val || val === 'null') return '-';
+  const str = typeof val === 'string' ? val.slice(0, 10) : '';
+  if (!str || str.length < 10) return '-';
+  const d = new Date(str + 'T00:00:00');
+  if (isNaN(d.getTime())) return '-';
+  return d.toLocaleDateString('pt-BR');
+};
+
+const vigenciaLabel = (vFrom, vUntil) => {
+  const from = formatDateBR(vFrom);
+  const until = formatDateBR(vUntil);
+  if (from === '-' && until === '-') return 'Sem vigencia';
+  if (from === '-') return `Ate ${until}`;
+  if (until === '-') return `A partir de ${from}`;
+  return `${from} a ${until}`;
+};
+
+router.get('/supplier-prices/export/excel', async (req, res) => {
+  try {
+    const { codcli } = req.query;
+    if (!codcli) return res.status(400).json({ message: 'Fornecedor obrigatorio.' });
+
+    const prices = await repo.getSupplierPrices({ codcli });
+    if (prices.length === 0) return res.status(404).json({ message: 'Nenhum preco encontrado.' });
+
+    const supplierName = prices[0].supplierName || codcli;
+
+    const rows = prices.map(p => ({
+      'Grupo': p.groupName || '',
+      'Parte': p.part ? `${p.part}${p.partName ? ' - ' + p.partName : ''}` : 'Todas',
+      'Preco (R$)': parseFloat(p.price) || 0,
+      'Vigencia De': formatDateBR(p.validFrom),
+      'Vigencia Ate': formatDateBR(p.validUntil),
+    }));
+
+    const ws = xlsx.utils.json_to_sheet(rows);
+    // Set column widths
+    ws['!cols'] = [{ wch: 35 }, { wch: 25 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+    const wb = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(wb, ws, 'Precos');
+    const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const filename = `precos_${supplierName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    return res.send(buffer);
+  } catch (error) {
+    console.error('Export supplier prices excel error:', error);
+    return res.status(500).json({ message: 'Erro ao exportar Excel.' });
+  }
+});
+
+router.get('/supplier-prices/export/pdf', async (req, res) => {
+  try {
+    const { codcli } = req.query;
+    if (!codcli) return res.status(400).json({ message: 'Fornecedor obrigatorio.' });
+
+    const prices = await repo.getSupplierPrices({ codcli });
+    if (prices.length === 0) return res.status(404).json({ message: 'Nenhum preco encontrado.' });
+
+    const supplierName = prices[0].supplierName || codcli;
+
+    // Get system settings for logo
+    const db = require('../db/connection');
+    const settingsResult = await db.query('SELECT logo_path, company_name FROM system_settings WHERE id = 1');
+    const sysSettings = settingsResult.rows[0] || {};
+
+    let logoHtml = '';
+    if (sysSettings.logo_path) {
+      const logoFullPath = require('path').resolve(__dirname, '../../uploads', sysSettings.logo_path);
+      if (fs.existsSync(logoFullPath)) {
+        const logoBuffer = fs.readFileSync(logoFullPath);
+        const ext = require('path').extname(sysSettings.logo_path).toLowerCase();
+        const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp' };
+        const mime = mimeMap[ext] || 'image/png';
+        logoHtml = `<img src="data:${mime};base64,${logoBuffer.toString('base64')}" style="max-height:60px;max-width:200px;" />`;
+      }
+    }
+    const companyName = sysSettings.company_name || '';
+
+    // Check which prices are currently active
+    const today = new Date().toISOString().slice(0, 10);
+    const isActive = (vFrom, vUntil) => {
+      const fromOk = !vFrom || vFrom <= today;
+      const untilOk = !vUntil || vUntil >= today;
+      return fromOk && untilOk;
+    };
+
+    // Group by groupName for better organization
+    const byGroup = new Map();
+    for (const p of prices) {
+      const gName = p.groupName || 'Sem grupo';
+      if (!byGroup.has(gName)) byGroup.set(gName, []);
+      byGroup.get(gName).push(p);
+    }
+
+    let rowsHtml = '';
+    let currentGroup = '';
+    for (const [groupName, items] of byGroup) {
+      rowsHtml += `<tr class="group-header"><td colspan="4" style="background:#edf2f7;font-weight:bold;font-size:11px;padding:6px 8px;">${groupName}</td></tr>`;
+      for (const p of items) {
+        const active = isActive(p.validFrom, p.validUntil);
+        const partLabel = p.part ? `${p.part}${p.partName ? ' - ' + p.partName : ''}` : 'Todas';
+        rowsHtml += `<tr>
+          <td style="padding-left:20px;">${partLabel}</td>
+          <td class="right">R$ ${formatPriceCur(p.price)}</td>
+          <td>${vigenciaLabel(p.validFrom, p.validUntil)}</td>
+          <td class="center">${active ? '<span style="color:#38a169;font-weight:bold;">Vigente</span>' : '<span style="color:#999;">Expirado</span>'}</td>
+        </tr>`;
+      }
+    }
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+  body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; color: #333; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+  .header-left { display: flex; align-items: center; gap: 15px; }
+  .title { font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 15px; }
+  .supplier-info { margin-bottom: 15px; background: #f9f9f9; padding: 10px; border-radius: 4px; }
+  .supplier-info p { margin: 2px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #2d3748; color: #fff; padding: 6px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 5px 8px; font-size: 10px; border-bottom: 1px solid #e2e8f0; }
+  tr:nth-child(even):not(.group-header) td { background: #f7fafc; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  .footer { margin-top: 20px; font-size: 9px; color: #666; text-align: center; }
+</style></head><body>
+  <div class="header">
+    <div class="header-left">
+      ${logoHtml}
+      <div><strong>${companyName}</strong></div>
+    </div>
+    <div style="text-align:right;font-size:9px;color:#666;">
+      ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}
+    </div>
+  </div>
+  <div class="title">Precos por Fornecedor</div>
+  <div class="supplier-info">
+    <p><strong>Fornecedor:</strong> ${codcli} - ${supplierName}</p>
+    <p><strong>Total de precos:</strong> ${prices.length}</p>
+  </div>
+  <table>
+    <thead><tr>
+      <th style="text-align:left;">Parte</th>
+      <th style="text-align:right;">Preco (R$)</th>
+      <th style="text-align:left;">Vigencia</th>
+      <th style="text-align:center;">Status</th>
+    </tr></thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <div class="footer">Gerado em ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
+</body></html>`;
+
+    const puppeteer = require('puppeteer');
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdf = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' } });
+    await browser.close();
+
+    const filename = `precos_${supplierName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/pdf');
+    return res.send(Buffer.from(pdf));
+  } catch (error) {
+    console.error('Export supplier prices PDF error:', error);
+    return res.status(500).json({ message: 'Erro ao exportar PDF.' });
+  }
+});
+
 // ── OFs ─────────────────────────────────────────────────────────────────────
 
 router.get('/ofs', async (req, res) => {

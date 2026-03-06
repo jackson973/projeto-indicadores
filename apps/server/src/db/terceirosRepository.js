@@ -397,7 +397,9 @@ async function getSupplierPrices({ codcli, groupId } = {}) {
     `SELECT sp.id, sp.codcli, sp.supplier_name AS "supplierName",
             sp.group_id AS "groupId", pg.name AS "groupName",
             sp.part, sp.price, sp.valid_from AS "validFrom", sp.valid_until AS "validUntil",
-            sp.created_at AS "createdAt", sp.updated_at AS "updatedAt"
+            sp.created_at AS "createdAt", sp.updated_at AS "updatedAt",
+            (SELECT o.fac_descparte FROM terceiros_ofs o
+             WHERE o.fac_parte = sp.part LIMIT 1) AS "partName"
      FROM terceiros_supplier_prices sp
      INNER JOIN terceiros_product_groups pg ON pg.id = sp.group_id
      WHERE ${conditions.join(' AND ')}

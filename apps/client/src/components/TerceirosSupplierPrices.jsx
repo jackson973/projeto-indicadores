@@ -32,7 +32,9 @@ import {
   Flex,
   Spinner,
   Center,
-  Divider
+  Divider,
+  Tooltip,
+  createIcon
 } from "@chakra-ui/react";
 import { AddIcon, EditIcon, DeleteIcon, ChevronDownIcon, ChevronRightIcon, TimeIcon, CloseIcon } from "@chakra-ui/icons";
 import {
@@ -43,7 +45,8 @@ import {
   deleteTerceirosSupplierPrice,
   fetchTerceirosSuppliers,
   fetchTerceirosProductGroups,
-  fetchTerceirosParts
+  fetchTerceirosParts,
+  getToken
 } from "../api";
 const formatPrice = (value) =>
   new Intl.NumberFormat("pt-BR", {
@@ -53,6 +56,30 @@ const formatPrice = (value) =>
     maximumFractionDigits: 3
   }).format(Number(value || 0));
 import SearchableSelect from "./SearchableSelect";
+
+const PdfIcon = createIcon({
+  displayName: "PdfIcon",
+  viewBox: "0 0 24 24",
+  path: (
+    <>
+      <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" fill="#E53E3E" />
+      <path d="M14 2v6h6" fill="#FC8181" />
+      <text x="12" y="17" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold" fontFamily="Arial">PDF</text>
+    </>
+  )
+});
+
+const ExcelIcon = createIcon({
+  displayName: "ExcelIcon",
+  viewBox: "0 0 24 24",
+  path: (
+    <>
+      <path d="M14 2H6C4.9 2 4 2.9 4 4v16c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8l-6-6z" fill="#38A169" />
+      <path d="M14 2v6h6" fill="#68D391" />
+      <text x="12" y="17" textAnchor="middle" fill="white" fontSize="5.5" fontWeight="bold" fontFamily="Arial">XLS</text>
+    </>
+  )
+});
 
 const emptyForm = {
   codcli: "",
@@ -245,6 +272,7 @@ const TerceirosSupplierPrices = () => {
           groupId: row.groupId || row.group_id,
           groupName: row.groupName || row.group_name,
           part: row.part,
+          partName: row.partName,
           entries: []
         });
       }
@@ -462,6 +490,48 @@ const TerceirosSupplierPrices = () => {
     }
   };
 
+  // ── Export helpers ──────────────────────────────────────────────────────────
+  const downloadBlob = (blob, filename) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  };
+
+  const handleExportExcel = async (codcli) => {
+    try {
+      const token = getToken();
+      const response = await fetch(`/api/terceiros/supplier-prices/export/excel?codcli=${encodeURIComponent(codcli)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error("Erro ao exportar Excel.");
+      const blob = await response.blob();
+      const name = supplierLabel(codcli).replace(/[^a-zA-Z0-9]/g, "_");
+      downloadBlob(blob, `precos_${name}.xlsx`);
+    } catch (err) {
+      toast({ title: "Erro ao exportar Excel.", status: "error", duration: 3000 });
+    }
+  };
+
+  const handleExportPdf = async (codcli) => {
+    try {
+      const token = getToken();
+      const response = await fetch(`/api/terceiros/supplier-prices/export/pdf?codcli=${encodeURIComponent(codcli)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error("Erro ao exportar PDF.");
+      const blob = await response.blob();
+      const name = supplierLabel(codcli).replace(/[^a-zA-Z0-9]/g, "_");
+      downloadBlob(blob, `precos_${name}.pdf`);
+    } catch (err) {
+      toast({ title: "Erro ao exportar PDF.", status: "error", duration: 3000 });
+    }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   const FiltersBar = isMobile ? (
     <VStack spacing={3} mb={4} align="stretch">
@@ -556,7 +626,7 @@ const TerceirosSupplierPrices = () => {
                       </Text>
                       <Text fontSize="xs" color="gray.500">
                         {group.groupName || groupLabel(group.groupId)}
-                        {group.part ? ` · ${group.part}` : ""}
+                        {group.part ? ` · ${group.part}${group.partName ? ` - ${group.partName}` : ""}` : ""}
                       </Text>
                     </Box>
                     <HStack spacing={1} ml={2} flexShrink={0}>
@@ -648,9 +718,17 @@ const TerceirosSupplierPrices = () => {
                   <Text fontSize="sm" fontWeight="bold" flex={1}>
                     {sg.supplierName || supplierLabel(sg.codcli)}
                   </Text>
-                  <Badge colorScheme="blue" fontSize="xs">
-                    {sg.items.length} preço{sg.items.length !== 1 ? "s" : ""}
-                  </Badge>
+                  <HStack spacing={1} ml={2}>
+                    <Tooltip label="Exportar PDF">
+                      <IconButton icon={<PdfIcon boxSize={5} />} size="xs" variant="ghost" aria-label="Exportar PDF" onClick={(e) => { e.stopPropagation(); handleExportPdf(sg.codcli); }} />
+                    </Tooltip>
+                    <Tooltip label="Exportar Excel">
+                      <IconButton icon={<ExcelIcon boxSize={5} />} size="xs" variant="ghost" aria-label="Exportar Excel" onClick={(e) => { e.stopPropagation(); handleExportExcel(sg.codcli); }} />
+                    </Tooltip>
+                    <Badge colorScheme="blue" fontSize="xs">
+                      {sg.items.length} preço{sg.items.length !== 1 ? "s" : ""}
+                    </Badge>
+                  </HStack>
                 </Flex>
 
                 {/* Expanded: table of prices for this supplier */}
@@ -691,7 +769,7 @@ const TerceirosSupplierPrices = () => {
                                   )}
                                 </Td>
                                 <Td><Text fontSize="sm" whiteSpace="nowrap">{group.groupName || groupLabel(group.groupId)}</Text></Td>
-                                <Td><Text fontSize="sm" whiteSpace="nowrap">{group.part || "Todas"}</Text></Td>
+                                <Td><Text fontSize="sm" whiteSpace="nowrap">{group.part ? `${group.part}${group.partName ? ` - ${group.partName}` : ""}` : "Todas"}</Text></Td>
                                 <Td isNumeric><Text fontWeight="semibold" whiteSpace="nowrap">{formatPrice(current.price)}</Text></Td>
                                 <Td>
                                   <HStack spacing={2}>
