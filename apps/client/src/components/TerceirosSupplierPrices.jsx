@@ -45,7 +45,13 @@ import {
   fetchTerceirosProductGroups,
   fetchTerceirosParts
 } from "../api";
-import { formatCurrency } from "../utils/format";
+const formatPrice = (value) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3
+  }).format(Number(value || 0));
 import SearchableSelect from "./SearchableSelect";
 
 const emptyForm = {
@@ -58,7 +64,7 @@ const emptyForm = {
 };
 
 const formatBRL = (v) =>
-  v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  v.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
 const TerceirosSupplierPrices = () => {
   const [prices, setPrices] = useState([]);
@@ -229,8 +235,8 @@ const TerceirosSupplierPrices = () => {
   // ── Currency input handler ────────────────────────────────────────────────
   const handleCurrencyChange = (e) => {
     const digits = e.target.value.replace(/\D/g, "");
-    const cents = parseInt(digits || "0", 10);
-    setForm({ ...form, price: cents / 100 });
+    const mils = parseInt(digits || "0", 10);
+    setForm({ ...form, price: mils / 1000 });
   };
 
   // ── Modal open helpers ────────────────────────────────────────────────────
@@ -420,7 +426,7 @@ const TerceirosSupplierPrices = () => {
                   <Flex justify="space-between" align="center">
                     <Box>
                       <Text fontSize="xs" color="gray.500">Preço atual</Text>
-                      <Text fontSize="lg" fontWeight="bold" color="blue.600">{formatCurrency(current.price)}</Text>
+                      <Text fontSize="lg" fontWeight="bold" color="blue.600">{formatPrice(current.price)}</Text>
                     </Box>
                     <Box textAlign="right">
                       <Text fontSize="xs" color="gray.500">Vigência</Text>
@@ -462,7 +468,7 @@ const TerceirosSupplierPrices = () => {
                         >
                           <TimeIcon boxSize={3} color="gray.400" mr={2} flexShrink={0} />
                           <Box flex={1} minW={0}>
-                            <Text fontSize="sm" fontWeight="medium">{formatCurrency(row.price)}</Text>
+                            <Text fontSize="sm" fontWeight="medium">{formatPrice(row.price)}</Text>
                             <Text fontSize="xs" color="gray.500">{vigenciaLabel(hFrom, hUntil)}</Text>
                           </Box>
                           <HStack spacing={1} flexShrink={0}>
@@ -519,7 +525,7 @@ const TerceirosSupplierPrices = () => {
                       <Td><Text fontSize="sm" fontWeight="medium">{group.supplierName || supplierLabel(group.codcli)}</Text></Td>
                       <Td><Text fontSize="sm">{group.groupName || groupLabel(group.groupId)}</Text></Td>
                       <Td><Text fontSize="sm">{group.part || "Todas"}</Text></Td>
-                      <Td isNumeric><Text fontWeight="semibold">{formatCurrency(current.price)}</Text></Td>
+                      <Td isNumeric><Text fontWeight="semibold">{formatPrice(current.price)}</Text></Td>
                       <Td>
                         <HStack spacing={2}>
                           <Text fontSize="sm">{vigenciaLabel(vFrom, vUntil)}</Text>
@@ -554,7 +560,7 @@ const TerceirosSupplierPrices = () => {
                               <Text fontSize="xs" color="gray.500">Histórico</Text>
                             </HStack>
                           </Td>
-                          <Td isNumeric><Text fontSize="sm">{formatCurrency(row.price)}</Text></Td>
+                          <Td isNumeric><Text fontSize="sm">{formatPrice(row.price)}</Text></Td>
                           <Td><Text fontSize="sm" color="gray.500">{vigenciaLabel(hFrom, hUntil)}</Text></Td>
                           <Td>
                             <HStack spacing={1}>
