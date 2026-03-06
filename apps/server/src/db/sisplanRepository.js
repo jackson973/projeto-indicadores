@@ -16,6 +16,12 @@ async function getSettings() {
             nf_last_sync_status AS "nfLastSyncStatus",
             nf_last_sync_message AS "nfLastSyncMessage",
             nf_last_sync_rows AS "nfLastSyncRows",
+            of_active AS "ofActive", of_sql_query AS "ofSqlQuery",
+            of_column_mapping AS "ofColumnMapping",
+            of_last_sync_at AT TIME ZONE 'America/Sao_Paulo' AS "ofLastSyncAt",
+            of_last_sync_status AS "ofLastSyncStatus",
+            of_last_sync_message AS "ofLastSyncMessage",
+            of_last_sync_rows AS "ofLastSyncRows",
             created_at AT TIME ZONE 'America/Sao_Paulo' AS "createdAt", updated_at AT TIME ZONE 'America/Sao_Paulo' AS "updatedAt"
      FROM sisplan_settings WHERE id = 1`
   );
@@ -42,7 +48,8 @@ async function getSettings() {
 async function updateSettings({
   active, host, port, databasePath, fbUser, fbPassword,
   sqlQuery, columnMapping, syncIntervalMinutes,
-  nfActive, nfSqlQuery, nfColumnMapping, nfBasePath, nfLocalPath
+  nfActive, nfSqlQuery, nfColumnMapping, nfBasePath, nfLocalPath,
+  ofActive, ofSqlQuery, ofColumnMapping
 }) {
   let passwordClause = '';
   const params = [
@@ -50,9 +57,11 @@ async function updateSettings({
     sqlQuery, columnMapping || {}, syncIntervalMinutes || 5,
     nfActive || false, (nfSqlQuery || '').trim() || null,
     nfColumnMapping || {}, (nfBasePath || '').trim() || null,
-    (nfLocalPath || '').trim() || null
+    (nfLocalPath || '').trim() || null,
+    ofActive || false, (ofSqlQuery || '').trim() || null,
+    ofColumnMapping || {}
   ];
-  let paramIndex = 14;
+  let paramIndex = 17;
 
   if (fbPassword) {
     const encrypted = encrypt(fbPassword);
@@ -66,7 +75,8 @@ async function updateSettings({
        active = $1, host = $2, port = $3, database_path = $4, fb_user = $5,
        sql_query = $6, column_mapping = $7, sync_interval_minutes = $8,
        nf_active = $9, nf_sql_query = $10, nf_column_mapping = $11, nf_base_path = $12,
-       nf_local_path = $13
+       nf_local_path = $13,
+       of_active = $14, of_sql_query = $15, of_column_mapping = $16
        ${passwordClause}
      WHERE id = 1
      RETURNING id, active, host, port, database_path AS "databasePath",
@@ -81,7 +91,13 @@ async function updateSettings({
                nf_last_sync_at AT TIME ZONE 'America/Sao_Paulo' AS "nfLastSyncAt",
                nf_last_sync_status AS "nfLastSyncStatus",
                nf_last_sync_message AS "nfLastSyncMessage",
-               nf_last_sync_rows AS "nfLastSyncRows"`,
+               nf_last_sync_rows AS "nfLastSyncRows",
+               of_active AS "ofActive", of_sql_query AS "ofSqlQuery",
+               of_column_mapping AS "ofColumnMapping",
+               of_last_sync_at AT TIME ZONE 'America/Sao_Paulo' AS "ofLastSyncAt",
+               of_last_sync_status AS "ofLastSyncStatus",
+               of_last_sync_message AS "ofLastSyncMessage",
+               of_last_sync_rows AS "ofLastSyncRows"`,
     params
   );
 
@@ -132,10 +148,23 @@ async function updateNfSyncStatus(status, message, rows) {
   );
 }
 
+async function updateOfSyncStatus(status, message, rows) {
+  await db.query(
+    `UPDATE sisplan_settings SET
+       of_last_sync_at = CURRENT_TIMESTAMP,
+       of_last_sync_status = $1,
+       of_last_sync_message = $2,
+       of_last_sync_rows = $3
+     WHERE id = 1`,
+    [status, message, rows || 0]
+  );
+}
+
 module.exports = {
   getSettings,
   updateSettings,
   isActive,
   updateSyncStatus,
-  updateNfSyncStatus
+  updateNfSyncStatus,
+  updateOfSyncStatus
 };

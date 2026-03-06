@@ -16,6 +16,7 @@ import {
   FormLabel,
   HStack,
   IconButton,
+  Image,
   Select,
   Spinner,
   Tooltip,
@@ -60,6 +61,10 @@ import ConversationLogs from "./components/ConversationLogs";
 import DatabaseManager from "./components/DatabaseManager";
 import CashFlow from "./components/CashFlow";
 import CashFlowDashboard from "./components/CashFlowDashboard";
+import TerceirosSettlement from "./components/TerceirosSettlement";
+import TerceirosProductGroups from "./components/TerceirosProductGroups";
+import TerceirosSupplierPrices from "./components/TerceirosSupplierPrices";
+import SystemSettings from "./components/SystemSettings";
 import { getSaoPauloDate, getSaoPauloYear, getSaoPauloMonth } from "./utils/timezone";
 import {
   fetchSummary,
@@ -75,7 +80,8 @@ import {
   getToken,
   fetchSisplanActive,
   refreshSisplanData,
-  refreshUpsellerTodayAnalytics
+  refreshUpsellerTodayAnalytics,
+  fetchSystemSettings
 } from "./api";
 
 const SIDEBAR_EXPANDED = "220px";
@@ -143,6 +149,12 @@ const ChartBarIcon = (props) => (
   </svg>
 );
 
+const FactoryIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M22 22H2V10l7-3v3l7-3v3l6-3v15zM4 20h16V9.83l-4 2V8.83l-7 3V8.83l-5 2.15V20zm2-8h3v2H6v-2zm5 0h3v2h-3v-2zm5 0h3v2h-3v-2zM6 16h3v2H6v-2zm5 0h3v2h-3v-2zm5 0h3v2h-3v-2z" />
+  </svg>
+);
+
 const PlayIcon = (props) => (
   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
     <path d="M8 5v14l11-7z" />
@@ -174,6 +186,7 @@ const App = () => {
   const [expandedMenu, setExpandedMenu] = useState(null); // For submenu expansion
   const [autoplay, setAutoplay] = useState(true);
   const [sisplanActive, setSisplanActive] = useState(false);
+  const [systemLogo, setSystemLogo] = useState(null);
   const isMobile = useBreakpointValue({ base: true, md: false });
   const mobileMenu = useDisclosure();
   const canceledDrawer = useDisclosure();
@@ -229,7 +242,16 @@ const App = () => {
     fetchSisplanActive()
       .then((data) => setSisplanActive(data.active))
       .catch(() => {});
+    loadSystemLogo();
   }, [user]);
+
+  const loadSystemLogo = () => {
+    fetchSystemSettings()
+      .then((data) => {
+        setSystemLogo(data.logoPath ? `/uploads/${data.logoPath}?t=${Date.now()}` : null);
+      })
+      .catch(() => {});
+  };
 
   const handleLogin = async (email, password) => {
     const result = await login(email, password);
@@ -358,6 +380,25 @@ const App = () => {
       show: true
     },
     {
+      label: "Terceiros",
+      icon: <FactoryIcon />,
+      show: true,
+      submenu: [
+        {
+          label: "Fechamento",
+          view: "terceiros-settlement"
+        },
+        {
+          label: "Grupos de Produtos",
+          view: "terceiros-groups"
+        },
+        {
+          label: "Precos por Fornecedor",
+          view: "terceiros-prices"
+        }
+      ]
+    },
+    {
       label: "Configurações",
       icon: <SettingsIcon />,
       show: user?.role === "admin",
@@ -369,6 +410,10 @@ const App = () => {
         {
           label: "Conexão Sisplan",
           view: "sisplan-settings"
+        },
+        {
+          label: "Sistema",
+          view: "system-settings"
         },
         {
           label: "WhatsApp Bot",
@@ -399,9 +444,13 @@ const App = () => {
       {/* Header */}
       <Flex align="center" justify="space-between" px={5} py={4} minH="64px">
         <Box>
-          <Text fontSize="lg" fontWeight="bold" color="blue.500" whiteSpace="nowrap">
-            Indicadores
-          </Text>
+          {systemLogo ? (
+            <Image src={systemLogo} alt="Logo" maxH="56px" maxW="180px" objectFit="contain" />
+          ) : (
+            <Text fontSize="lg" fontWeight="bold" color="blue.500" whiteSpace="nowrap">
+              Indicadores
+            </Text>
+          )}
           <Text fontSize="xs" color="gray.500" mt={1} whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis" maxW="140px">
             {user.name}
           </Text>
@@ -683,7 +732,7 @@ const App = () => {
           </Alert>
         )}
 
-        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && (
+        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && activeView !== "terceiros-settlement" && activeView !== "terceiros-groups" && activeView !== "terceiros-prices" && activeView !== "system-settings" && (
           <Center py={10}>
             <Box maxW="680px" w="full">
               <UploadForm onUpload={handleUpload} />
@@ -725,6 +774,22 @@ const App = () => {
 
         {activeView === "financial-dashboard" && (
           <CashFlowDashboard />
+        )}
+
+        {activeView === "terceiros-settlement" && (
+          <TerceirosSettlement />
+        )}
+
+        {activeView === "terceiros-groups" && (
+          <TerceirosProductGroups />
+        )}
+
+        {activeView === "terceiros-prices" && (
+          <TerceirosSupplierPrices />
+        )}
+
+        {activeView === "system-settings" && user?.role === "admin" && (
+          <SystemSettings onLogoChange={() => loadSystemLogo()} />
         )}
 
         {hasData && activeView === "dashboard" && (

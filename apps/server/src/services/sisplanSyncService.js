@@ -4,6 +4,7 @@ const { XdrReader, BlrReader } = require('node-firebird/lib/wire/serialize');
 const sisplanRepo = require('../db/sisplanRepository');
 const salesRepo = require('../db/salesRepository');
 const notasFiscaisRepo = require('../db/notasFiscaisRepository');
+const terceirosRepo = require('../db/terceirosRepository');
 
 // node-firebird exporta o objeto de constantes como Object.freeze(), então não é
 // possível alterar DEFAULT_ENCODING. A solução é sobrescrever os métodos de leitura
@@ -297,6 +298,111 @@ async function runNfSync() {
   }
 }
 
+function mapOfRow(row, columnMapping) {
+  const fieldKeys = Object.keys(row);
+
+  const getValue = (systemField) => {
+    const sourceColumn = columnMapping[systemField];
+    if (!sourceColumn) return null;
+    const key = fieldKeys.find(k => k.toUpperCase() === sourceColumn.toUpperCase());
+    if (key === undefined) return null;
+    const val = row[key];
+    return val !== null && val !== undefined ? val : null;
+  };
+
+  return {
+    facNumero: getValue('fac_numero') ? String(getValue('fac_numero')).trim() : null,
+    facLancto: getValue('fac_lancto') ? String(getValue('fac_lancto')).trim() : null,
+    facDtS: getValue('fac_dt_s') || null,
+    facDtLan: getValue('fac_dt_lan') || null,
+    facDtPrevRet: getValue('fac_dt_prev_ret') || null,
+    facCodsetor: getValue('fac_codsetor') ? String(getValue('fac_codsetor')).trim() : null,
+    facDescsetor: getValue('fac_descsetor') ? String(getValue('fac_descsetor')).trim() : null,
+    facQtOrig: parseFloat(getValue('fac_qt_orig')) || 0,
+    facQuant: parseFloat(getValue('fac_quant')) || 0,
+    facTam: getValue('fac_tam') ? String(getValue('fac_tam')).trim() : null,
+    facCor: getValue('fac_cor') ? String(getValue('fac_cor')).trim() : null,
+    facDesccor: getValue('fac_desccor') ? String(getValue('fac_desccor')).trim() : null,
+    facParte: getValue('fac_parte') ? String(getValue('fac_parte')).trim() : null,
+    facDescparte: getValue('fac_descparte') ? String(getValue('fac_descparte')).trim() : null,
+    facCodigoProduto: getValue('fac_codigo_produto') ? String(getValue('fac_codigo_produto')).trim() : null,
+    facDescProduto: getValue('fac_desc_produto') ? String(getValue('fac_desc_produto')).trim() : null,
+    produtoUnidade: getValue('produto_unidade') ? String(getValue('produto_unidade')).trim() : null,
+    facCodcli: getValue('fac_codcli') ? String(getValue('fac_codcli')).trim() : null,
+    clienteNome: getValue('cliente_nome') ? String(getValue('cliente_nome')).trim() : null,
+    dddFone: getValue('ddd_fone') ? String(getValue('ddd_fone')).trim() : null,
+    clienteFone: getValue('cliente_fone') ? String(getValue('cliente_fone')).trim() : null,
+    foneCompl: getValue('fone_compl') ? String(getValue('fone_compl')).trim() : null,
+    clienteEndereco: getValue('cliente_endereco') ? String(getValue('cliente_endereco')).trim() : null,
+    numEnd: getValue('num_end') ? String(getValue('num_end')).trim() : null,
+    clienteBairro: getValue('cliente_bairro') ? String(getValue('cliente_bairro')).trim() : null,
+    clienteCep: getValue('cliente_cep') ? String(getValue('cliente_cep')).trim() : null,
+    clienteUf: getValue('cliente_uf') ? String(getValue('cliente_uf')).trim() : null,
+    clienteCidade: getValue('cliente_cidade') ? String(getValue('cliente_cidade')).trim() : null,
+    clienteComplemento: getValue('cliente_complemento') ? String(getValue('cliente_complemento')).trim() : null,
+    clienteCnpj: getValue('cliente_cnpj') ? String(getValue('cliente_cnpj')).trim() : null,
+    clienteInscricao: getValue('cliente_inscricao') ? String(getValue('cliente_inscricao')).trim() : null,
+    clienteFantasia: getValue('cliente_fantasia') ? String(getValue('cliente_fantasia')).trim() : null,
+    clienteFax: getValue('cliente_fax') ? String(getValue('cliente_fax')).trim() : null,
+    facPeriodoOf: getValue('fac_periodo_of') ? String(getValue('fac_periodo_of')).trim() : null,
+  };
+}
+
+async function runOfSync() {
+  slog('[Sisplan OF Sync] Starting OF sync...');
+
+  try {
+    const settings = await sisplanRepo.getSettings();
+    if (!settings || !settings.ofActive) {
+      slog('[Sisplan OF Sync] OF integration not active, skipping.');
+      return { success: false, message: 'Sincronizacao de OFs nao ativa.' };
+    }
+
+    if (!settings.host || !settings.databasePath || !settings.fbUser || !settings.fbPassword || !settings.ofSqlQuery) {
+      slog('[Sisplan OF Sync] Incomplete OF configuration, skipping.');
+      await sisplanRepo.updateOfSyncStatus('error', 'Configuracao OF incompleta.', 0);
+      return { success: false, message: 'Configuracao OF incompleta.' };
+    }
+
+    const fbOptions = {
+      host: settings.host,
+      port: settings.port || 3050,
+      database: settings.databasePath,
+      user: settings.fbUser,
+      password: settings.fbPassword
+    };
+
+    slog('[Sisplan OF Sync] Connecting to Firebird...');
+    const rows = await queryFirebird(fbOptions, settings.ofSqlQuery);
+
+    console.log(`[Sisplan OF Sync] Query returned ${rows.length} rows`);
+
+    if (!rows.length) {
+      await sisplanRepo.updateOfSyncStatus('success', 'Nenhum registro encontrado.', 0);
+      return { success: true, message: 'Nenhum registro encontrado.', rows: 0 };
+    }
+
+    const columnMapping = settings.ofColumnMapping || {};
+    const mappedRows = rows.map(row => mapOfRow(row, columnMapping));
+
+    const validRows = mappedRows.filter(r => r.facNumero);
+    console.log(`[Sisplan OF Sync] ${validRows.length} valid rows after mapping`);
+
+    const { inserted, updated } = await terceirosRepo.batchUpsertOfs(validRows);
+
+    const message = `Sincronizado: ${inserted} inseridos, ${updated} atualizados.`;
+    console.log(`[Sisplan OF Sync] ${message}`);
+    await sisplanRepo.updateOfSyncStatus('success', message, validRows.length);
+
+    return { success: true, message, rows: validRows.length, inserted, updated };
+  } catch (error) {
+    const message = error.message || 'Erro desconhecido';
+    serr('[Sisplan OF Sync] Error:', message);
+    await sisplanRepo.updateOfSyncStatus('error', message, 0);
+    return { success: false, message };
+  }
+}
+
 async function startSisplanSyncScheduler() {
   slog('[Sisplan Sync] Initializing scheduler...');
 
@@ -313,6 +419,7 @@ async function startSisplanSyncScheduler() {
     currentJob = cron.schedule(schedule, async () => {
       await runSync();
       await runNfSync();
+      await runOfSync();
     }, {
       scheduled: true,
       timezone: 'America/Sao_Paulo'
@@ -353,6 +460,7 @@ module.exports = {
   restartSisplanSyncScheduler,
   runSync,
   runNfSync,
+  runOfSync,
   testFirebirdConnection,
   queryFirebird,
   getFirebirdOptions

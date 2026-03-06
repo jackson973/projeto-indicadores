@@ -38,7 +38,8 @@ import {
   testSisplanConnection,
   testSisplanQuery,
   triggerSisplanSync,
-  triggerSisplanNfSync
+  triggerSisplanNfSync,
+  triggerOfSync
 } from "../api";
 
 const SYSTEM_FIELDS = [
@@ -58,6 +59,43 @@ const SYSTEM_FIELDS = [
   { key: "codcli", label: "codcli", description: "Código do cliente", required: false },
   { key: "nome_fantasia", label: "nome_fantasia", description: "Nome fantasia", required: false },
   { key: "cnpj_cpf", label: "cnpj_cpf", description: "CNPJ/CPF", required: false }
+];
+
+const OF_SYSTEM_FIELDS = [
+  { key: "fac_numero", label: "fac_numero", description: "Numero da OF", required: true },
+  { key: "fac_lancto", label: "fac_lancto", description: "Lancamento", required: false },
+  { key: "fac_dt_s", label: "fac_dt_s", description: "Data de envio", required: false },
+  { key: "fac_dt_lan", label: "fac_dt_lan", description: "Data de lancamento", required: false },
+  { key: "fac_dt_prev_ret", label: "fac_dt_prev_ret", description: "Data prevista retorno", required: false },
+  { key: "fac_codsetor", label: "fac_codsetor", description: "Codigo setor", required: false },
+  { key: "fac_descsetor", label: "fac_descsetor", description: "Descricao setor", required: false },
+  { key: "fac_qt_orig", label: "fac_qt_orig", description: "Quantidade original", required: false },
+  { key: "fac_quant", label: "fac_quant", description: "Quantidade validada", required: true },
+  { key: "fac_tam", label: "fac_tam", description: "Tamanho", required: false },
+  { key: "fac_cor", label: "fac_cor", description: "Codigo cor", required: false },
+  { key: "fac_desccor", label: "fac_desccor", description: "Descricao cor", required: false },
+  { key: "fac_parte", label: "fac_parte", description: "Codigo parte", required: false },
+  { key: "fac_descparte", label: "fac_descparte", description: "Descricao parte", required: false },
+  { key: "fac_codigo_produto", label: "fac_codigo_produto", description: "Codigo produto", required: true },
+  { key: "fac_desc_produto", label: "fac_desc_produto", description: "Descricao produto", required: false },
+  { key: "produto_unidade", label: "produto_unidade", description: "Unidade do produto", required: false },
+  { key: "fac_codcli", label: "fac_codcli", description: "Codigo fornecedor", required: true },
+  { key: "cliente_nome", label: "cliente_nome", description: "Nome fornecedor", required: false },
+  { key: "ddd_fone", label: "ddd_fone", description: "DDD telefone", required: false },
+  { key: "cliente_fone", label: "cliente_fone", description: "Telefone", required: false },
+  { key: "fone_compl", label: "fone_compl", description: "Complemento telefone", required: false },
+  { key: "cliente_endereco", label: "cliente_endereco", description: "Endereco", required: false },
+  { key: "num_end", label: "num_end", description: "Numero endereco", required: false },
+  { key: "cliente_bairro", label: "cliente_bairro", description: "Bairro", required: false },
+  { key: "cliente_cep", label: "cliente_cep", description: "CEP", required: false },
+  { key: "cliente_uf", label: "cliente_uf", description: "UF", required: false },
+  { key: "cliente_cidade", label: "cliente_cidade", description: "Cidade", required: false },
+  { key: "cliente_complemento", label: "cliente_complemento", description: "Complemento endereco", required: false },
+  { key: "cliente_cnpj", label: "cliente_cnpj", description: "CNPJ fornecedor", required: false },
+  { key: "cliente_inscricao", label: "cliente_inscricao", description: "Inscricao estadual", required: false },
+  { key: "cliente_fantasia", label: "cliente_fantasia", description: "Nome fantasia", required: false },
+  { key: "cliente_fax", label: "cliente_fax", description: "Fax", required: false },
+  { key: "fac_periodo_of", label: "fac_periodo_of", description: "Periodo da OF", required: false },
 ];
 
 const NF_SYSTEM_FIELDS = [
@@ -88,15 +126,23 @@ const SisplanSettings = () => {
     nfSqlQuery: "",
     nfColumnMapping: {},
     nfBasePath: "",
-    nfLocalPath: ""
+    nfLocalPath: "",
+    ofActive: false,
+    ofSqlQuery: "",
+    ofColumnMapping: {}
   });
   const [syncStatus, setSyncStatus] = useState({});
   const [nfSyncStatus, setNfSyncStatus] = useState({});
+  const [ofSyncStatus, setOfSyncStatus] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testingQuery, setTestingQuery] = useState(false);
   const [testingNfQuery, setTestingNfQuery] = useState(false);
+  const [testingOfQuery, setTestingOfQuery] = useState(false);
+  const [syncingOf, setSyncingOf] = useState(false);
+  const [ofQueryColumns, setOfQueryColumns] = useState([]);
+  const [ofPreviewRows, setOfPreviewRows] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [syncingNf, setSyncingNf] = useState(false);
   const [queryColumns, setQueryColumns] = useState([]);
@@ -130,7 +176,10 @@ const SisplanSettings = () => {
         nfSqlQuery: data.nfSqlQuery || "",
         nfColumnMapping: data.nfColumnMapping || {},
         nfBasePath: data.nfBasePath || "",
-        nfLocalPath: data.nfLocalPath || ""
+        nfLocalPath: data.nfLocalPath || "",
+        ofActive: data.ofActive || false,
+        ofSqlQuery: data.ofSqlQuery || "",
+        ofColumnMapping: data.ofColumnMapping || {}
       });
       setSyncStatus({
         lastSyncAt: data.lastSyncAt,
@@ -143,6 +192,12 @@ const SisplanSettings = () => {
         lastSyncStatus: data.nfLastSyncStatus,
         lastSyncMessage: data.nfLastSyncMessage,
         lastSyncRows: data.nfLastSyncRows
+      });
+      setOfSyncStatus({
+        lastSyncAt: data.ofLastSyncAt,
+        lastSyncStatus: data.ofLastSyncStatus,
+        lastSyncMessage: data.ofLastSyncMessage,
+        lastSyncRows: data.ofLastSyncRows
       });
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
@@ -273,6 +328,54 @@ const SisplanSettings = () => {
       ...prev,
       nfColumnMapping: {
         ...prev.nfColumnMapping,
+        [systemField]: sourceColumn || undefined
+      }
+    }));
+  };
+
+  const handleTestOfQuery = async () => {
+    setTestingOfQuery(true);
+    try {
+      const result = await testSisplanQuery({
+        host: form.host,
+        port: form.port,
+        databasePath: form.databasePath,
+        fbUser: form.fbUser,
+        fbPassword: form.fbPassword,
+        sqlQuery: form.ofSqlQuery
+      });
+      setOfQueryColumns(result.columns || []);
+      setOfPreviewRows(result.rows || []);
+      toast({
+        title: `Query executada: ${result.totalPreview} registros retornados`,
+        status: "success",
+        duration: 3000
+      });
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setTestingOfQuery(false);
+    }
+  };
+
+  const handleOfSync = async () => {
+    setSyncingOf(true);
+    try {
+      const result = await triggerOfSync();
+      toast({ title: result.message, status: "success", duration: 4000 });
+      await loadSettings();
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setSyncingOf(false);
+    }
+  };
+
+  const updateOfMapping = (systemField, sourceColumn) => {
+    setForm(prev => ({
+      ...prev,
+      ofColumnMapping: {
+        ...prev.ofColumnMapping,
         [systemField]: sourceColumn || undefined
       }
     }));
@@ -692,7 +795,140 @@ const SisplanSettings = () => {
           </AccordionPanel>
         </AccordionItem>
 
-        {/* 4. Agendamento (ultimo) */}
+        {/* 4. Ordens de Fabricacao (OFs) */}
+        <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
+          <AccordionButton py={3} _expanded={{ bg: refBg }}>
+            <Box flex="1" textAlign="left">
+              <Text fontWeight="semibold">Ordens de Fabricacao (OFs)</Text>
+            </Box>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel pb={4}>
+            <HStack mb={4}>
+              <Text fontSize="sm">Ativo</Text>
+              <Switch
+                isChecked={form.ofActive}
+                onChange={(e) => setForm(prev => ({ ...prev, ofActive: e.target.checked }))}
+                colorScheme="green"
+                size="sm"
+              />
+            </HStack>
+
+            {form.ofActive && (
+              <VStack spacing={4} align="stretch">
+                <FormControl>
+                  <FormLabel fontSize="sm">Query SQL para OFs</FormLabel>
+                  <Textarea
+                    size="sm"
+                    rows={6}
+                    fontFamily="mono"
+                    fontSize="xs"
+                    placeholder="SELECT ... FROM faccao3_001 ..."
+                    value={form.ofSqlQuery}
+                    onChange={(e) => setForm(prev => ({ ...prev, ofSqlQuery: e.target.value }))}
+                  />
+                </FormControl>
+
+                <Button
+                  size="sm"
+                  colorScheme="blue"
+                  variant="outline"
+                  isLoading={testingOfQuery}
+                  loadingText="Testando..."
+                  onClick={handleTestOfQuery}
+                  isDisabled={!form.ofSqlQuery}
+                >
+                  Testar Query OFs
+                </Button>
+
+                {ofPreviewRows.length > 0 && (
+                  <Box borderWidth="1px" borderColor={borderColor} borderRadius="md" overflowX="auto" maxH="200px">
+                    <Table size="sm" variant="simple">
+                      <Thead>
+                        <Tr>
+                          {ofQueryColumns.map((col) => (
+                            <Th key={col} fontSize="xs" whiteSpace="nowrap">{col}</Th>
+                          ))}
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {ofPreviewRows.map((row, i) => (
+                          <Tr key={i}>
+                            {ofQueryColumns.map((col) => (
+                              <Td key={col} fontSize="xs" whiteSpace="nowrap" maxW="200px" overflow="hidden" textOverflow="ellipsis">
+                                {row[col] != null ? String(row[col]).substring(0, 50) : ''}
+                              </Td>
+                            ))}
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                )}
+
+                {ofQueryColumns.length > 0 && (
+                  <Box>
+                    <Text fontSize="sm" fontWeight="semibold" mb={2}>Mapeamento de Colunas (OFs)</Text>
+                    <Divider mb={3} />
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                      {OF_SYSTEM_FIELDS.map(field => (
+                        <FormControl key={field.key}>
+                          <FormLabel fontSize="xs">
+                            {field.description}
+                            {field.required && <Text as="span" color="red.400" ml={1}>*</Text>}
+                          </FormLabel>
+                          <Select
+                            size="sm"
+                            placeholder="-- Selecione --"
+                            value={form.ofColumnMapping[field.key] || ''}
+                            onChange={(e) => updateOfMapping(field.key, e.target.value)}
+                          >
+                            {ofQueryColumns.map(col => (
+                              <option key={col} value={col}>{col}</option>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      ))}
+                    </SimpleGrid>
+                  </Box>
+                )}
+
+                <Box mt={2} p={3} bg={refBg} borderRadius="md">
+                  <Text fontSize="sm" fontWeight="medium" mb={1}>Status do sync de OFs</Text>
+                  <HStack spacing={2}>
+                    {ofSyncStatus.lastSyncStatus && (
+                      <Badge colorScheme={ofSyncStatus.lastSyncStatus === "success" ? "green" : "red"}>
+                        {ofSyncStatus.lastSyncStatus === "success" ? "Sucesso" : "Erro"}
+                      </Badge>
+                    )}
+                    <Text fontSize="xs" color="gray.500">
+                      {formatSyncDate(ofSyncStatus.lastSyncAt)}
+                    </Text>
+                  </HStack>
+                  {ofSyncStatus.lastSyncMessage && (
+                    <Text fontSize="xs" color="gray.500" mt={1}>{ofSyncStatus.lastSyncMessage}</Text>
+                  )}
+                  {ofSyncStatus.lastSyncRows > 0 && (
+                    <Text fontSize="xs" color="gray.500">{ofSyncStatus.lastSyncRows} registros</Text>
+                  )}
+                  <Button
+                    mt={3}
+                    size="sm"
+                    colorScheme="teal"
+                    variant="outline"
+                    isLoading={syncingOf}
+                    loadingText="Sincronizando..."
+                    onClick={handleOfSync}
+                  >
+                    Sincronizar OFs Agora
+                  </Button>
+                </Box>
+              </VStack>
+            )}
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* 5. Agendamento (ultimo) */}
         <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
           <AccordionButton py={3} _expanded={{ bg: refBg }}>
             <Box flex="1" textAlign="left">

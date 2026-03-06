@@ -4,6 +4,7 @@ const sisplanRepo = require('../db/sisplanRepository');
 const {
   runSync,
   runNfSync,
+  runOfSync,
   restartSisplanSyncScheduler,
   testFirebirdConnection,
   queryFirebird,
@@ -56,7 +57,8 @@ router.put('/', async (req, res) => {
     const {
       active, host, port, databasePath, fbUser, fbPassword,
       sqlQuery, columnMapping, syncIntervalMinutes,
-      nfActive, nfSqlQuery, nfColumnMapping, nfBasePath, nfLocalPath
+      nfActive, nfSqlQuery, nfColumnMapping, nfBasePath, nfLocalPath,
+      ofActive, ofSqlQuery, ofColumnMapping
     } = req.body;
 
     const result = await sisplanRepo.updateSettings({
@@ -73,7 +75,10 @@ router.put('/', async (req, res) => {
       nfSqlQuery: (nfSqlQuery || '').trim(),
       nfColumnMapping: nfColumnMapping || {},
       nfBasePath: (nfBasePath || '').trim(),
-      nfLocalPath: (nfLocalPath || '').trim()
+      nfLocalPath: (nfLocalPath || '').trim(),
+      ofActive: ofActive || false,
+      ofSqlQuery: (ofSqlQuery || '').trim(),
+      ofColumnMapping: ofColumnMapping || {}
     });
 
     // Reiniciar scheduler com novas configurações
@@ -186,6 +191,20 @@ router.post('/nf-sync', async (req, res) => {
     return res.status(400).json(result);
   } catch (error) {
     console.error('Manual NF sync error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/sisplan/of-sync - Forçar sync de OFs
+router.post('/of-sync', async (req, res) => {
+  try {
+    const result = await runOfSync();
+    if (result.success) {
+      return res.json(result);
+    }
+    return res.status(400).json(result);
+  } catch (error) {
+    console.error('Manual OF sync error:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 });

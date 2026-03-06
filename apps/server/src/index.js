@@ -12,6 +12,9 @@ const sisplanRouter = require("./routes/sisplan");
 const whatsappRouter = require("./routes/whatsapp");
 const upsellerRouter = require("./routes/upseller");
 const databaseRouter = require("./routes/database");
+const terceirosRouter = require("./routes/terceiros");
+const settingsRouter = require("./routes/settings");
+const path = require("path");
 const { authenticate, requireAdmin } = require("./middleware/auth");
 
 // Initialize database connection (will test connection on import)
@@ -72,8 +75,13 @@ async function start() {
   app.use("/api/sisplan", sisplanRouter);
   app.use("/api/whatsapp", whatsappRouter);
   app.use("/api/upseller", upsellerRouter);
+  app.use("/api/terceiros", terceirosRouter);
+  app.use("/api/settings", settingsRouter);
   app.use("/api/database", authenticate, requireAdmin, databaseRouter);
   app.use("/api", authenticate, apiRouter);
+
+  // Serve uploaded files (logos, etc)
+  app.use("/uploads", express.static(path.join(__dirname, '../uploads')));
 
   app.get("/health", (_req, res) => {
     res.json({ status: "ok" });

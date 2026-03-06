@@ -535,3 +535,255 @@ export const clearCashflowData = async () => {
   });
   return handleResponse(response);
 };
+
+// ── Terceiros: Product Groups ───────────────────────────────────────────────
+
+export const fetchTerceirosProductGroups = async () => {
+  const response = await authFetch("/api/terceiros/product-groups");
+  return handleResponse(response);
+};
+
+export const createTerceirosProductGroup = async (name) => {
+  const response = await authFetch("/api/terceiros/product-groups", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+  return handleResponse(response);
+};
+
+export const updateTerceirosProductGroup = async (id, name) => {
+  const response = await authFetch(`/api/terceiros/product-groups/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name })
+  });
+  return handleResponse(response);
+};
+
+export const deleteTerceirosProductGroup = async (id) => {
+  const response = await authFetch(`/api/terceiros/product-groups/${id}`, { method: "DELETE" });
+  return handleResponse(response);
+};
+
+export const fetchGroupProducts = async (groupId) => {
+  const response = await authFetch(`/api/terceiros/product-groups/${groupId}/products`);
+  return handleResponse(response);
+};
+
+export const addProductToGroup = async (groupId, productCode, productName) => {
+  const response = await authFetch(`/api/terceiros/product-groups/${groupId}/products`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ productCode, productName })
+  });
+  return handleResponse(response);
+};
+
+export const removeProductFromGroup = async (groupId, productCode) => {
+  const response = await authFetch(`/api/terceiros/product-groups/${groupId}/products/${encodeURIComponent(productCode)}`, {
+    method: "DELETE"
+  });
+  return handleResponse(response);
+};
+
+// ── Terceiros: Supplier Prices ──────────────────────────────────────────────
+
+export const fetchTerceirosSupplierPrices = async (codcli, groupId) => {
+  const params = new URLSearchParams();
+  if (codcli) params.append('codcli', codcli);
+  if (groupId) params.append('groupId', groupId);
+  const response = await authFetch(`/api/terceiros/supplier-prices?${params}`);
+  return handleResponse(response);
+};
+
+export const createTerceirosSupplierPrice = async (data) => {
+  const response = await authFetch("/api/terceiros/supplier-prices", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const updateTerceirosSupplierPrice = async (id, data) => {
+  const response = await authFetch(`/api/terceiros/supplier-prices/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const deleteTerceirosSupplierPrice = async (id) => {
+  const response = await authFetch(`/api/terceiros/supplier-prices/${id}`, { method: "DELETE" });
+  return handleResponse(response);
+};
+
+// ── Terceiros: OFs ──────────────────────────────────────────────────────────
+
+export const fetchTerceirosOfs = async (params) => {
+  const response = await authFetch(`/api/terceiros/ofs?${params || ''}`);
+  return handleResponse(response);
+};
+
+export const fetchTerceirosSuppliers = async () => {
+  const response = await authFetch("/api/terceiros/ofs/suppliers");
+  return handleResponse(response);
+};
+
+export const fetchTerceirosProducts = async () => {
+  const response = await authFetch("/api/terceiros/ofs/products");
+  return handleResponse(response);
+};
+
+export const fetchTerceirosParts = async (codcli, groupId) => {
+  const params = new URLSearchParams();
+  if (codcli) params.append("codcli", codcli);
+  if (groupId) params.append("groupId", groupId);
+  const qs = params.toString();
+  const response = await authFetch(`/api/terceiros/ofs/parts${qs ? `?${qs}` : ""}`);
+  return handleResponse(response);
+};
+
+// ── Terceiros: Settlements ──────────────────────────────────────────────────
+
+export const fetchTerceirosSettlements = async (params) => {
+  const response = await authFetch(`/api/terceiros/settlements?${params || ''}`);
+  return handleResponse(response);
+};
+
+export const fetchTerceirosSettlement = async (id) => {
+  const response = await authFetch(`/api/terceiros/settlements/${id}`);
+  return handleResponse(response);
+};
+
+export const createTerceirosSettlement = async (data) => {
+  const response = await authFetch("/api/terceiros/settlements", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const payTerceirosSettlement = async (id) => {
+  const response = await authFetch(`/api/terceiros/settlements/${id}/pay`, { method: "PUT" });
+  return handleResponse(response);
+};
+
+export const unpayTerceirosSettlement = async (id) => {
+  const response = await authFetch(`/api/terceiros/settlements/${id}/unpay`, { method: "PUT" });
+  return handleResponse(response);
+};
+
+export const deleteTerceirosSettlement = async (id) => {
+  const response = await authFetch(`/api/terceiros/settlements/${id}`, { method: "DELETE" });
+  return handleResponse(response);
+};
+
+export const updateTerceirosSettlement = async (id, data) => {
+  const response = await authFetch(`/api/terceiros/settlements/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const removeSettlementItem = async (settlementId, itemId) => {
+  const response = await authFetch(`/api/terceiros/settlements/${settlementId}/items/${itemId}`, { method: "DELETE" });
+  return handleResponse(response);
+};
+
+export const updateSettlementItem = async (settlementId, itemId, data) => {
+  const response = await authFetch(`/api/terceiros/settlements/${settlementId}/items/${itemId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const addSettlementItems = async (settlementId, items) => {
+  const response = await authFetch(`/api/terceiros/settlements/${settlementId}/items`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items })
+  });
+  return handleResponse(response);
+};
+
+// ── Terceiros: Settlement Discounts ──────────────────────────────────────────
+
+export const addSettlementDiscount = async (settlementId, data) => {
+  const response = await authFetch(`/api/terceiros/settlements/${settlementId}/discounts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const updateSettlementDiscount = async (settlementId, discountId, data) => {
+  const response = await authFetch(`/api/terceiros/settlements/${settlementId}/discounts/${discountId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const removeSettlementDiscount = async (settlementId, discountId) => {
+  const response = await authFetch(`/api/terceiros/settlements/${settlementId}/discounts/${discountId}`, {
+    method: "DELETE"
+  });
+  return handleResponse(response);
+};
+
+export const fetchTerceirosPricesForOfs = async (codcli, items) => {
+  const response = await authFetch("/api/terceiros/find-prices", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ codcli, items })
+  });
+  return handleResponse(response);
+};
+
+// ── Terceiros: OF Sync ──────────────────────────────────────────────────────
+
+export const triggerOfSync = async () => {
+  const response = await authFetch("/api/sisplan/of-sync", { method: "POST" });
+  return handleResponse(response);
+};
+
+// ── System Settings ─────────────────────────────────────────────────────────
+
+export const fetchSystemSettings = async () => {
+  const response = await authFetch("/api/settings");
+  return handleResponse(response);
+};
+
+export const updateSystemSettings = async (data) => {
+  const response = await authFetch("/api/settings", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const uploadSystemLogo = async (file) => {
+  const formData = new FormData();
+  formData.append("logo", file);
+  const response = await authFetch("/api/settings/logo", {
+    method: "POST",
+    body: formData
+  });
+  return handleResponse(response);
+};
+
+export const deleteSystemLogo = async () => {
+  const response = await authFetch("/api/settings/logo", { method: "DELETE" });
+  return handleResponse(response);
+};
