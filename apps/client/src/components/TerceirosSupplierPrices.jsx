@@ -160,10 +160,11 @@ const TerceirosSupplierPrices = () => {
     loadModalParts();
   }, [form.codcli, form.groupId]);
 
-  // ── Load parts dynamically in bulk modal ──────────────────────────────────
+  // ── Load parts dynamically in bulk modal and auto-populate grid ────────────
   useEffect(() => {
     if (!bulkForm.codcli || !bulkForm.groupId) {
       setBulkParts([]);
+      setBulkRows([]);
       return;
     }
     const load = async () => {
@@ -171,8 +172,15 @@ const TerceirosSupplierPrices = () => {
       try {
         const data = await fetchTerceirosParts(bulkForm.codcli, bulkForm.groupId);
         setBulkParts(data);
+        // Auto-populate grid with all parts
+        if (data.length > 0) {
+          setBulkRows(data.map((p) => ({ part: p.code, partLabel: `${p.code}${p.name ? ` - ${p.name}` : ""}`, price: 0, _key: p.code })));
+        } else {
+          setBulkRows([{ part: "", partLabel: "Todas", price: 0, _key: "all" }]);
+        }
       } catch {
         setBulkParts([]);
+        setBulkRows([{ part: "", partLabel: "Todas", price: 0, _key: "all" }]);
       } finally {
         setLoadingBulkParts(false);
       }
@@ -338,35 +346,21 @@ const TerceirosSupplierPrices = () => {
       validFrom: `${year}-01-01`,
       validUntil: `${year}-12-31`
     });
-    setBulkRows([{ part: "", price: 0, _key: Date.now() }]);
+    // Grid will auto-populate via the useEffect when codcli+groupId are set
+    setBulkRows([]);
     bulkModal.onOpen();
   };
 
-  // ── Bulk rows management ──────────────────────────────────────────────────
-  const addBulkRow = () => {
-    setBulkRows((prev) => [...prev, { part: "", price: 0, _key: Date.now() + Math.random() }]);
+  const updateBulkRowPrice = (index, rawValue) => {
+    const price = parseCurrencyInput(rawValue);
+    setBulkRows((prev) => prev.map((row, i) => (i === index ? { ...row, price } : row)));
   };
 
-  const removeBulkRow = (index) => {
-    setBulkRows((prev) => prev.filter((_, i) => i !== index));
-  };
-
-  const updateBulkRow = (index, field, value) => {
-    setBulkRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)));
-  };
-
-  const addAllPartsToGrid = () => {
-    if (bulkParts.length === 0) return;
-    const existingParts = new Set(bulkRows.map((r) => r.part));
-    const newParts = bulkParts.filter((p) => !existingParts.has(p.code));
-    if (newParts.length === 0) {
-      toast({ title: "Todas as partes já estão no grid.", status: "info", duration: 2000 });
-      return;
-    }
-    // Remove empty rows first
-    const cleaned = bulkRows.filter((r) => r.part || r.price > 0);
-    const additions = newParts.map((p) => ({ part: p.code, price: 0, _key: Date.now() + Math.random() }));
-    setBulkRows([...cleaned, ...additions]);
+  const applyPriceToAll = () => {
+    if (bulkRows.length === 0) return;
+    const firstPrice = bulkRows[0].price;
+    if (firstPrice <= 0) return;
+    setBulkRows((prev) => prev.map((row) => ({ ...row, price: row.price > 0 ? row.price : firstPrice })));
   };
 
   // ── CRUD ──────────────────────────────────────────────────────────────────
@@ -862,74 +856,62 @@ const TerceirosSupplierPrices = () => {
 
               {/* Grid header */}
               <Flex justify="space-between" align="center">
-                <Text fontSize="sm" fontWeight="semibold">Preços por Parte</Text>
-                <HStack spacing={2}>
-                  {bulkParts.length > 0 && (
-                    <Button size="xs" variant="outline" colorScheme="blue" onClick={addAllPartsToGrid} isDisabled={loadingBulkParts}>
-                      Carregar todas as partes ({bulkParts.length})
-                    </Button>
-                  )}
-                  <Button size="xs" leftIcon={<AddIcon />} colorScheme="blue" onClick={addBulkRow}>
-                    Linha
+                <Text fontSize="sm" fontWeight="semibold">
+                  Preços por Parte
+                  {bulkRows.length > 0 && <Badge ml={2} colorScheme="blue" fontSize="xs">{bulkRows.length}</Badge>}
+                </Text>
+                {bulkRows.length > 1 && (
+                  <Button size="xs" variant="outline" colorScheme="blue" onClick={applyPriceToAll}>
+                    Replicar 1° preço nos vazios
                   </Button>
-                </HStack>
+                )}
               </Flex>
 
               {loadingBulkParts && bulkForm.codcli && bulkForm.groupId && (
                 <Center py={2}><Spinner size="sm" /><Text fontSize="xs" ml={2}>Carregando partes...</Text></Center>
               )}
 
-              {/* Grid */}
-              <Box overflowX="auto">
-                <Table size="sm" variant="simple">
-                  <Thead bg={headerBg}>
-                    <Tr>
-                      <Th w="50px" fontSize="xs">#</Th>
-                      <Th fontSize="xs">Parte</Th>
-                      <Th fontSize="xs" w="180px">Preço (R$)</Th>
-                      <Th w="40px"></Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {bulkRows.map((row, idx) => (
-                      <Tr key={row._key}>
-                        <Td fontSize="xs" color="gray.500">{idx + 1}</Td>
-                        <Td>
-                          <SearchableSelect
-                            size="sm"
-                            placeholder={!bulkForm.codcli || !bulkForm.groupId ? "Selecione fornecedor/grupo" : "Todas (opcional)"}
-                            value={row.part}
-                            onChange={(val) => updateBulkRow(idx, "part", val)}
-                            isDisabled={!bulkForm.codcli || !bulkForm.groupId || loadingBulkParts}
-                            options={bulkParts.map((p) => ({ value: p.code, label: `${p.code}${p.name ? ` - ${p.name}` : ""}` }))}
-                          />
-                        </Td>
-                        <Td>
-                          <Input
-                            size="sm"
-                            value={row.price > 0 ? formatBRL(row.price) : ""}
-                            onChange={(e) => updateBulkRow(idx, "price", parseCurrencyInput(e.target.value))}
-                            placeholder="0,000"
-                            inputMode="numeric"
-                          />
-                        </Td>
-                        <Td>
-                          {bulkRows.length > 1 && (
-                            <IconButton
-                              icon={<CloseIcon />}
-                              size="xs"
-                              variant="ghost"
-                              colorScheme="red"
-                              aria-label="Remover linha"
-                              onClick={() => removeBulkRow(idx)}
-                            />
-                          )}
-                        </Td>
+              {!bulkForm.codcli || !bulkForm.groupId ? (
+                <Center py={6}>
+                  <Text fontSize="sm" color="gray.500">Selecione fornecedor e grupo para carregar as partes.</Text>
+                </Center>
+              ) : !loadingBulkParts && bulkRows.length === 0 ? (
+                <Center py={6}>
+                  <Text fontSize="sm" color="gray.500">Nenhuma parte encontrada para este fornecedor/grupo.</Text>
+                </Center>
+              ) : (
+                /* Grid */
+                <Box overflowX="auto" maxH="400px" overflowY="auto">
+                  <Table size="sm" variant="simple">
+                    <Thead bg={headerBg} position="sticky" top={0} zIndex={1}>
+                      <Tr>
+                        <Th w="50px" fontSize="xs">#</Th>
+                        <Th fontSize="xs">Parte</Th>
+                        <Th fontSize="xs" w="180px">Preço (R$)</Th>
                       </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </Box>
+                    </Thead>
+                    <Tbody>
+                      {bulkRows.map((row, idx) => (
+                        <Tr key={row._key} bg={row.price > 0 ? "green.50" : undefined} _dark={{ bg: row.price > 0 ? "green.900" : undefined }}>
+                          <Td fontSize="xs" color="gray.500">{idx + 1}</Td>
+                          <Td>
+                            <Text fontSize="sm" fontWeight="medium">{row.partLabel || row.part || "Todas"}</Text>
+                          </Td>
+                          <Td>
+                            <Input
+                              size="sm"
+                              value={row.price > 0 ? formatBRL(row.price) : ""}
+                              onChange={(e) => updateBulkRowPrice(idx, e.target.value)}
+                              placeholder="0,000"
+                              inputMode="numeric"
+                            />
+                          </Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </Box>
+              )}
 
               <Text fontSize="xs" color="gray.500">
                 Preencha os preços para cada parte. Linhas com preço zero serão ignoradas. Datas opcionais = vigente indefinidamente.
