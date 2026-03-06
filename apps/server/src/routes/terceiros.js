@@ -244,8 +244,12 @@ const formatPriceCur = (v) => {
 
 const formatDateBR = (val) => {
   if (!val || val === 'null') return '-';
-  const str = typeof val === 'string' ? val.slice(0, 10) : '';
-  if (!str || str.length < 10) return '-';
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '-';
+    return val.toLocaleDateString('pt-BR');
+  }
+  const str = String(val).slice(0, 10);
+  if (str.length < 10) return '-';
   const d = new Date(str + 'T00:00:00');
   if (isNaN(d.getTime())) return '-';
   return d.toLocaleDateString('pt-BR');
@@ -324,10 +328,19 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
     const companyName = sysSettings.company_name || '';
 
     // Check which prices are currently active
-    const today = new Date().toISOString().slice(0, 10);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const toDate = (v) => {
+      if (!v) return null;
+      if (v instanceof Date) return v;
+      const d = new Date(String(v).slice(0, 10) + 'T00:00:00');
+      return isNaN(d.getTime()) ? null : d;
+    };
     const isActive = (vFrom, vUntil) => {
-      const fromOk = !vFrom || vFrom <= today;
-      const untilOk = !vUntil || vUntil >= today;
+      const from = toDate(vFrom);
+      const until = toDate(vUntil);
+      const fromOk = !from || from <= today;
+      const untilOk = !until || until >= today;
       return fromOk && untilOk;
     };
 
