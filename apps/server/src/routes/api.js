@@ -607,9 +607,10 @@ router.get("/sisplan-active", async (req, res) => {
   try {
     const sisplanRepo = require('../db/sisplanRepository');
     const active = await sisplanRepo.isActive();
-    return res.json({ active });
+    const settings = await sisplanRepo.getSettings();
+    return res.json({ active, ofActive: !!(active && settings?.ofActive) });
   } catch (error) {
-    return res.json({ active: false });
+    return res.json({ active: false, ofActive: false });
   }
 });
 

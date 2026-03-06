@@ -186,6 +186,7 @@ const App = () => {
   const [expandedMenu, setExpandedMenu] = useState(null); // For submenu expansion
   const [autoplay, setAutoplay] = useState(true);
   const [sisplanActive, setSisplanActive] = useState(false);
+  const [ofActive, setOfActive] = useState(false);
   const [systemLogo, setSystemLogo] = useState(null);
   const isMobile = useBreakpointValue({ base: true, md: false });
   const mobileMenu = useDisclosure();
@@ -240,7 +241,10 @@ const App = () => {
       })
       .catch(() => {});
     fetchSisplanActive()
-      .then((data) => setSisplanActive(data.active))
+      .then((data) => {
+        setSisplanActive(data.active);
+        setOfActive(data.ofActive || false);
+      })
       .catch(() => {});
     loadSystemLogo();
   }, [user]);
@@ -382,7 +386,7 @@ const App = () => {
     {
       label: "Terceiros",
       icon: <FactoryIcon />,
-      show: true,
+      show: ofActive,
       submenu: [
         {
           label: "Fechamento",
