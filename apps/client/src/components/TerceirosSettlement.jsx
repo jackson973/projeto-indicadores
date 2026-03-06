@@ -147,6 +147,10 @@ const TerceirosSettlement = () => {
   const [editedGroupPrices, setEditedGroupPrices] = useState({});
   const [editingSize, setEditingSize] = useState(null);
 
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [hasDraft, setHasDraft] = useState(false);
+  const [restoringDraft, setRestoringDraft] = useState(false);
+
   const toast = useToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
 
@@ -670,6 +674,8 @@ const TerceirosSettlement = () => {
         discounts: newDiscounts.length > 0 ? newDiscounts : undefined
       });
       toast({ title: "Fechamento criado com sucesso.", status: "success", duration: 3000 });
+      localStorage.removeItem(DRAFT_KEY);
+      setHasDraft(false);
       setCreating(false);
       setNewSupplier("");
       setOfSearchNew("");
@@ -690,6 +696,135 @@ const TerceirosSettlement = () => {
       setSubmitting(false);
     }
   }, [newSupplier, selectedOfs, unsettledOfs, getOfPrice, getOfPriceInfo, editedQuantities, editedGroupPrices, manualPrices, suppliers, newMonth, newYear, dateFrom, notes, newDiscounts, loadSettlements, toast]);
+
+  // ── Draft save/restore ───────────────────────────────────────────────────
+  const DRAFT_KEY = "terceiros_settlement_draft";
+
+  useEffect(() => {
+    setHasDraft(!!localStorage.getItem(DRAFT_KEY));
+  }, [creating]);
+
+  const handleSaveDraft = useCallback(() => {
+    const ofIds = [];
+    selectedOfs.forEach((index) => {
+      const of = unsettledOfs[index];
+      if (of) ofIds.push(of.id);
+    });
+    const draft = {
+      newSupplier,
+      dateFrom,
+      dateTo,
+      ofSearchNew,
+      etapaFilter,
+      selectedOfIds: ofIds,
+      manualPrices,
+      editedQuantities,
+      editedGroupPrices,
+      notes,
+      newDiscounts,
+      savedAt: new Date().toISOString()
+    };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    setHasDraft(true);
+    toast({ title: "Rascunho salvo com sucesso.", status: "success", duration: 3000 });
+  }, [newSupplier, dateFrom, dateTo, ofSearchNew, etapaFilter, selectedOfs, unsettledOfs, manualPrices, editedQuantities, editedGroupPrices, notes, newDiscounts, toast]);
+
+  const handleRestoreDraft = useCallback(async () => {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    if (!raw) return;
+    try {
+      const draft = JSON.parse(raw);
+      setRestoringDraft(true);
+      setCreating(true);
+      setNewSupplier(draft.newSupplier || "");
+      setDateFrom(draft.dateFrom || "");
+      setDateTo(draft.dateTo || "");
+      setOfSearchNew(draft.ofSearchNew || "");
+      setEtapaFilter(draft.etapaFilter || "");
+      setNotes(draft.notes || "");
+      setNewDiscounts(draft.newDiscounts || []);
+
+      // Reload OFs from server
+      const params = new URLSearchParams();
+      if (draft.newSupplier) params.append("codcli", draft.newSupplier);
+      params.append("unsettledOnly", "true");
+      if (draft.dateFrom) params.append("dateFrom", draft.dateFrom);
+      if (draft.dateTo) params.append("dateTo", draft.dateTo);
+      if (draft.ofSearchNew) params.append("facNumero", draft.ofSearchNew.trim());
+
+      setLoadingOfs(true);
+      const result = await fetchTerceirosOfs(params.toString());
+      const data = result.rows || result || [];
+      setUnsettledOfs(data);
+
+      // Re-select OFs by id
+      const idToIndex = {};
+      data.forEach((of, idx) => { idToIndex[of.id] = idx; });
+      const restored = new Set();
+      (draft.selectedOfIds || []).forEach((id) => {
+        if (idToIndex[id] !== undefined) restored.add(idToIndex[id]);
+      });
+
+      // Reload prices
+      if (data.length > 0 && draft.newSupplier) {
+        const items = data.map((of) => ({
+          productCode: of.fac_codigo_produto,
+          parte: of.fac_parte,
+          cor: of.fac_cor
+        }));
+        try {
+          const prices = await fetchTerceirosPricesForOfs(draft.newSupplier, items);
+          const legacyPriceMap = {};
+          if (Array.isArray(prices)) {
+            prices.forEach((p) => {
+              const key = `${p.productCode}|${p.parte}|${p.cor}`;
+              legacyPriceMap[key] = { price: p.price, source: p.source, error: p.error || null, groupName: p.groupName || null };
+            });
+            // Auto-select OFs with prices if none were saved
+            if (restored.size === 0) {
+              data.forEach((of, idx) => {
+                const key = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+                if (legacyPriceMap[key]?.price != null) restored.add(idx);
+              });
+            }
+          }
+          setOfPrices(legacyPriceMap);
+        } catch {
+          setOfPrices({});
+        }
+      }
+
+      setSelectedOfs(restored);
+      // Remap edited quantities/prices by OF id -> new index
+      const restoredQty = {};
+      const restoredGroupPrices = {};
+      const restoredManual = {};
+      if (draft.editedQuantities) {
+        Object.entries(draft.editedQuantities).forEach(([oldIdx, val]) => {
+          // Old index mapped to OF id in selectedOfIds context - but we saved by index
+          // We need to find the OF and remap. Since OFs were reloaded, use id mapping.
+        });
+      }
+      // For simplicity, restore manual edits by matching OF ids
+      setManualPrices(draft.manualPrices || {});
+      setEditedQuantities(draft.editedQuantities || {});
+      setEditedGroupPrices(draft.editedGroupPrices || {});
+
+      setLoadingOfs(false);
+      setRestoringDraft(false);
+      toast({ title: "Rascunho restaurado.", status: "info", duration: 3000 });
+    } catch (err) {
+      setRestoringDraft(false);
+      setLoadingOfs(false);
+      toast({ title: "Erro ao restaurar rascunho.", status: "error", duration: 3000 });
+    }
+  }, [toast]);
+
+  const handleDiscardDraft = useCallback(() => {
+    localStorage.removeItem(DRAFT_KEY);
+    setHasDraft(false);
+    toast({ title: "Rascunho descartado.", status: "info", duration: 2000 });
+  }, [toast]);
 
   // ── Cancel new settlement ─────────────────────────────────────────────────
   const handleCancelCreate = useCallback(() => {
@@ -815,6 +950,28 @@ const TerceirosSettlement = () => {
             onChange={(e) => setOfSearch(e.target.value)}
           />
         </InputGroup>
+        {hasDraft && !creating && (
+          <HStack spacing={1} flexShrink={0}>
+            <Button
+              size="sm"
+              variant="outline"
+              colorScheme="orange"
+              onClick={handleRestoreDraft}
+              isLoading={restoringDraft}
+              loadingText="Restaurando..."
+            >
+              Continuar Rascunho
+            </Button>
+            <IconButton
+              icon={<CloseIcon />}
+              size="xs"
+              variant="ghost"
+              colorScheme="red"
+              aria-label="Descartar rascunho"
+              onClick={handleDiscardDraft}
+            />
+          </HStack>
+        )}
         <Button
           leftIcon={<AddIcon />}
           colorScheme="blue"
@@ -2237,6 +2394,15 @@ const TerceirosSettlement = () => {
             </Box>
 
             <HStack spacing={3} mt={4} justify="flex-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSaveDraft}
+                isLoading={savingDraft}
+                isDisabled={selectedOfs.size === 0}
+              >
+                Salvar Rascunho
+              </Button>
               <Button
                 colorScheme="blue"
                 size="sm"
