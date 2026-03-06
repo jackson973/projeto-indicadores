@@ -35,6 +35,7 @@ import {
   CloseIcon,
   SearchIcon
 } from "@chakra-ui/icons";
+import SearchableSelect from "./SearchableSelect";
 import {
   fetchTerceirosProductGroups,
   createTerceirosProductGroup,
@@ -458,19 +459,15 @@ const TerceirosProductGroups = () => {
               </InputGroup>
 
               {/* Group selector for batch assignment */}
-              <HStack mb={4} spacing={2}>
-                <Select
+              <Box mb={4}>
+                <SearchableSelect
                   size="sm"
                   placeholder="Selecionar grupo para atribuir"
                   value={assignTargetGroupId}
-                  onChange={(e) => setAssignTargetGroupId(e.target.value)}
-                  flex={1}
-                >
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name}</option>
-                  ))}
-                </Select>
-              </HStack>
+                  onChange={(val) => setAssignTargetGroupId(val)}
+                  options={groups.map((g) => ({ value: String(g.id), label: g.name }))}
+                />
+              </Box>
 
               {loadingAllProducts ? (
                 <Center p={6}><Spinner /></Center>

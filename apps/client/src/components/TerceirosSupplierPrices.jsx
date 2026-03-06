@@ -46,6 +46,7 @@ import {
   fetchTerceirosParts
 } from "../api";
 import { formatCurrency } from "../utils/format";
+import SearchableSelect from "./SearchableSelect";
 
 const emptyForm = {
   codcli: "",
@@ -235,10 +236,13 @@ const TerceirosSupplierPrices = () => {
   // ── Modal open helpers ────────────────────────────────────────────────────
   const openCreate = () => {
     setEditingPrice(null);
+    const year = new Date().getFullYear();
     setForm({
       ...emptyForm,
       codcli: filterSupplier || "",
-      groupId: filterGroup || ""
+      groupId: filterGroup || "",
+      validFrom: `${year}-01-01`,
+      validUntil: `${year}-12-31`
     });
     modal.onOpen();
   };
@@ -579,40 +583,31 @@ const TerceirosSupplierPrices = () => {
             <VStack spacing={4}>
               <FormControl isRequired>
                 <FormLabel>Fornecedor</FormLabel>
-                <Select
+                <SearchableSelect
                   placeholder="Selecione o fornecedor"
                   value={form.codcli}
-                  onChange={(e) => setForm({ ...form, codcli: e.target.value, part: "" })}
-                >
-                  {suppliers.map((s) => (
-                    <option key={s.codcli} value={s.codcli}>{s.codcli} - {s.nome || s.codcli}</option>
-                  ))}
-                </Select>
+                  onChange={(val) => setForm({ ...form, codcli: val, part: "" })}
+                  options={suppliers.map((s) => ({ value: s.codcli, label: `${s.codcli} - ${s.nome || s.codcli}` }))}
+                />
               </FormControl>
               <FormControl isRequired>
                 <FormLabel>Grupo</FormLabel>
-                <Select
+                <SearchableSelect
                   placeholder="Selecione o grupo"
                   value={form.groupId}
-                  onChange={(e) => setForm({ ...form, groupId: e.target.value, part: "" })}
-                >
-                  {groups.map((g) => (
-                    <option key={g.id} value={g.id}>{g.name} ({g.productCount} produtos)</option>
-                  ))}
-                </Select>
+                  onChange={(val) => setForm({ ...form, groupId: val, part: "" })}
+                  options={groups.map((g) => ({ value: String(g.id), label: `${g.name} (${g.productCount} produtos)` }))}
+                />
               </FormControl>
               <FormControl>
                 <FormLabel>Parte</FormLabel>
-                <Select
+                <SearchableSelect
                   placeholder={loadingParts ? "Carregando partes..." : (!form.codcli || !form.groupId) ? "Selecione fornecedor e grupo" : "Todas (opcional)"}
                   value={form.part}
-                  onChange={(e) => setForm({ ...form, part: e.target.value })}
+                  onChange={(val) => setForm({ ...form, part: val })}
                   isDisabled={!form.codcli || !form.groupId || loadingParts}
-                >
-                  {modalParts.map((p) => (
-                    <option key={p.code} value={p.code}>{p.code}{p.name ? ` - ${p.name}` : ""}</option>
-                  ))}
-                </Select>
+                  options={modalParts.map((p) => ({ value: p.code, label: `${p.code}${p.name ? ` - ${p.name}` : ""}` }))}
+                />
                 {form.codcli && form.groupId && !loadingParts && modalParts.length === 0 && (
                   <Text fontSize="xs" color="orange.500" mt={1}>
                     Nenhuma parte encontrada para este fornecedor/grupo nas OFs.

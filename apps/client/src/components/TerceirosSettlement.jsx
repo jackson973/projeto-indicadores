@@ -42,6 +42,7 @@ import {
   ChevronRightIcon,
   createIcon
 } from "@chakra-ui/icons";
+import SearchableSelect from "./SearchableSelect";
 import {
   fetchTerceirosSettlements,
   fetchTerceirosSettlement,
@@ -1730,19 +1731,14 @@ const TerceirosSettlement = () => {
         <Flex gap={3} mb={3} wrap="wrap" align="flex-end">
           <Box flex={isMobile ? "1 1 100%" : "0 0 auto"}>
             <Text fontSize="xs" color="gray.500" mb={1}>Fornecedor</Text>
-            <Select
+            <SearchableSelect
               size="sm"
               placeholder="Selecione o fornecedor"
               value={newSupplier}
-              onChange={(e) => handleNewSupplierChange(e.target.value)}
+              onChange={(val) => handleNewSupplierChange(val)}
               w={isMobile ? "100%" : "260px"}
-            >
-              {suppliers.map((s) => (
-                <option key={s.codcli} value={s.codcli}>
-                  {s.codcli} - {s.nome || s.codcli}
-                </option>
-              ))}
-            </Select>
+              options={suppliers.map((s) => ({ value: s.codcli, label: `${s.codcli} - ${s.nome || s.codcli}` }))}
+            />
           </Box>
           <Box flex={{ base: "1 1 calc(50% - 6px)", md: "0 0 auto" }}>
             <Text fontSize="xs" color="gray.500" mb={1}>De</Text>
