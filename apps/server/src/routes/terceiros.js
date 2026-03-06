@@ -94,6 +94,34 @@ router.post('/product-groups/:id/products', async (req, res) => {
   }
 });
 
+router.post('/product-groups/:id/products/batch', async (req, res) => {
+  try {
+    const { products } = req.body;
+    if (!Array.isArray(products) || products.length === 0) {
+      return res.status(400).json({ message: 'Lista de produtos e obrigatoria.' });
+    }
+    const results = await repo.addProductsToGroupBatch(req.params.id, products);
+    return res.status(201).json(results);
+  } catch (error) {
+    console.error('Batch add products error:', error);
+    return res.status(500).json({ message: 'Erro ao adicionar produtos ao grupo.' });
+  }
+});
+
+router.delete('/product-groups/:groupId/products/batch', async (req, res) => {
+  try {
+    const { productCodes } = req.body;
+    if (!Array.isArray(productCodes) || productCodes.length === 0) {
+      return res.status(400).json({ message: 'Lista de codigos e obrigatoria.' });
+    }
+    const count = await repo.removeProductsFromGroupBatch(req.params.groupId, productCodes);
+    return res.json({ success: true, removed: count });
+  } catch (error) {
+    console.error('Batch remove products error:', error);
+    return res.status(500).json({ message: 'Erro ao remover produtos do grupo.' });
+  }
+});
+
 router.delete('/product-groups/:groupId/products/:productCode', async (req, res) => {
   try {
     const deleted = await repo.removeProductFromGroup(req.params.groupId, decodeURIComponent(req.params.productCode));

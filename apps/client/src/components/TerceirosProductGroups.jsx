@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Box,
   VStack,
@@ -22,6 +22,7 @@ import {
   ModalBody,
   ModalFooter,
   ModalCloseButton,
+  Checkbox,
   useToast,
   useColorModeValue,
   useBreakpointValue,
@@ -44,6 +45,8 @@ import {
   fetchGroupProducts,
   addProductToGroup,
   removeProductFromGroup,
+  addProductsToGroupBatch,
+  removeProductsFromGroupBatch,
   fetchTerceirosProducts
 } from "../api";
 
@@ -63,17 +66,30 @@ const TerceirosProductGroups = () => {
   const [creating, setCreating] = useState(false);
   const createModal = useDisclosure();
 
-  // Product search
+  // Product search (for adding)
   const [allProducts, setAllProducts] = useState([]);
   const [productSearch, setProductSearch] = useState("");
   const [loadingAllProducts, setLoadingAllProducts] = useState(false);
   const [addingProduct, setAddingProduct] = useState(null);
+  const [batchAdding, setBatchAdding] = useState(false);
+
+  // Filter for products already in the group
+  const [groupFilter, setGroupFilter] = useState("");
+
+  // Multi-select for group products
+  const [selectedProducts, setSelectedProducts] = useState(new Set());
+  const [removingBatch, setRemovingBatch] = useState(false);
+
+  // Multi-select for search results (batch add)
+  const [selectedSearchResults, setSelectedSearchResults] = useState(new Set());
 
   // Ungrouped view
   const [showUngrouped, setShowUngrouped] = useState(false);
   const [ungroupedSearch, setUngroupedSearch] = useState("");
   const [assignTargetGroupId, setAssignTargetGroupId] = useState("");
   const [assigningProduct, setAssigningProduct] = useState(null);
+  const [selectedUngrouped, setSelectedUngrouped] = useState(new Set());
+  const [batchAssigning, setBatchAssigning] = useState(false);
 
   const toast = useToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -133,6 +149,8 @@ const TerceirosProductGroups = () => {
   useEffect(() => {
     if (selectedGroupId) {
       loadGroupProducts(selectedGroupId);
+      setSelectedProducts(new Set());
+      setGroupFilter("");
     } else {
       setGroupProducts([]);
     }
@@ -142,6 +160,17 @@ const TerceirosProductGroups = () => {
   const groupProductCodes = useMemo(() => {
     return new Set(groupProducts.map((p) => p.productCode));
   }, [groupProducts]);
+
+  // ── Filtered group products (search within group) ────────────────────────
+  const filteredGroupProducts = useMemo(() => {
+    if (!groupFilter.trim()) return groupProducts;
+    const term = groupFilter.toLowerCase();
+    return groupProducts.filter(
+      (p) =>
+        (p.productCode || "").toLowerCase().includes(term) ||
+        (p.productName || "").toLowerCase().includes(term)
+    );
+  }, [groupProducts, groupFilter]);
 
   // ── Products not assigned to any group ────────────────────────────────────
   const ungroupedProducts = useMemo(() => {
@@ -168,6 +197,26 @@ const TerceirosProductGroups = () => {
     }
   };
 
+  // ── Batch assign ungrouped products ───────────────────────────────────────
+  const handleBatchAssignUngrouped = async () => {
+    if (!assignTargetGroupId || selectedUngrouped.size === 0) return;
+    setBatchAssigning(true);
+    try {
+      const products = ungroupedProducts
+        .filter((p) => selectedUngrouped.has(p.code))
+        .map((p) => ({ code: p.code, name: p.name }));
+      await addProductsToGroupBatch(parseInt(assignTargetGroupId), products);
+      toast({ title: `${products.length} produto(s) adicionado(s) ao grupo.`, status: "success", duration: 3000 });
+      setSelectedUngrouped(new Set());
+      await loadAllProducts();
+      await loadGroups();
+    } catch (err) {
+      toast({ title: err.message || "Erro ao adicionar produtos.", status: "error", duration: 3000 });
+    } finally {
+      setBatchAssigning(false);
+    }
+  };
+
   // ── Filtered product search results ──────────────────────────────────────
   const filteredProducts = useMemo(() => {
     if (!productSearch.trim()) return [];
@@ -179,7 +228,7 @@ const TerceirosProductGroups = () => {
           ((p.code || "").toLowerCase().includes(term) ||
           (p.name || "").toLowerCase().includes(term))
       )
-      .slice(0, 15);
+      .slice(0, 50);
   }, [productSearch, allProducts, groupProductCodes]);
 
   // ── Create group ─────────────────────────────────────────────────────────
@@ -226,7 +275,7 @@ const TerceirosProductGroups = () => {
     }
   };
 
-  // ── Add product to group ─────────────────────────────────────────────────
+  // ── Add single product to group ─────────────────────────────────────────
   const handleAddProduct = async (product) => {
     if (!selectedGroupId) return;
     setAddingProduct(product.code);
@@ -241,7 +290,28 @@ const TerceirosProductGroups = () => {
     }
   };
 
-  // ── Remove product from group ────────────────────────────────────────────
+  // ── Batch add products to group ──────────────────────────────────────────
+  const handleBatchAdd = async () => {
+    if (!selectedGroupId || selectedSearchResults.size === 0) return;
+    setBatchAdding(true);
+    try {
+      const products = filteredProducts
+        .filter((p) => selectedSearchResults.has(p.code))
+        .map((p) => ({ code: p.code, name: p.name }));
+      await addProductsToGroupBatch(selectedGroupId, products);
+      toast({ title: `${products.length} produto(s) adicionado(s).`, status: "success", duration: 3000 });
+      setSelectedSearchResults(new Set());
+      setProductSearch("");
+      await loadGroupProducts(selectedGroupId);
+      await loadGroups();
+    } catch (err) {
+      toast({ title: err.message || "Erro ao adicionar produtos.", status: "error", duration: 3000 });
+    } finally {
+      setBatchAdding(false);
+    }
+  };
+
+  // ── Remove single product from group ────────────────────────────────────
   const handleRemoveProduct = async (productCode) => {
     if (!selectedGroupId) return;
     try {
@@ -253,6 +323,56 @@ const TerceirosProductGroups = () => {
       toast({ title: err.message || "Erro ao remover produto.", status: "error", duration: 3000 });
     }
   };
+
+  // ── Batch remove products from group ────────────────────────────────────
+  const handleBatchRemove = async () => {
+    if (!selectedGroupId || selectedProducts.size === 0) return;
+    setRemovingBatch(true);
+    try {
+      const codes = Array.from(selectedProducts);
+      await removeProductsFromGroupBatch(selectedGroupId, codes);
+      toast({ title: `${codes.length} produto(s) removido(s).`, status: "success", duration: 3000 });
+      setSelectedProducts(new Set());
+      await loadGroupProducts(selectedGroupId);
+      await loadGroups();
+    } catch (err) {
+      toast({ title: err.message || "Erro ao remover produtos.", status: "error", duration: 3000 });
+    } finally {
+      setRemovingBatch(false);
+    }
+  };
+
+  // ── Toggle helpers ──────────────────────────────────────────────────────
+  const toggleProduct = (code, set, setter) => {
+    const next = new Set(set);
+    if (next.has(code)) next.delete(code);
+    else next.add(code);
+    setter(next);
+  };
+
+  const toggleAllFiltered = useCallback(() => {
+    if (selectedProducts.size === filteredGroupProducts.length && filteredGroupProducts.length > 0) {
+      setSelectedProducts(new Set());
+    } else {
+      setSelectedProducts(new Set(filteredGroupProducts.map((p) => p.productCode)));
+    }
+  }, [filteredGroupProducts, selectedProducts]);
+
+  const toggleAllSearch = useCallback(() => {
+    if (selectedSearchResults.size === filteredProducts.length && filteredProducts.length > 0) {
+      setSelectedSearchResults(new Set());
+    } else {
+      setSelectedSearchResults(new Set(filteredProducts.map((p) => p.code)));
+    }
+  }, [filteredProducts, selectedSearchResults]);
+
+  const toggleAllUngrouped = useCallback(() => {
+    if (selectedUngrouped.size === ungroupedProducts.length && ungroupedProducts.length > 0) {
+      setSelectedUngrouped(new Set());
+    } else {
+      setSelectedUngrouped(new Set(ungroupedProducts.map((p) => p.code)));
+    }
+  }, [ungroupedProducts, selectedUngrouped]);
 
   const selectedGroup = groups.find((g) => g.id === selectedGroupId);
 
@@ -305,6 +425,7 @@ const TerceirosProductGroups = () => {
                   setSelectedGroupId(null);
                   setUngroupedSearch("");
                   setAssignTargetGroupId("");
+                  setSelectedUngrouped(new Set());
                 }}
               >
                 <Text
@@ -452,14 +573,14 @@ const TerceirosProductGroups = () => {
                   <SearchIcon color="gray.400" />
                 </InputLeftElement>
                 <Input
-                  placeholder="Filtrar por código ou nome..."
+                  placeholder="Filtrar por codigo ou nome..."
                   value={ungroupedSearch}
-                  onChange={(e) => setUngroupedSearch(e.target.value)}
+                  onChange={(e) => { setUngroupedSearch(e.target.value); setSelectedUngrouped(new Set()); }}
                 />
               </InputGroup>
 
               {/* Group selector for batch assignment */}
-              <Box mb={4}>
+              <Box mb={3}>
                 <SearchableSelect
                   size="sm"
                   placeholder="Selecionar grupo para atribuir"
@@ -469,16 +590,41 @@ const TerceirosProductGroups = () => {
                 />
               </Box>
 
+              {/* Batch actions bar */}
+              {ungroupedProducts.length > 0 && (
+                <Flex align="center" gap={2} mb={3}>
+                  <Checkbox
+                    size="sm"
+                    isChecked={selectedUngrouped.size === ungroupedProducts.length && ungroupedProducts.length > 0}
+                    isIndeterminate={selectedUngrouped.size > 0 && selectedUngrouped.size < ungroupedProducts.length}
+                    onChange={toggleAllUngrouped}
+                  >
+                    <Text fontSize="xs">Selecionar todos ({ungroupedProducts.length})</Text>
+                  </Checkbox>
+                  {selectedUngrouped.size > 0 && assignTargetGroupId && (
+                    <Button
+                      size="xs"
+                      colorScheme="blue"
+                      leftIcon={<AddIcon />}
+                      onClick={handleBatchAssignUngrouped}
+                      isLoading={batchAssigning}
+                    >
+                      Adicionar {selectedUngrouped.size} ao grupo
+                    </Button>
+                  )}
+                </Flex>
+              )}
+
               {loadingAllProducts ? (
                 <Center p={6}><Spinner /></Center>
               ) : ungroupedProducts.length === 0 ? (
                 <Center p={6}>
                   <Text fontSize="sm" color="gray.500">
-                    {ungroupedSearch ? "Nenhum produto encontrado." : "Todos os produtos já estão em algum grupo."}
+                    {ungroupedSearch ? "Nenhum produto encontrado." : "Todos os produtos ja estao em algum grupo."}
                   </Text>
                 </Center>
               ) : (
-                <VStack spacing={0} align="stretch">
+                <VStack spacing={0} align="stretch" maxH="500px" overflowY="auto">
                   {ungroupedProducts.map((p) => (
                     <Flex
                       key={p.code}
@@ -490,6 +636,12 @@ const TerceirosProductGroups = () => {
                       _last={{ borderBottomWidth: 0 }}
                       _hover={{ bg: hoverBg }}
                     >
+                      <Checkbox
+                        size="sm"
+                        mr={2}
+                        isChecked={selectedUngrouped.has(p.code)}
+                        onChange={() => toggleProduct(p.code, selectedUngrouped, setSelectedUngrouped)}
+                      />
                       <Text fontSize="xs" fontWeight="bold" color="gray.500" w="55px" flexShrink={0}>
                         {p.code}
                       </Text>
@@ -527,7 +679,7 @@ const TerceirosProductGroups = () => {
                   <Input
                     placeholder="Buscar produto por codigo ou nome para adicionar..."
                     value={productSearch}
-                    onChange={(e) => setProductSearch(e.target.value)}
+                    onChange={(e) => { setProductSearch(e.target.value); setSelectedSearchResults(new Set()); }}
                   />
                 </InputGroup>
 
@@ -542,24 +694,62 @@ const TerceirosProductGroups = () => {
                     border="1px solid"
                     borderColor={borderColor}
                     borderRadius="md"
-                    maxH="280px"
+                    maxH="350px"
                     overflowY="auto"
                     boxShadow="lg"
                     mt={1}
                   >
+                    {/* Batch add bar */}
+                    <Flex
+                      align="center"
+                      gap={2}
+                      px={3}
+                      py={2}
+                      bg={headerBg}
+                      borderBottomWidth="1px"
+                      borderColor={borderColor}
+                      position="sticky"
+                      top={0}
+                      zIndex={1}
+                    >
+                      <Checkbox
+                        size="sm"
+                        isChecked={selectedSearchResults.size === filteredProducts.length && filteredProducts.length > 0}
+                        isIndeterminate={selectedSearchResults.size > 0 && selectedSearchResults.size < filteredProducts.length}
+                        onChange={toggleAllSearch}
+                      >
+                        <Text fontSize="xs">Todos ({filteredProducts.length})</Text>
+                      </Checkbox>
+                      {selectedSearchResults.size > 0 && (
+                        <Button
+                          size="xs"
+                          colorScheme="blue"
+                          leftIcon={<AddIcon />}
+                          onClick={handleBatchAdd}
+                          isLoading={batchAdding}
+                        >
+                          Adicionar {selectedSearchResults.size}
+                        </Button>
+                      )}
+                    </Flex>
+
                     {filteredProducts.map((product) => (
                       <Flex
                         key={product.code}
                         align="center"
                         px={3}
                         py={2}
-                        cursor="pointer"
                         _hover={{ bg: searchResultHover }}
-                        onClick={() => handleAddProduct(product)}
                         borderBottomWidth="1px"
                         borderColor={borderColor}
                         _last={{ borderBottomWidth: 0 }}
                       >
+                        <Checkbox
+                          size="sm"
+                          mr={2}
+                          isChecked={selectedSearchResults.has(product.code)}
+                          onChange={() => toggleProduct(product.code, selectedSearchResults, setSelectedSearchResults)}
+                        />
                         <Text fontSize="xs" fontWeight="bold" color="gray.500" w="55px" flexShrink={0}>
                           {product.code}
                         </Text>
@@ -575,7 +765,14 @@ const TerceirosProductGroups = () => {
                           {addingProduct === product.code ? (
                             <Spinner size="xs" />
                           ) : (
-                            <AddIcon boxSize={3} color="blue.400" />
+                            <IconButton
+                              icon={<AddIcon />}
+                              size="xs"
+                              variant="ghost"
+                              colorScheme="blue"
+                              aria-label="Adicionar"
+                              onClick={() => handleAddProduct(product)}
+                            />
                           )}
                         </Box>
                       </Flex>
@@ -584,6 +781,43 @@ const TerceirosProductGroups = () => {
                 )}
               </Box>
 
+              {/* Filter within group products */}
+              <InputGroup size="sm" mb={3}>
+                <InputLeftElement pointerEvents="none">
+                  <SearchIcon color="gray.400" />
+                </InputLeftElement>
+                <Input
+                  placeholder="Pesquisar nos produtos do grupo..."
+                  value={groupFilter}
+                  onChange={(e) => { setGroupFilter(e.target.value); setSelectedProducts(new Set()); }}
+                />
+              </InputGroup>
+
+              {/* Batch actions bar */}
+              {filteredGroupProducts.length > 0 && (
+                <Flex align="center" gap={2} mb={3}>
+                  <Checkbox
+                    size="sm"
+                    isChecked={selectedProducts.size === filteredGroupProducts.length && filteredGroupProducts.length > 0}
+                    isIndeterminate={selectedProducts.size > 0 && selectedProducts.size < filteredGroupProducts.length}
+                    onChange={toggleAllFiltered}
+                  >
+                    <Text fontSize="xs">Selecionar todos ({filteredGroupProducts.length})</Text>
+                  </Checkbox>
+                  {selectedProducts.size > 0 && (
+                    <Button
+                      size="xs"
+                      colorScheme="red"
+                      leftIcon={<DeleteIcon />}
+                      onClick={handleBatchRemove}
+                      isLoading={removingBatch}
+                    >
+                      Remover {selectedProducts.size}
+                    </Button>
+                  )}
+                </Flex>
+              )}
+
               {/* Products list */}
               {loadingProducts ? (
                 <Center p={6}><Spinner /></Center>
@@ -591,9 +825,13 @@ const TerceirosProductGroups = () => {
                 <Center p={6}>
                   <Text fontSize="sm" color="gray.500">Nenhum produto neste grupo. Use a busca acima para adicionar.</Text>
                 </Center>
+              ) : filteredGroupProducts.length === 0 ? (
+                <Center p={6}>
+                  <Text fontSize="sm" color="gray.500">Nenhum produto encontrado com esse filtro.</Text>
+                </Center>
               ) : (
-                <VStack spacing={0} align="stretch">
-                  {groupProducts.map((p) => (
+                <VStack spacing={0} align="stretch" maxH="500px" overflowY="auto">
+                  {filteredGroupProducts.map((p) => (
                     <Flex
                       key={p.productCode}
                       align="center"
@@ -602,7 +840,14 @@ const TerceirosProductGroups = () => {
                       borderBottomWidth="1px"
                       borderColor={borderColor}
                       _last={{ borderBottomWidth: 0 }}
+                      _hover={{ bg: hoverBg }}
                     >
+                      <Checkbox
+                        size="sm"
+                        mr={2}
+                        isChecked={selectedProducts.has(p.productCode)}
+                        onChange={() => toggleProduct(p.productCode, selectedProducts, setSelectedProducts)}
+                      />
                       <Text fontSize="xs" fontWeight="bold" color="gray.500" w="55px" flexShrink={0}>
                         {p.productCode}
                       </Text>

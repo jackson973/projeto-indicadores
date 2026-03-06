@@ -360,6 +360,23 @@ async function removeProductFromGroup(groupId, productCode) {
   return result.rowCount > 0;
 }
 
+async function addProductsToGroupBatch(groupId, products) {
+  const results = [];
+  for (const p of products) {
+    const row = await addProductToGroup(groupId, p.code, p.name || '');
+    results.push(row);
+  }
+  return results;
+}
+
+async function removeProductsFromGroupBatch(groupId, productCodes) {
+  const result = await db.query(
+    'DELETE FROM terceiros_group_products WHERE group_id = $1 AND product_code = ANY($2::text[]) RETURNING id',
+    [groupId, productCodes]
+  );
+  return result.rowCount;
+}
+
 // ── Supplier Prices ─────────────────────────────────────────────────────────
 
 async function getSupplierPrices({ codcli, groupId } = {}) {
@@ -1091,6 +1108,8 @@ module.exports = {
   getGroupProducts,
   addProductToGroup,
   removeProductFromGroup,
+  addProductsToGroupBatch,
+  removeProductsFromGroupBatch,
   // Supplier Prices
   getSupplierPrices,
   createSupplierPrice,

@@ -587,6 +587,24 @@ export const removeProductFromGroup = async (groupId, productCode) => {
   return handleResponse(response);
 };
 
+export const addProductsToGroupBatch = async (groupId, products) => {
+  const response = await authFetch(`/api/terceiros/product-groups/${groupId}/products/batch`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ products })
+  });
+  return handleResponse(response);
+};
+
+export const removeProductsFromGroupBatch = async (groupId, productCodes) => {
+  const response = await authFetch(`/api/terceiros/product-groups/${groupId}/products/batch`, {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ productCodes })
+  });
+  return handleResponse(response);
+};
+
 // ── Terceiros: Supplier Prices ──────────────────────────────────────────────
 
 export const fetchTerceirosSupplierPrices = async (codcli, groupId) => {

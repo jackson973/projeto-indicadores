@@ -1,3 +1,4 @@
+import { useMemo, useState } from "react";
 import {
   LineChart,
   Line,
@@ -7,10 +8,79 @@ import {
   ResponsiveContainer,
   CartesianGrid
 } from "recharts";
-import { Box, Button, Flex, Select, Text, HStack, useColorModeValue } from "@chakra-ui/react";
+import { Box, Button, Flex, Select, Text, HStack, useColorModeValue, Checkbox, VStack } from "@chakra-ui/react";
 import { useAnimationCycle } from "../hooks/useAnimationCycle";
 import { CalendarIcon } from "@chakra-ui/icons";
 import { formatCurrency } from "../utils/format";
+
+const linearRegression = (points) => {
+  const n = points.length;
+  if (n < 2) return { slope: 0, intercept: 0 };
+  let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+  for (let i = 0; i < n; i++) {
+    sumX += i;
+    sumY += points[i];
+    sumXY += i * points[i];
+    sumX2 += i * i;
+  }
+  const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+};
+
+const MIN_POINTS_FOR_TREND = 4;
+
+const buildTrendAndProjection = (data, showTrend, showProjection, period) => {
+  if (!data || data.length < 2) return data || [];
+
+  const hasTrend = (showTrend || showProjection) && data.length >= MIN_POINTS_FOR_TREND;
+
+  if (!hasTrend) {
+    return data.map((d) => ({ ...d }));
+  }
+
+  // Use median of neighboring points to reduce outlier impact from partial periods
+  const values = data.map((d) => d.total);
+  // Detect and dampen partial first/last periods for week/month
+  // If the first value is less than 50% of the second, it's likely partial
+  if ((period === "week" || period === "month") && values.length >= 3) {
+    if (values[0] < values[1] * 0.5) {
+      values[0] = values[1]; // Replace with next full period
+    }
+    const last = values.length - 1;
+    if (values[last] < values[last - 1] * 0.5) {
+      values[last] = values[last - 1]; // Replace with previous full period
+    }
+  }
+
+  const { slope, intercept } = linearRegression(values);
+
+  const projectionCount = period === "day" ? 7 : period === "week" ? 4 : 3;
+
+  const result = data.map((d, i) => ({
+    ...d,
+    trend: showTrend ? Math.round(intercept + slope * i) : undefined
+  }));
+
+  if (showProjection) {
+    const lastEntry = data[data.length - 1];
+    result[result.length - 1].projection = lastEntry.total;
+
+    for (let j = 1; j <= projectionCount; j++) {
+      const idx = data.length - 1 + j;
+      const projectedValue = Math.max(0, Math.round(intercept + slope * idx));
+      const trendValue = showTrend ? projectedValue : undefined;
+      result.push({
+        period: `proj_${j}`,
+        total: undefined,
+        trend: trendValue,
+        projection: projectedValue
+      });
+    }
+  }
+
+  return result;
+};
 
 const downloadCsv = (rows, filename) => {
   if (!rows.length) return;
@@ -97,11 +167,30 @@ const formatXAxisLabel = (label) => {
 
 const SalesByPeriodChart = ({ data, period, onPeriodChange, autoplay = true }) => {
   const cycle = useAnimationCycle(30000, 0, autoplay);
+  const [showTrend, setShowTrend] = useState(false);
+  const [showProjection, setShowProjection] = useState(false);
   const panelBg = useColorModeValue("white", "gray.800");
   const tooltipBg = useColorModeValue("white", "gray.800");
   const tooltipBorder = useColorModeValue("gray.100", "gray.700");
   const tooltipText = useColorModeValue("gray.800", "gray.100");
   const tooltipSubText = useColorModeValue("gray.600", "gray.300");
+
+  const notEnoughData = (showTrend || showProjection) && (!data || data.length < MIN_POINTS_FOR_TREND);
+
+  const chartData = useMemo(
+    () => buildTrendAndProjection(data, showTrend, showProjection, period),
+    [data, showTrend, showProjection, period]
+  );
+
+  const formatXAxisLabelWithProjection = (label) => {
+    if (typeof label === "string" && label.startsWith("proj_")) {
+      const idx = Number(label.replace("proj_", ""));
+      if (period === "day") return `+${idx}d`;
+      if (period === "week") return `+${idx}s`;
+      return `+${idx}m`;
+    }
+    return formatXAxisLabel(label);
+  };
 
   return (
     <Box className="panel" bg={panelBg} p={6} borderRadius="lg" boxShadow="sm">
@@ -112,7 +201,13 @@ const SalesByPeriodChart = ({ data, period, onPeriodChange, autoplay = true }) =
             <span>Vendas</span>
           </HStack>
         </Text>
-        <HStack spacing={2}>
+        <HStack spacing={3}>
+          <Checkbox size="sm" isChecked={showTrend} onChange={(e) => setShowTrend(e.target.checked)} colorScheme="orange">
+            Tendência
+          </Checkbox>
+          <Checkbox size="sm" isChecked={showProjection} onChange={(e) => setShowProjection(e.target.checked)} colorScheme="green">
+            Projeção
+          </Checkbox>
           <Select
             size="sm"
             w="130px"
@@ -128,16 +223,24 @@ const SalesByPeriodChart = ({ data, period, onPeriodChange, autoplay = true }) =
           </Button>
         </HStack>
       </Flex>
+      {notEnoughData && (
+        <Text fontSize="xs" color="orange.500" mb={2}>
+          Mínimo de {MIN_POINTS_FOR_TREND} períodos necessários para tendência/projeção. Tente o modo Diário.
+        </Text>
+      )}
       <div className="chart">
         <ResponsiveContainer width="100%" height={280}>
-          <LineChart key={cycle} data={data} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
+          <LineChart key={cycle} data={chartData} margin={{ top: 20, right: 20, left: 0, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="period" tickFormatter={formatXAxisLabel} fontSize={11} angle={-35} textAnchor="end" height={50} interval="preserveStartEnd" />
+            <XAxis dataKey="period" tickFormatter={formatXAxisLabelWithProjection} fontSize={11} angle={-35} textAnchor="end" height={50} interval="preserveStartEnd" />
             <YAxis />
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload?.length) return null;
-                const { primary, secondary } = getPeriodTooltipLabel(label);
+                const isProjection = typeof label === "string" && label.startsWith("proj_");
+                const { primary, secondary } = isProjection
+                  ? { primary: "Projeção", secondary: undefined }
+                  : getPeriodTooltipLabel(label);
                 return (
                   <Box bg={tooltipBg} border="1px solid" borderColor={tooltipBorder} borderRadius="md" p={3} boxShadow="md">
                     <Text fontWeight="semibold" color={tooltipText}>
@@ -148,14 +251,23 @@ const SalesByPeriodChart = ({ data, period, onPeriodChange, autoplay = true }) =
                         {secondary}
                       </Text>
                     )}
-                    <Text fontSize="sm" color={tooltipSubText}>
-                      Total: {formatCurrency(payload[0].value)}
-                    </Text>
+                    {payload.map((entry) => (
+                      <Text key={entry.dataKey} fontSize="sm" color={tooltipSubText}>
+                        {entry.dataKey === "total" ? "Total" : entry.dataKey === "trend" ? "Tendência" : "Projeção"}:{" "}
+                        {formatCurrency(entry.value)}
+                      </Text>
+                    ))}
                   </Box>
                 );
               }}
             />
-            <Line type="monotone" dataKey="total" stroke="#3182ce" strokeWidth={2} isAnimationActive animationDuration={1200} animationEasing="ease-in-out" />
+            <Line type="monotone" dataKey="total" stroke="#3182ce" strokeWidth={2} dot connectNulls={false} isAnimationActive animationDuration={1200} animationEasing="ease-in-out" />
+            {showTrend && (
+              <Line type="linear" dataKey="trend" stroke="#dd6b20" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls isAnimationActive animationDuration={800} />
+            )}
+            {showProjection && (
+              <Line type="monotone" dataKey="projection" stroke="#38a169" strokeWidth={2} strokeDasharray="4 4" dot={{ r: 3 }} connectNulls isAnimationActive animationDuration={800} />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
