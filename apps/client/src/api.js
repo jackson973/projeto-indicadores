@@ -667,6 +667,23 @@ export const createTerceirosSettlement = async (data) => {
   return handleResponse(response);
 };
 
+export const saveTerceirosDraft = async (data, id) => {
+  const url = id
+    ? `/api/terceiros/settlements/drafts/${id}`
+    : "/api/terceiros/settlements/drafts";
+  const response = await authFetch(url, {
+    method: id ? "PUT" : "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const fetchTerceirosDraft = async (id) => {
+  const response = await authFetch(`/api/terceiros/settlements/drafts/${id}`);
+  return handleResponse(response);
+};
+
 export const payTerceirosSettlement = async (id) => {
   const response = await authFetch(`/api/terceiros/settlements/${id}/pay`, { method: "PUT" });
   return handleResponse(response);

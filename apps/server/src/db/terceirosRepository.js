@@ -527,6 +527,7 @@ async function getSettlements({ codcli, month, year, status } = {}) {
             s.status, s.paid_at AS "paidAt", s.notes,
             s.total_discounts AS "totalDiscounts", s.total_payable AS "totalPayable",
             s.created_at AS "createdAt", s.updated_at AS "updatedAt",
+            u.name AS "createdByName",
             (
               SELECT COUNT(*)::int FROM terceiros_ofs o
               WHERE o.fac_codcli = s.codcli
@@ -543,8 +544,9 @@ async function getSettlements({ codcli, month, year, status } = {}) {
                 )
             ) AS "missingCount"
      FROM terceiros_settlements s
+     LEFT JOIN users u ON u.id = s.created_by
      WHERE ${conditions.join(' AND ')}
-     ORDER BY s.reference_year DESC, s.reference_month DESC, s.supplier_name`,
+     ORDER BY s.status = 'draft' DESC, s.reference_year DESC, s.reference_month DESC, s.supplier_name`,
     params
   );
   return result.rows;
@@ -678,6 +680,105 @@ async function createSettlement({ codcli, supplierName, referenceMonth, referenc
 
     await client.query('COMMIT');
     return { id: settlementId, ...totals };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function saveDraft({ id, codcli, supplierName, referenceMonth, referenceYear, notes, createdBy, draftData }) {
+  if (id) {
+    // Update existing draft
+    const result = await db.query(
+      `UPDATE terceiros_settlements
+       SET codcli = $1, supplier_name = $2, reference_month = $3, reference_year = $4,
+           notes = $5, draft_data = $6
+       WHERE id = $7 AND status = 'draft'
+       RETURNING id`,
+      [codcli, supplierName || null, referenceMonth, referenceYear, notes || null, draftData || {}, id]
+    );
+    if (result.rows.length === 0) throw new Error('Rascunho não encontrado.');
+    return result.rows[0];
+  }
+
+  // Create new draft
+  const result = await db.query(
+    `INSERT INTO terceiros_settlements (codcli, supplier_name, reference_month, reference_year, notes, status, created_by, draft_data, total_amount, total_items)
+     VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7, 0, 0)
+     RETURNING id`,
+    [codcli, supplierName || null, referenceMonth, referenceYear, notes || null, createdBy, draftData || {}]
+  );
+  return result.rows[0];
+}
+
+async function getDraft(id) {
+  const result = await db.query(
+    `SELECT s.id, s.codcli, s.supplier_name AS "supplierName",
+            s.reference_month AS "referenceMonth", s.reference_year AS "referenceYear",
+            s.notes, s.draft_data AS "draftData",
+            s.created_by AS "createdBy", u.name AS "createdByName",
+            s.created_at AS "createdAt", s.updated_at AS "updatedAt"
+     FROM terceiros_settlements s
+     LEFT JOIN users u ON u.id = s.created_by
+     WHERE s.id = $1 AND s.status = 'draft'`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
+async function promoteDraft(id, { items, discounts }) {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+
+    // Verify it's a draft
+    const check = await client.query('SELECT id, codcli FROM terceiros_settlements WHERE id = $1 AND status = $2', [id, 'draft']);
+    if (check.rows.length === 0) throw new Error('Rascunho não encontrado.');
+
+    let totalAmount = 0;
+    let totalItems = 0;
+
+    for (const item of items) {
+      const totalPrice = parseFloat((item.quantity * item.unitPrice).toFixed(2));
+      const manuallyEdited = item.manuallyEdited || false;
+      await client.query(
+        `INSERT INTO terceiros_settlement_items (settlement_id, of_id, quantity, unit_price, total_price, price_source, original_quantity, original_unit_price, manually_edited)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [id, item.ofId, item.quantity, item.unitPrice, totalPrice, item.priceSource || 'table',
+         manuallyEdited ? item.originalQuantity : null,
+         manuallyEdited ? item.originalUnitPrice : null,
+         manuallyEdited]
+      );
+
+      await client.query('UPDATE terceiros_ofs SET settlement_id = $1 WHERE id = $2', [id, item.ofId]);
+      totalAmount += totalPrice;
+      totalItems++;
+    }
+
+    if (discounts && discounts.length > 0) {
+      for (const disc of discounts) {
+        if (disc.description && parseFloat(disc.amount) > 0) {
+          await client.query(
+            `INSERT INTO terceiros_settlement_discounts (settlement_id, description, amount) VALUES ($1, $2, $3)`,
+            [id, disc.description, parseFloat(disc.amount).toFixed(2)]
+          );
+        }
+      }
+    }
+
+    // Promote to open and clear draft_data
+    await client.query(
+      `UPDATE terceiros_settlements SET status = 'open', draft_data = NULL,
+              total_amount = $2, total_items = $3
+       WHERE id = $1`,
+      [id, totalAmount, totalItems]
+    );
+
+    const totals = await recalcSettlementTotals(client.query.bind(client), id);
+    await client.query('COMMIT');
+    return { id, ...totals };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
@@ -1008,6 +1109,10 @@ module.exports = {
   updateSettlementItem,
   addSettlementItems,
   getSettlementExportData,
+  // Drafts
+  saveDraft,
+  getDraft,
+  promoteDraft,
   // Discounts
   getSettlementDiscounts,
   addSettlementDiscount,

@@ -245,6 +245,17 @@ router.get('/settlements', async (req, res) => {
   }
 });
 
+router.get('/settlements/drafts/:id', async (req, res) => {
+  try {
+    const draft = await repo.getDraft(req.params.id);
+    if (!draft) return res.status(404).json({ message: 'Rascunho não encontrado.' });
+    return res.json(draft);
+  } catch (error) {
+    console.error('Get draft error:', error);
+    return res.status(500).json({ message: 'Erro ao buscar rascunho.' });
+  }
+});
+
 router.get('/settlements/:id', async (req, res) => {
   try {
     const settlement = await repo.getSettlement(req.params.id);
@@ -258,18 +269,57 @@ router.get('/settlements/:id', async (req, res) => {
 
 router.post('/settlements', async (req, res) => {
   try {
-    const { codcli, supplierName, referenceMonth, referenceYear, notes, items } = req.body;
+    const { codcli, supplierName, referenceMonth, referenceYear, notes, items, discounts, draftId } = req.body;
     if (!codcli || !referenceMonth || !referenceYear || !items || items.length === 0) {
       return res.status(400).json({ message: 'Fornecedor, mes/ano e itens sao obrigatorios.' });
     }
+
+    // If promoting from a draft, use promoteDraft
+    if (draftId) {
+      const result = await repo.promoteDraft(draftId, { items, discounts });
+      return res.status(201).json(result);
+    }
+
     const result = await repo.createSettlement({
       codcli, supplierName, referenceMonth, referenceYear,
-      notes, createdBy: req.user.id, items
+      notes, createdBy: req.user.id, items, discounts
     });
     return res.status(201).json(result);
   } catch (error) {
     console.error('Create settlement error:', error);
     return res.status(500).json({ message: 'Erro ao criar fechamento.' });
+  }
+});
+
+// ── Drafts ────────────────────────────────────────────────────────────────
+router.post('/settlements/drafts', async (req, res) => {
+  try {
+    const { codcli, supplierName, referenceMonth, referenceYear, notes, draftData } = req.body;
+    if (!codcli) {
+      return res.status(400).json({ message: 'Fornecedor é obrigatório.' });
+    }
+    const result = await repo.saveDraft({
+      codcli, supplierName, referenceMonth, referenceYear,
+      notes, createdBy: req.user.id, draftData
+    });
+    return res.status(201).json(result);
+  } catch (error) {
+    console.error('Create draft error:', error);
+    return res.status(500).json({ message: 'Erro ao salvar rascunho.' });
+  }
+});
+
+router.put('/settlements/drafts/:id', async (req, res) => {
+  try {
+    const { codcli, supplierName, referenceMonth, referenceYear, notes, draftData } = req.body;
+    const result = await repo.saveDraft({
+      id: req.params.id, codcli, supplierName, referenceMonth, referenceYear,
+      notes, draftData
+    });
+    return res.json(result);
+  } catch (error) {
+    console.error('Update draft error:', error);
+    return res.status(500).json({ message: 'Erro ao atualizar rascunho.' });
   }
 });
 

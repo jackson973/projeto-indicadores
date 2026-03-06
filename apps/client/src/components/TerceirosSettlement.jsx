@@ -58,7 +58,9 @@ import {
   removeSettlementDiscount,
   fetchTerceirosOfs,
   fetchTerceirosSuppliers,
-  fetchTerceirosPricesForOfs
+  fetchTerceirosPricesForOfs,
+  saveTerceirosDraft,
+  fetchTerceirosDraft
 } from "../api";
 import { getToken } from "../api";
 import { getSaoPauloYear, getSaoPauloMonth } from "../utils/timezone";
@@ -148,8 +150,8 @@ const TerceirosSettlement = () => {
   const [editingSize, setEditingSize] = useState(null);
 
   const [savingDraft, setSavingDraft] = useState(false);
-  const [hasDraft, setHasDraft] = useState(false);
   const [restoringDraft, setRestoringDraft] = useState(false);
+  const [activeDraftId, setActiveDraftId] = useState(null);
 
   const toast = useToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -671,11 +673,11 @@ const TerceirosSettlement = () => {
         referenceYear: dateFrom ? new Date(dateFrom + "T12:00:00").getFullYear() : newYear,
         notes,
         items,
-        discounts: newDiscounts.length > 0 ? newDiscounts : undefined
+        discounts: newDiscounts.length > 0 ? newDiscounts : undefined,
+        draftId: activeDraftId || undefined
       });
       toast({ title: "Fechamento criado com sucesso.", status: "success", duration: 3000 });
-      localStorage.removeItem(DRAFT_KEY);
-      setHasDraft(false);
+      setActiveDraftId(null);
       setCreating(false);
       setNewSupplier("");
       setOfSearchNew("");
@@ -697,60 +699,75 @@ const TerceirosSettlement = () => {
     }
   }, [newSupplier, selectedOfs, unsettledOfs, getOfPrice, getOfPriceInfo, editedQuantities, editedGroupPrices, manualPrices, suppliers, newMonth, newYear, dateFrom, notes, newDiscounts, loadSettlements, toast]);
 
-  // ── Draft save/restore ───────────────────────────────────────────────────
-  const DRAFT_KEY = "terceiros_settlement_draft";
+  // ── Draft save/restore (persisted in DB) ─────────────────────────────────
+  const handleSaveDraft = useCallback(async () => {
+    if (!newSupplier) {
+      toast({ title: "Selecione um fornecedor para salvar o rascunho.", status: "warning", duration: 3000 });
+      return;
+    }
 
-  useEffect(() => {
-    setHasDraft(!!localStorage.getItem(DRAFT_KEY));
-  }, [creating]);
-
-  const handleSaveDraft = useCallback(() => {
     const ofIds = [];
     selectedOfs.forEach((index) => {
       const of = unsettledOfs[index];
       if (of) ofIds.push(of.id);
     });
-    const draft = {
-      newSupplier,
-      dateFrom,
-      dateTo,
-      ofSearchNew,
-      etapaFilter,
-      selectedOfIds: ofIds,
-      manualPrices,
-      editedQuantities,
-      editedGroupPrices,
-      notes,
-      newDiscounts,
-      savedAt: new Date().toISOString()
-    };
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    setHasDraft(true);
-    toast({ title: "Rascunho salvo com sucesso.", status: "success", duration: 3000 });
-  }, [newSupplier, dateFrom, dateTo, ofSearchNew, etapaFilter, selectedOfs, unsettledOfs, manualPrices, editedQuantities, editedGroupPrices, notes, newDiscounts, toast]);
 
-  const handleRestoreDraft = useCallback(async () => {
-    const raw = localStorage.getItem(DRAFT_KEY);
-    if (!raw) return;
+    const supplierObj = suppliers.find((s) => String(s.codcli) === String(newSupplier));
+    const supplierName = supplierObj ? supplierObj.nome || newSupplier : newSupplier;
+
+    const draftData = {
+      dateFrom, dateTo, ofSearchNew, etapaFilter,
+      selectedOfIds: ofIds,
+      manualPrices, editedQuantities, editedGroupPrices,
+      newDiscounts
+    };
+
+    setSavingDraft(true);
     try {
-      const draft = JSON.parse(raw);
-      setRestoringDraft(true);
+      const result = await saveTerceirosDraft({
+        codcli: newSupplier,
+        supplierName,
+        referenceMonth: dateFrom ? new Date(dateFrom + "T12:00:00").getMonth() + 1 : newMonth,
+        referenceYear: dateFrom ? new Date(dateFrom + "T12:00:00").getFullYear() : newYear,
+        notes,
+        draftData
+      }, activeDraftId || undefined);
+
+      setActiveDraftId(result.id);
+      toast({ title: "Rascunho salvo com sucesso.", status: "success", duration: 3000 });
+      await loadSettlements();
+    } catch (err) {
+      toast({ title: err.message || "Erro ao salvar rascunho.", status: "error", duration: 4000 });
+    } finally {
+      setSavingDraft(false);
+    }
+  }, [newSupplier, dateFrom, dateTo, ofSearchNew, etapaFilter, selectedOfs, unsettledOfs, manualPrices, editedQuantities, editedGroupPrices, notes, newDiscounts, suppliers, newMonth, newYear, activeDraftId, loadSettlements, toast]);
+
+  const handleRestoreDraft = useCallback(async (draftId) => {
+    setRestoringDraft(true);
+    try {
+      const draft = await fetchTerceirosDraft(draftId);
+      if (!draft) throw new Error("Rascunho não encontrado.");
+
+      const dd = draft.draftData || {};
+
       setCreating(true);
-      setNewSupplier(draft.newSupplier || "");
-      setDateFrom(draft.dateFrom || "");
-      setDateTo(draft.dateTo || "");
-      setOfSearchNew(draft.ofSearchNew || "");
-      setEtapaFilter(draft.etapaFilter || "");
+      setActiveDraftId(draft.id);
+      setNewSupplier(draft.codcli || "");
+      setDateFrom(dd.dateFrom || "");
+      setDateTo(dd.dateTo || "");
+      setOfSearchNew(dd.ofSearchNew || "");
+      setEtapaFilter(dd.etapaFilter || "");
       setNotes(draft.notes || "");
-      setNewDiscounts(draft.newDiscounts || []);
+      setNewDiscounts(dd.newDiscounts || []);
 
       // Reload OFs from server
       const params = new URLSearchParams();
-      if (draft.newSupplier) params.append("codcli", draft.newSupplier);
+      if (draft.codcli) params.append("codcli", draft.codcli);
       params.append("unsettledOnly", "true");
-      if (draft.dateFrom) params.append("dateFrom", draft.dateFrom);
-      if (draft.dateTo) params.append("dateTo", draft.dateTo);
-      if (draft.ofSearchNew) params.append("facNumero", draft.ofSearchNew.trim());
+      if (dd.dateFrom) params.append("dateFrom", dd.dateFrom);
+      if (dd.dateTo) params.append("dateTo", dd.dateTo);
+      if (dd.ofSearchNew) params.append("facNumero", dd.ofSearchNew.trim());
 
       setLoadingOfs(true);
       const result = await fetchTerceirosOfs(params.toString());
@@ -761,26 +778,25 @@ const TerceirosSettlement = () => {
       const idToIndex = {};
       data.forEach((of, idx) => { idToIndex[of.id] = idx; });
       const restored = new Set();
-      (draft.selectedOfIds || []).forEach((id) => {
+      (dd.selectedOfIds || []).forEach((id) => {
         if (idToIndex[id] !== undefined) restored.add(idToIndex[id]);
       });
 
       // Reload prices
-      if (data.length > 0 && draft.newSupplier) {
+      if (data.length > 0 && draft.codcli) {
         const items = data.map((of) => ({
           productCode: of.fac_codigo_produto,
           parte: of.fac_parte,
           cor: of.fac_cor
         }));
         try {
-          const prices = await fetchTerceirosPricesForOfs(draft.newSupplier, items);
+          const prices = await fetchTerceirosPricesForOfs(draft.codcli, items);
           const legacyPriceMap = {};
           if (Array.isArray(prices)) {
             prices.forEach((p) => {
               const key = `${p.productCode}|${p.parte}|${p.cor}`;
               legacyPriceMap[key] = { price: p.price, source: p.source, error: p.error || null, groupName: p.groupName || null };
             });
-            // Auto-select OFs with prices if none were saved
             if (restored.size === 0) {
               data.forEach((of, idx) => {
                 const key = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
@@ -795,40 +811,23 @@ const TerceirosSettlement = () => {
       }
 
       setSelectedOfs(restored);
-      // Remap edited quantities/prices by OF id -> new index
-      const restoredQty = {};
-      const restoredGroupPrices = {};
-      const restoredManual = {};
-      if (draft.editedQuantities) {
-        Object.entries(draft.editedQuantities).forEach(([oldIdx, val]) => {
-          // Old index mapped to OF id in selectedOfIds context - but we saved by index
-          // We need to find the OF and remap. Since OFs were reloaded, use id mapping.
-        });
-      }
-      // For simplicity, restore manual edits by matching OF ids
-      setManualPrices(draft.manualPrices || {});
-      setEditedQuantities(draft.editedQuantities || {});
-      setEditedGroupPrices(draft.editedGroupPrices || {});
+      setManualPrices(dd.manualPrices || {});
+      setEditedQuantities(dd.editedQuantities || {});
+      setEditedGroupPrices(dd.editedGroupPrices || {});
 
       setLoadingOfs(false);
-      setRestoringDraft(false);
       toast({ title: "Rascunho restaurado.", status: "info", duration: 3000 });
     } catch (err) {
+      toast({ title: err.message || "Erro ao restaurar rascunho.", status: "error", duration: 3000 });
+    } finally {
       setRestoringDraft(false);
-      setLoadingOfs(false);
-      toast({ title: "Erro ao restaurar rascunho.", status: "error", duration: 3000 });
     }
-  }, [toast]);
-
-  const handleDiscardDraft = useCallback(() => {
-    localStorage.removeItem(DRAFT_KEY);
-    setHasDraft(false);
-    toast({ title: "Rascunho descartado.", status: "info", duration: 2000 });
   }, [toast]);
 
   // ── Cancel new settlement ─────────────────────────────────────────────────
   const handleCancelCreate = useCallback(() => {
     setCreating(false);
+    setActiveDraftId(null);
     setNewSupplier("");
     setOfSearchNew("");
     setEtapaFilter("");
@@ -937,6 +936,7 @@ const TerceirosSettlement = () => {
           w={isMobile ? "100%" : "140px"}
         >
           <option value="">Todos</option>
+          <option value="draft">Rascunho</option>
           <option value="open">Em Aberto</option>
           <option value="paid">Pago</option>
         </Select>
@@ -950,28 +950,6 @@ const TerceirosSettlement = () => {
             onChange={(e) => setOfSearch(e.target.value)}
           />
         </InputGroup>
-        {hasDraft && !creating && (
-          <HStack spacing={1} flexShrink={0}>
-            <Button
-              size="sm"
-              variant="outline"
-              colorScheme="orange"
-              onClick={handleRestoreDraft}
-              isLoading={restoringDraft}
-              loadingText="Restaurando..."
-            >
-              Continuar Rascunho
-            </Button>
-            <IconButton
-              icon={<CloseIcon />}
-              size="xs"
-              variant="ghost"
-              colorScheme="red"
-              aria-label="Descartar rascunho"
-              onClick={handleDiscardDraft}
-            />
-          </HStack>
-        )}
         <Button
           leftIcon={<AddIcon />}
           colorScheme="blue"
@@ -1030,6 +1008,9 @@ const TerceirosSettlement = () => {
                   <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
                     {s.supplierName || getSupplierName(s.codcli)}
                   </Text>
+                  {s.status === "draft" && s.createdByName && (
+                    <Text fontSize="2xs" color="gray.400">por {s.createdByName}</Text>
+                  )}
                   {s.missingCount > 0 && (
                     <Tooltip label={`${s.missingCount} tamanho(s) nao incluido(s)`}>
                       <Box as="span">
@@ -1038,8 +1019,8 @@ const TerceirosSettlement = () => {
                     </Tooltip>
                   )}
                 </HStack>
-                <Badge colorScheme={s.status === "paid" ? "green" : "yellow"} fontSize="xs">
-                  {s.status === "paid" ? "Pago" : "Em Aberto"}
+                <Badge colorScheme={s.status === "paid" ? "green" : s.status === "draft" ? "purple" : "yellow"} fontSize="xs">
+                  {s.status === "paid" ? "Pago" : s.status === "draft" ? "Rascunho" : "Em Aberto"}
                 </Badge>
               </Flex>
               <Flex justify="space-between" align="center" mb={2}>
@@ -1058,63 +1039,37 @@ const TerceirosSettlement = () => {
                 </VStack>
               </Flex>
               <HStack spacing={1} justify="flex-end">
-                <Tooltip label="Ver detalhes">
-                  <IconButton
-                    icon={<ViewIcon />}
-                    size="xs"
-                    variant="ghost"
-                    aria-label="Ver detalhes"
-                    onClick={() => handleViewDetail(s.id)}
-                  />
-                </Tooltip>
-                <Tooltip label="Editar">
-                  <IconButton
-                    icon={<EditIcon />}
-                    size="xs"
-                    variant="ghost"
-                    colorScheme="blue"
-                    aria-label="Editar"
-                    onClick={() => handleStartEdit(s)}
-                  />
-                </Tooltip>
-                <Tooltip label={s.status === "paid" ? "Marcar como em aberto" : "Marcar como pago"}>
-                  <IconButton
-                    icon={<CheckIcon />}
-                    size="xs"
-                    variant="ghost"
-                    colorScheme={s.status === "paid" ? "yellow" : "green"}
-                    aria-label="Alternar status"
-                    onClick={() => handleTogglePaid(s)}
-                  />
-                </Tooltip>
-                <Tooltip label="Exportar PDF">
-                  <IconButton
-                    icon={<PdfIcon boxSize={5} />}
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Exportar PDF"
-                    onClick={() => handleExportPdf(s)}
-                  />
-                </Tooltip>
-                <Tooltip label="Exportar Excel">
-                  <IconButton
-                    icon={<ExcelIcon boxSize={5} />}
-                    size="sm"
-                    variant="ghost"
-                    aria-label="Exportar Excel"
-                    onClick={() => handleExportExcel(s)}
-                  />
-                </Tooltip>
-                <Tooltip label="Excluir">
-                  <IconButton
-                    icon={<DeleteIcon />}
-                    size="xs"
-                    variant="ghost"
-                    colorScheme="red"
-                    aria-label="Excluir"
-                    onClick={() => handleDelete(s)}
-                  />
-                </Tooltip>
+                {s.status === "draft" ? (
+                  <>
+                    <Button size="xs" colorScheme="purple" variant="outline" onClick={() => handleRestoreDraft(s.id)} isLoading={restoringDraft}>
+                      Continuar
+                    </Button>
+                    <Tooltip label="Excluir rascunho">
+                      <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Excluir" onClick={() => handleDelete(s)} />
+                    </Tooltip>
+                  </>
+                ) : (
+                  <>
+                    <Tooltip label="Ver detalhes">
+                      <IconButton icon={<ViewIcon />} size="xs" variant="ghost" aria-label="Ver detalhes" onClick={() => handleViewDetail(s.id)} />
+                    </Tooltip>
+                    <Tooltip label="Editar">
+                      <IconButton icon={<EditIcon />} size="xs" variant="ghost" colorScheme="blue" aria-label="Editar" onClick={() => handleStartEdit(s)} />
+                    </Tooltip>
+                    <Tooltip label={s.status === "paid" ? "Marcar como em aberto" : "Marcar como pago"}>
+                      <IconButton icon={<CheckIcon />} size="xs" variant="ghost" colorScheme={s.status === "paid" ? "yellow" : "green"} aria-label="Alternar status" onClick={() => handleTogglePaid(s)} />
+                    </Tooltip>
+                    <Tooltip label="Exportar PDF">
+                      <IconButton icon={<PdfIcon boxSize={5} />} size="sm" variant="ghost" aria-label="Exportar PDF" onClick={() => handleExportPdf(s)} />
+                    </Tooltip>
+                    <Tooltip label="Exportar Excel">
+                      <IconButton icon={<ExcelIcon boxSize={5} />} size="sm" variant="ghost" aria-label="Exportar Excel" onClick={() => handleExportExcel(s)} />
+                    </Tooltip>
+                    <Tooltip label="Excluir">
+                      <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Excluir" onClick={() => handleDelete(s)} />
+                    </Tooltip>
+                  </>
+                )}
               </HStack>
             </Box>
           ))}
@@ -1164,69 +1119,43 @@ const TerceirosSettlement = () => {
                     </Text>
                   </Td>
                   <Td>
-                    <Badge colorScheme={s.status === "paid" ? "green" : "yellow"} fontSize="xs">
-                      {s.status === "paid" ? "Pago" : "Em Aberto"}
+                    <Badge colorScheme={s.status === "paid" ? "green" : s.status === "draft" ? "purple" : "yellow"} fontSize="xs">
+                      {s.status === "paid" ? "Pago" : s.status === "draft" ? "Rascunho" : "Em Aberto"}
                     </Badge>
                   </Td>
                   <Td textAlign="right">
                     <HStack justify="flex-end" spacing={1}>
-                      <Tooltip label="Ver detalhes">
-                        <IconButton
-                          icon={<ViewIcon />}
-                          size="xs"
-                          variant="ghost"
-                          aria-label="Ver detalhes"
-                          onClick={() => handleViewDetail(s.id)}
-                        />
-                      </Tooltip>
-                      <Tooltip label="Editar">
-                        <IconButton
-                          icon={<EditIcon />}
-                          size="xs"
-                          variant="ghost"
-                          colorScheme="blue"
-                          aria-label="Editar"
-                          onClick={() => handleStartEdit(s)}
-                        />
-                      </Tooltip>
-                      <Tooltip label={s.status === "paid" ? "Marcar como em aberto" : "Marcar como pago"}>
-                        <IconButton
-                          icon={<CheckIcon />}
-                          size="xs"
-                          variant="ghost"
-                          colorScheme={s.status === "paid" ? "yellow" : "green"}
-                          aria-label="Alternar status"
-                          onClick={() => handleTogglePaid(s)}
-                        />
-                      </Tooltip>
-                      <Tooltip label="Exportar PDF">
-                        <IconButton
-                          icon={<PdfIcon boxSize={5} />}
-                          size="sm"
-                          variant="ghost"
-                          aria-label="Exportar PDF"
-                          onClick={() => handleExportPdf(s)}
-                        />
-                      </Tooltip>
-                      <Tooltip label="Exportar Excel">
-                        <IconButton
-                          icon={<ExcelIcon boxSize={5} />}
-                          size="sm"
-                          variant="ghost"
-                          aria-label="Exportar Excel"
-                          onClick={() => handleExportExcel(s)}
-                        />
-                      </Tooltip>
-                      <Tooltip label="Excluir">
-                        <IconButton
-                          icon={<DeleteIcon />}
-                          size="xs"
-                          variant="ghost"
-                          colorScheme="red"
-                          aria-label="Excluir"
-                          onClick={() => handleDelete(s)}
-                        />
-                      </Tooltip>
+                      {s.status === "draft" ? (
+                        <>
+                          <Button size="xs" colorScheme="purple" variant="outline" onClick={() => handleRestoreDraft(s.id)} isLoading={restoringDraft}>
+                            Continuar
+                          </Button>
+                          <Tooltip label="Excluir rascunho">
+                            <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Excluir" onClick={() => handleDelete(s)} />
+                          </Tooltip>
+                        </>
+                      ) : (
+                        <>
+                          <Tooltip label="Ver detalhes">
+                            <IconButton icon={<ViewIcon />} size="xs" variant="ghost" aria-label="Ver detalhes" onClick={() => handleViewDetail(s.id)} />
+                          </Tooltip>
+                          <Tooltip label="Editar">
+                            <IconButton icon={<EditIcon />} size="xs" variant="ghost" colorScheme="blue" aria-label="Editar" onClick={() => handleStartEdit(s)} />
+                          </Tooltip>
+                          <Tooltip label={s.status === "paid" ? "Marcar como em aberto" : "Marcar como pago"}>
+                            <IconButton icon={<CheckIcon />} size="xs" variant="ghost" colorScheme={s.status === "paid" ? "yellow" : "green"} aria-label="Alternar status" onClick={() => handleTogglePaid(s)} />
+                          </Tooltip>
+                          <Tooltip label="Exportar PDF">
+                            <IconButton icon={<PdfIcon boxSize={5} />} size="sm" variant="ghost" aria-label="Exportar PDF" onClick={() => handleExportPdf(s)} />
+                          </Tooltip>
+                          <Tooltip label="Exportar Excel">
+                            <IconButton icon={<ExcelIcon boxSize={5} />} size="sm" variant="ghost" aria-label="Exportar Excel" onClick={() => handleExportExcel(s)} />
+                          </Tooltip>
+                          <Tooltip label="Excluir">
+                            <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Excluir" onClick={() => handleDelete(s)} />
+                          </Tooltip>
+                        </>
+                      )}
                     </HStack>
                   </Td>
                 </Tr>
@@ -1733,7 +1662,7 @@ const TerceirosSettlement = () => {
         <HStack spacing={4} mb={4} fontSize="sm" color="gray.600">
           <Text>Referencia: {monthNames[(editingSettlement.referenceMonth || 1) - 1]}/{editingSettlement.referenceYear}</Text>
           <Badge colorScheme={editingSettlement.status === "paid" ? "green" : "yellow"}>
-            {editingSettlement.status === "paid" ? "Pago" : "Em Aberto"}
+            {editingSettlement.status === "paid" ? "Pago" : editingSettlement.status === "draft" ? "Rascunho" : "Em Aberto"}
           </Badge>
         </HStack>
 
@@ -1887,7 +1816,10 @@ const TerceirosSettlement = () => {
         mb={6}
       >
         <Flex justify="space-between" align="center" mb={4}>
-          <Heading size="sm">Novo Fechamento</Heading>
+          <HStack spacing={2}>
+            <Heading size="sm">{activeDraftId ? "Continuar Rascunho" : "Novo Fechamento"}</Heading>
+            {activeDraftId && <Badge colorScheme="purple" fontSize="2xs">#{activeDraftId}</Badge>}
+          </HStack>
           <IconButton
             icon={<CloseIcon />}
             size="sm"
