@@ -14,6 +14,7 @@ import {
   Badge,
   Spinner,
   Center,
+  Select,
   Modal,
   ModalOverlay,
   ModalContent,
@@ -66,6 +67,12 @@ const TerceirosProductGroups = () => {
   const [productSearch, setProductSearch] = useState("");
   const [loadingAllProducts, setLoadingAllProducts] = useState(false);
   const [addingProduct, setAddingProduct] = useState(null);
+
+  // Ungrouped view
+  const [showUngrouped, setShowUngrouped] = useState(false);
+  const [ungroupedSearch, setUngroupedSearch] = useState("");
+  const [assignTargetGroupId, setAssignTargetGroupId] = useState("");
+  const [assigningProduct, setAssigningProduct] = useState(null);
 
   const toast = useToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -134,6 +141,31 @@ const TerceirosProductGroups = () => {
   const groupProductCodes = useMemo(() => {
     return new Set(groupProducts.map((p) => p.productCode));
   }, [groupProducts]);
+
+  // ── Products not assigned to any group ────────────────────────────────────
+  const ungroupedProducts = useMemo(() => {
+    const term = ungroupedSearch.toLowerCase().trim();
+    return allProducts.filter((p) => {
+      if (p.groupName) return false;
+      if (!term) return true;
+      return (p.code || "").toLowerCase().includes(term) || (p.name || "").toLowerCase().includes(term);
+    });
+  }, [allProducts, ungroupedSearch]);
+
+  // ── Assign ungrouped product to a group ───────────────────────────────────
+  const handleAssignToGroup = async (product) => {
+    if (!assignTargetGroupId) return;
+    setAssigningProduct(product.code);
+    try {
+      await addProductToGroup(parseInt(assignTargetGroupId), product.code, product.name);
+      await loadAllProducts();
+      await loadGroups();
+    } catch (err) {
+      toast({ title: err.message || "Erro ao adicionar produto.", status: "error", duration: 3000 });
+    } finally {
+      setAssigningProduct(null);
+    }
+  };
 
   // ── Filtered product search results ──────────────────────────────────────
   const filteredProducts = useMemo(() => {
@@ -255,12 +287,42 @@ const TerceirosProductGroups = () => {
 
           {loadingGroups ? (
             <Center p={8}><Spinner /></Center>
-          ) : groups.length === 0 ? (
-            <Center p={8}>
-              <Text fontSize="sm" color="gray.500">Nenhum grupo cadastrado.</Text>
-            </Center>
           ) : (
             <VStack spacing={0} align="stretch">
+              {/* Sem grupo */}
+              <Flex
+                align="center"
+                px={4}
+                py={2.5}
+                cursor="pointer"
+                bg={showUngrouped ? selectedBg : undefined}
+                _hover={{ bg: showUngrouped ? selectedBg : hoverBg }}
+                borderBottomWidth="1px"
+                borderColor={borderColor}
+                onClick={() => {
+                  setShowUngrouped(true);
+                  setSelectedGroupId(null);
+                  setUngroupedSearch("");
+                  setAssignTargetGroupId("");
+                }}
+              >
+                <Text
+                  fontSize="sm"
+                  fontWeight={showUngrouped ? "semibold" : "normal"}
+                  flex={1}
+                  color={ungroupedProducts.length > 0 ? "orange.500" : "gray.400"}
+                >
+                  Sem grupo
+                </Text>
+                <Badge
+                  colorScheme={ungroupedProducts.length > 0 ? "orange" : "gray"}
+                  fontSize="xs"
+                  ml={2}
+                >
+                  {loadingAllProducts ? "..." : ungroupedProducts.length}
+                </Badge>
+              </Flex>
+
               {groups.map((group) => (
                 <Flex
                   key={group.id}
@@ -273,7 +335,10 @@ const TerceirosProductGroups = () => {
                   borderBottomWidth="1px"
                   borderColor={borderColor}
                   onClick={() => {
-                    if (editingId !== group.id) setSelectedGroupId(group.id);
+                    if (editingId !== group.id) {
+                      setSelectedGroupId(group.id);
+                      setShowUngrouped(false);
+                    }
                   }}
                 >
                   <Box flex={1} minW={0}>
@@ -365,16 +430,92 @@ const TerceirosProductGroups = () => {
         >
           <Flex justify="space-between" align="center" p={4} borderBottomWidth="1px" borderColor={borderColor}>
             <Heading size="sm" isTruncated>
-              {selectedGroup ? `Produtos — ${selectedGroup.name}` : "Produtos"}
+              {showUngrouped ? "Produtos sem grupo" : selectedGroup ? `Produtos — ${selectedGroup.name}` : "Produtos"}
             </Heading>
-            {selectedGroup && (
+            {showUngrouped ? (
+              <Badge colorScheme="orange" fontSize="xs" ml={2} flexShrink={0}>
+                {ungroupedProducts.length} produto{ungroupedProducts.length !== 1 ? "s" : ""}
+              </Badge>
+            ) : selectedGroup ? (
               <Badge colorScheme="blue" fontSize="xs" ml={2} flexShrink={0}>
                 {groupProducts.length} produto{groupProducts.length !== 1 ? "s" : ""}
               </Badge>
-            )}
+            ) : null}
           </Flex>
 
-          {!selectedGroupId ? (
+          {showUngrouped ? (
+            <Box p={4}>
+              {/* Search */}
+              <InputGroup size="sm" mb={3}>
+                <InputLeftElement pointerEvents="none">
+                  <SearchIcon color="gray.400" />
+                </InputLeftElement>
+                <Input
+                  placeholder="Filtrar por código ou nome..."
+                  value={ungroupedSearch}
+                  onChange={(e) => setUngroupedSearch(e.target.value)}
+                />
+              </InputGroup>
+
+              {/* Group selector for batch assignment */}
+              <HStack mb={4} spacing={2}>
+                <Select
+                  size="sm"
+                  placeholder="Selecionar grupo para atribuir"
+                  value={assignTargetGroupId}
+                  onChange={(e) => setAssignTargetGroupId(e.target.value)}
+                  flex={1}
+                >
+                  {groups.map((g) => (
+                    <option key={g.id} value={g.id}>{g.name}</option>
+                  ))}
+                </Select>
+              </HStack>
+
+              {loadingAllProducts ? (
+                <Center p={6}><Spinner /></Center>
+              ) : ungroupedProducts.length === 0 ? (
+                <Center p={6}>
+                  <Text fontSize="sm" color="gray.500">
+                    {ungroupedSearch ? "Nenhum produto encontrado." : "Todos os produtos já estão em algum grupo."}
+                  </Text>
+                </Center>
+              ) : (
+                <VStack spacing={0} align="stretch">
+                  {ungroupedProducts.map((p) => (
+                    <Flex
+                      key={p.code}
+                      align="center"
+                      px={3}
+                      py={2}
+                      borderBottomWidth="1px"
+                      borderColor={borderColor}
+                      _last={{ borderBottomWidth: 0 }}
+                      _hover={{ bg: hoverBg }}
+                    >
+                      <Text fontSize="xs" fontWeight="bold" color="gray.500" w="55px" flexShrink={0}>
+                        {p.code}
+                      </Text>
+                      <Text fontSize="sm" flex={1} minW={0} isTruncated>
+                        {p.name}
+                      </Text>
+                      <IconButton
+                        icon={assigningProduct === p.code ? <Spinner size="xs" /> : <AddIcon />}
+                        size="xs"
+                        colorScheme="blue"
+                        variant="ghost"
+                        aria-label="Adicionar ao grupo"
+                        ml={2}
+                        flexShrink={0}
+                        isDisabled={!assignTargetGroupId || assigningProduct === p.code}
+                        onClick={() => handleAssignToGroup(p)}
+                      />
+                    </Flex>
+                  ))}
+                </VStack>
+              )}
+            </Box>
+          ) : !selectedGroupId ? (
             <Center p={10}>
               <Text fontSize="sm" color="gray.500">Selecione um grupo para gerenciar os produtos.</Text>
             </Center>

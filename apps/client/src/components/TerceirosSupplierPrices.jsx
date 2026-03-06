@@ -370,7 +370,7 @@ const TerceirosSupplierPrices = () => {
   );
 
   return (
-    <Box className="panel" bg={panelBg} p={6} borderRadius="lg" boxShadow="sm" maxW="1100px" mx="auto" mt={8}>
+    <Box className="panel" bg={panelBg} p={{ base: 3, md: 6 }} borderRadius="lg" boxShadow="sm" maxW="1100px" mx="auto" mt={{ base: 2, md: 8 }}>
       <Text fontSize="lg" fontWeight="bold" mb={4}>Preços por Fornecedor</Text>
 
       {FiltersBar}
@@ -383,7 +383,99 @@ const TerceirosSupplierPrices = () => {
         <Center py={10}>
           <Text color="gray.500">Nenhum preço encontrado.</Text>
         </Center>
+      ) : isMobile ? (
+        /* ── Mobile: cards ── */
+        <VStack spacing={3} align="stretch">
+          {groupedPrices.map((group) => {
+            const current = group.current;
+            const vFrom = current.validFrom || current.valid_from;
+            const vUntil = current.validUntil || current.valid_until;
+            const active = isActive(vFrom, vUntil);
+            const expanded = expandedGroups.has(group.key);
+            const history = group.entries.filter((e) => e.id !== current.id);
+
+            return (
+              <Box key={group.key} borderWidth="1px" borderColor={borderColor} borderRadius="md" overflow="hidden">
+                {/* Main price row */}
+                <Box p={3}>
+                  <Flex justify="space-between" align="flex-start" mb={1}>
+                    <Box flex={1} minW={0}>
+                      <Text fontSize="sm" fontWeight="bold" noOfLines={1}>
+                        {group.supplierName || supplierLabel(group.codcli)}
+                      </Text>
+                      <Text fontSize="xs" color="gray.500">
+                        {group.groupName || groupLabel(group.groupId)}
+                        {group.part ? ` · ${group.part}` : ""}
+                      </Text>
+                    </Box>
+                    <HStack spacing={1} ml={2} flexShrink={0}>
+                      <IconButton icon={<EditIcon />} size="xs" variant="ghost" aria-label="Editar" onClick={() => openEdit(current)} />
+                      <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Excluir" onClick={() => handleDelete(current)} />
+                    </HStack>
+                  </Flex>
+                  <Flex justify="space-between" align="center">
+                    <Box>
+                      <Text fontSize="xs" color="gray.500">Preço atual</Text>
+                      <Text fontSize="lg" fontWeight="bold" color="blue.600">{formatCurrency(current.price)}</Text>
+                    </Box>
+                    <Box textAlign="right">
+                      <Text fontSize="xs" color="gray.500">Vigência</Text>
+                      <Text fontSize="xs">{vigenciaLabel(vFrom, vUntil)}</Text>
+                      {active && <Badge colorScheme="green" fontSize="2xs">Vigente</Badge>}
+                    </Box>
+                  </Flex>
+                  {history.length > 0 && (
+                    <Button
+                      size="xs"
+                      variant="ghost"
+                      leftIcon={expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                      onClick={() => toggleExpand(group.key)}
+                      mt={2}
+                      color="gray.500"
+                    >
+                      {history.length} histórico{history.length !== 1 ? "s" : ""}
+                    </Button>
+                  )}
+                </Box>
+
+                {/* History */}
+                {expanded && (
+                  <Box bg={historyBg} borderTopWidth="1px" borderColor={borderColor}>
+                    {history.map((row) => {
+                      const hFrom = row.validFrom || row.valid_from;
+                      const hUntil = row.validUntil || row.valid_until;
+                      const hExpired = isExpired(hUntil);
+                      return (
+                        <Flex
+                          key={row.id}
+                          px={3}
+                          py={2}
+                          align="center"
+                          opacity={hExpired ? 0.5 : 0.8}
+                          borderBottomWidth="1px"
+                          borderColor={borderColor}
+                          _last={{ borderBottomWidth: 0 }}
+                        >
+                          <TimeIcon boxSize={3} color="gray.400" mr={2} flexShrink={0} />
+                          <Box flex={1} minW={0}>
+                            <Text fontSize="sm" fontWeight="medium">{formatCurrency(row.price)}</Text>
+                            <Text fontSize="xs" color="gray.500">{vigenciaLabel(hFrom, hUntil)}</Text>
+                          </Box>
+                          <HStack spacing={1} flexShrink={0}>
+                            <IconButton icon={<EditIcon />} size="xs" variant="ghost" aria-label="Editar" onClick={() => openEdit(row)} />
+                            <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Excluir" onClick={() => handleDelete(row)} />
+                          </HStack>
+                        </Flex>
+                      );
+                    })}
+                  </Box>
+                )}
+              </Box>
+            );
+          })}
+        </VStack>
       ) : (
+        /* ── Desktop: table ── */
         <TableContainer>
           <Table size="sm">
             <Thead bg={headerBg}>
@@ -408,7 +500,6 @@ const TerceirosSupplierPrices = () => {
 
                 return (
                   <>
-                    {/* Main row - current price */}
                     <Tr key={group.key}>
                       <Td px={1}>
                         {history.length > 0 && (
@@ -421,18 +512,10 @@ const TerceirosSupplierPrices = () => {
                           />
                         )}
                       </Td>
-                      <Td>
-                        <Text fontSize="sm" fontWeight="medium">{group.supplierName || supplierLabel(group.codcli)}</Text>
-                      </Td>
-                      <Td>
-                        <Text fontSize="sm">{group.groupName || groupLabel(group.groupId)}</Text>
-                      </Td>
-                      <Td>
-                        <Text fontSize="sm">{group.part || "Todas"}</Text>
-                      </Td>
-                      <Td isNumeric>
-                        <Text fontWeight="semibold">{formatCurrency(current.price)}</Text>
-                      </Td>
+                      <Td><Text fontSize="sm" fontWeight="medium">{group.supplierName || supplierLabel(group.codcli)}</Text></Td>
+                      <Td><Text fontSize="sm">{group.groupName || groupLabel(group.groupId)}</Text></Td>
+                      <Td><Text fontSize="sm">{group.part || "Todas"}</Text></Td>
+                      <Td isNumeric><Text fontWeight="semibold">{formatCurrency(current.price)}</Text></Td>
                       <Td>
                         <HStack spacing={2}>
                           <Text fontSize="sm">{vigenciaLabel(vFrom, vUntil)}</Text>
@@ -441,28 +524,10 @@ const TerceirosSupplierPrices = () => {
                       </Td>
                       <Td>
                         <HStack spacing={1}>
-                          <IconButton
-                            icon={<EditIcon />}
-                            size="xs"
-                            variant="ghost"
-                            aria-label="Editar"
-                            onClick={() => openEdit(current)}
-                          />
-                          <IconButton
-                            icon={<DeleteIcon />}
-                            size="xs"
-                            variant="ghost"
-                            colorScheme="red"
-                            aria-label="Excluir"
-                            onClick={() => handleDelete(current)}
-                          />
+                          <IconButton icon={<EditIcon />} size="xs" variant="ghost" aria-label="Editar" onClick={() => openEdit(current)} />
+                          <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Excluir" onClick={() => handleDelete(current)} />
                           {history.length > 0 && (
-                            <Badge
-                              colorScheme="gray"
-                              fontSize="2xs"
-                              cursor="pointer"
-                              onClick={() => toggleExpand(group.key)}
-                            >
+                            <Badge colorScheme="gray" fontSize="2xs" cursor="pointer" onClick={() => toggleExpand(group.key)}>
                               <HStack spacing={1}>
                                 <TimeIcon boxSize={2.5} />
                                 <Text>{history.length}</Text>
@@ -472,13 +537,10 @@ const TerceirosSupplierPrices = () => {
                         </HStack>
                       </Td>
                     </Tr>
-
-                    {/* History rows */}
                     {expanded && history.map((row) => {
                       const hFrom = row.validFrom || row.valid_from;
                       const hUntil = row.validUntil || row.valid_until;
                       const hExpired = isExpired(hUntil);
-
                       return (
                         <Tr key={row.id} bg={historyBg} opacity={hExpired ? 0.5 : 0.75}>
                           <Td px={1}></Td>
@@ -488,29 +550,12 @@ const TerceirosSupplierPrices = () => {
                               <Text fontSize="xs" color="gray.500">Histórico</Text>
                             </HStack>
                           </Td>
-                          <Td isNumeric>
-                            <Text fontSize="sm">{formatCurrency(row.price)}</Text>
-                          </Td>
-                          <Td>
-                            <Text fontSize="sm" color="gray.500">{vigenciaLabel(hFrom, hUntil)}</Text>
-                          </Td>
+                          <Td isNumeric><Text fontSize="sm">{formatCurrency(row.price)}</Text></Td>
+                          <Td><Text fontSize="sm" color="gray.500">{vigenciaLabel(hFrom, hUntil)}</Text></Td>
                           <Td>
                             <HStack spacing={1}>
-                              <IconButton
-                                icon={<EditIcon />}
-                                size="xs"
-                                variant="ghost"
-                                aria-label="Editar"
-                                onClick={() => openEdit(row)}
-                              />
-                              <IconButton
-                                icon={<DeleteIcon />}
-                                size="xs"
-                                variant="ghost"
-                                colorScheme="red"
-                                aria-label="Excluir"
-                                onClick={() => handleDelete(row)}
-                              />
+                              <IconButton icon={<EditIcon />} size="xs" variant="ghost" aria-label="Editar" onClick={() => openEdit(row)} />
+                              <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Excluir" onClick={() => handleDelete(row)} />
                             </HStack>
                           </Td>
                         </Tr>
@@ -525,7 +570,7 @@ const TerceirosSupplierPrices = () => {
       )}
 
       {/* ── Price Modal ─────────────────────────────────────────────────────── */}
-      <Modal isOpen={modal.isOpen} onClose={modal.onClose} isCentered size="lg">
+      <Modal isOpen={modal.isOpen} onClose={modal.onClose} isCentered size={{ base: "full", md: "lg" }}>
         <ModalOverlay />
         <ModalContent>
           <ModalHeader>{editingPrice ? "Editar preco" : "Novo preco"}</ModalHeader>
@@ -583,7 +628,7 @@ const TerceirosSupplierPrices = () => {
                   inputMode="numeric"
                 />
               </FormControl>
-              <HStack spacing={4} w="100%">
+              <Flex gap={4} w="100%" direction={{ base: "column", md: "row" }}>
                 <FormControl>
                   <FormLabel>Vigência De</FormLabel>
                   <Input
@@ -593,14 +638,14 @@ const TerceirosSupplierPrices = () => {
                   />
                 </FormControl>
                 <FormControl>
-                  <FormLabel>Vigência Ate</FormLabel>
+                  <FormLabel>Vigência Até</FormLabel>
                   <Input
                     type="date"
                     value={form.validUntil}
                     onChange={(e) => setForm({ ...form, validUntil: e.target.value })}
                   />
                 </FormControl>
-              </HStack>
+              </Flex>
               <Text fontSize="xs" color="gray.500">
                 Datas opcionais. Sem datas = preco vigente indefinidamente.
               </Text>
