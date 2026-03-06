@@ -162,7 +162,7 @@ const TerceirosSupplierPrices = () => {
 
   // ── Load parts dynamically in bulk modal and auto-populate grid ────────────
   useEffect(() => {
-    if (!bulkForm.codcli || !bulkForm.groupId) {
+    if (!bulkForm.groupId) {
       setBulkParts([]);
       setBulkRows([]);
       return;
@@ -170,9 +170,12 @@ const TerceirosSupplierPrices = () => {
     const load = async () => {
       setLoadingBulkParts(true);
       try {
-        const data = await fetchTerceirosParts(bulkForm.codcli, bulkForm.groupId);
+        // First try with supplier+group, then fallback to group only
+        let data = await fetchTerceirosParts(bulkForm.codcli, bulkForm.groupId);
+        if (data.length === 0 && bulkForm.codcli) {
+          data = await fetchTerceirosParts(null, bulkForm.groupId);
+        }
         setBulkParts(data);
-        // Auto-populate grid with all parts
         if (data.length > 0) {
           setBulkRows(data.map((p) => ({ part: p.code, partLabel: `${p.code}${p.name ? ` - ${p.name}` : ""}`, price: 0, _key: p.code })));
         } else {
