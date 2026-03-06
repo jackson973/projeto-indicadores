@@ -624,6 +624,15 @@ export const createTerceirosSupplierPrice = async (data) => {
   return handleResponse(response);
 };
 
+export const createTerceirosSupplierPricesBatch = async (items) => {
+  const response = await authFetch("/api/terceiros/supplier-prices/batch", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ items })
+  });
+  return handleResponse(response);
+};
+
 export const updateTerceirosSupplierPrice = async (id, data) => {
   const response = await authFetch(`/api/terceiros/supplier-prices/${id}`, {
     method: "PUT",

@@ -169,6 +169,37 @@ router.post('/supplier-prices', async (req, res) => {
   }
 });
 
+router.post('/supplier-prices/batch', async (req, res) => {
+  try {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ message: 'Lista de precos e obrigatoria.' });
+    }
+    const results = [];
+    const errors = [];
+    for (const item of items) {
+      try {
+        const result = await repo.createSupplierPrice({
+          codcli: item.codcli,
+          supplierName: item.supplierName || '',
+          groupId: item.groupId,
+          part: item.part || null,
+          price: item.price,
+          validFrom: item.validFrom || null,
+          validUntil: item.validUntil || null
+        });
+        results.push(result);
+      } catch (err) {
+        errors.push({ part: item.part || 'Todas', error: err.message });
+      }
+    }
+    return res.status(201).json({ created: results, errors });
+  } catch (error) {
+    console.error('Batch create supplier prices error:', error);
+    return res.status(500).json({ message: 'Erro ao criar precos em lote.' });
+  }
+});
+
 router.put('/supplier-prices/:id', async (req, res) => {
   try {
     const { codcli, supplierName, groupId, part, price, validFrom, validUntil } = req.body;
