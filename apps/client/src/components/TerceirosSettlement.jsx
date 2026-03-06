@@ -580,6 +580,19 @@ const TerceirosSettlement = () => {
     return total;
   }, [selectedOfs, unsettledOfs, getOfPrice, editedQuantities]);
 
+  const newSettlementPcs = useMemo(() => {
+    let pcs = 0;
+    selectedOfs.forEach((index) => {
+      const of = unsettledOfs[index];
+      if (!of) return;
+      const qty = editedQuantities[index] !== undefined
+        ? (parseFloat(editedQuantities[index]) || 0)
+        : (parseFloat(of.fac_quant) || 0);
+      pcs += qty;
+    });
+    return pcs;
+  }, [selectedOfs, unsettledOfs, editedQuantities]);
+
   // ── Create new settlement ─────────────────────────────────────────────────
   const handleCreateSettlement = useCallback(async () => {
     if (selectedOfs.size === 0) {
@@ -2127,6 +2140,12 @@ const TerceirosSettlement = () => {
 
             <Flex justify="flex-end" mt={3} pr={2}>
               <VStack spacing={0} align="flex-end">
+                <HStack spacing={2}>
+                  <Text fontSize="sm" color="gray.500">Total de Pecas:</Text>
+                  <Text fontSize="sm" fontWeight="bold">
+                    {newSettlementPcs.toLocaleString("pt-BR")}
+                  </Text>
+                </HStack>
                 <HStack spacing={2}>
                   <Text fontWeight="bold" fontSize="sm">{newDiscounts.length > 0 ? "Subtotal:" : "Total Selecionado:"}</Text>
                   <Text fontWeight="bold" fontSize="lg" color="blue.500">
