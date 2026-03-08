@@ -849,11 +849,31 @@ async function deleteSettlement(id) {
   }
 }
 
-async function updateSettlementNotes(id, notes) {
+async function updateSettlement(id, { notes, referenceMonth, referenceYear } = {}) {
+  const fields = [];
+  const values = [];
+  let idx = 1;
+
+  if (notes !== undefined) {
+    fields.push(`notes = $${idx++}`);
+    values.push(notes || null);
+  }
+  if (referenceMonth !== undefined) {
+    fields.push(`reference_month = $${idx++}`);
+    values.push(referenceMonth);
+  }
+  if (referenceYear !== undefined) {
+    fields.push(`reference_year = $${idx++}`);
+    values.push(referenceYear);
+  }
+
+  if (fields.length === 0) return null;
+
+  values.push(id);
   const result = await db.query(
-    `UPDATE terceiros_settlements SET notes = $1
-     WHERE id = $2 RETURNING id, notes`,
-    [notes || null, id]
+    `UPDATE terceiros_settlements SET ${fields.join(', ')}
+     WHERE id = $${idx} RETURNING *`,
+    values
   );
   return result.rows[0] || null;
 }
@@ -1125,7 +1145,7 @@ module.exports = {
   markSettlementPaid,
   markSettlementUnpaid,
   deleteSettlement,
-  updateSettlementNotes,
+  updateSettlement,
   removeSettlementItem,
   updateSettlementItem,
   addSettlementItems,

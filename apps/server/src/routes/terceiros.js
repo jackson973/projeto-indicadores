@@ -598,8 +598,8 @@ router.put('/settlements/:id/unpay', async (req, res) => {
 
 router.put('/settlements/:id', async (req, res) => {
   try {
-    const { notes } = req.body;
-    const result = await repo.updateSettlementNotes(req.params.id, notes);
+    const { notes, referenceMonth, referenceYear } = req.body;
+    const result = await repo.updateSettlement(req.params.id, { notes, referenceMonth, referenceYear });
     if (!result) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
     return res.json(result);
   } catch (error) {

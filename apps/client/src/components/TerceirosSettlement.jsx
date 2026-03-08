@@ -123,6 +123,8 @@ const TerceirosSettlement = () => {
   const [editingItemId, setEditingItemId] = useState(null);
   const [editingItemValue, setEditingItemValue] = useState("");
   const [editingItemField, setEditingItemField] = useState(null); // "qty" or "price"
+  const [editMonth, setEditMonth] = useState(null);
+  const [editYear, setEditYear] = useState(null);
   const [editingGroupPrice, setEditingGroupPrice] = useState(null);
   const [editingGroupPriceValue, setEditingGroupPriceValue] = useState("");
 
@@ -261,6 +263,8 @@ const TerceirosSettlement = () => {
       const data = await fetchTerceirosSettlement(settlement.id);
       setEditingSettlement(data);
       setEditNotes(data.notes || "");
+      setEditMonth(data.referenceMonth || data.reference_month || 1);
+      setEditYear(data.referenceYear || data.reference_year || getSaoPauloYear());
     } catch (err) {
       toast({ title: "Erro ao carregar fechamento.", status: "error", duration: 3000 });
     } finally {
@@ -272,7 +276,7 @@ const TerceirosSettlement = () => {
     if (!editingSettlement) return;
     setSavingEdit(true);
     try {
-      await updateTerceirosSettlement(editingSettlement.id, { notes: editNotes });
+      await updateTerceirosSettlement(editingSettlement.id, { notes: editNotes, referenceMonth: editMonth, referenceYear: editYear });
       toast({ title: "Fechamento atualizado.", status: "success", duration: 3000 });
       const updated = await fetchTerceirosSettlement(editingSettlement.id);
       setEditingSettlement(updated);
@@ -282,7 +286,7 @@ const TerceirosSettlement = () => {
     } finally {
       setSavingEdit(false);
     }
-  }, [editingSettlement, editNotes, loadSettlements, toast]);
+  }, [editingSettlement, editNotes, editMonth, editYear, loadSettlements, toast]);
 
   const handleRemoveItem = useCallback(async (itemId) => {
     if (!editingSettlement) return;
@@ -332,6 +336,8 @@ const TerceirosSettlement = () => {
   const handleCancelEdit = useCallback(() => {
     setEditingSettlement(null);
     setEditNotes("");
+    setEditMonth(null);
+    setEditYear(null);
   }, []);
 
   // ── Export helper ─────────────────────────────────────────────────────────
@@ -1664,12 +1670,37 @@ const TerceirosSettlement = () => {
           />
         </Flex>
 
-        <HStack spacing={4} mb={4} fontSize="sm" color="gray.600">
-          <Text>Referencia: {monthNames[(editingSettlement.referenceMonth || 1) - 1]}/{editingSettlement.referenceYear}</Text>
-          <Badge colorScheme={editingSettlement.status === "paid" ? "green" : "yellow"}>
+        <Flex gap={3} mb={4} wrap="wrap" align="center">
+          <Box>
+            <Text fontSize="xs" color="gray.500" mb={1}>Mês de Referência</Text>
+            <Select
+              size="sm"
+              value={editMonth || 1}
+              onChange={(e) => setEditMonth(parseInt(e.target.value))}
+              w="150px"
+            >
+              {monthNames.map((name, i) => (
+                <option key={i + 1} value={i + 1}>{name}</option>
+              ))}
+            </Select>
+          </Box>
+          <Box>
+            <Text fontSize="xs" color="gray.500" mb={1}>Ano</Text>
+            <Select
+              size="sm"
+              value={editYear || getSaoPauloYear()}
+              onChange={(e) => setEditYear(parseInt(e.target.value))}
+              w="90px"
+            >
+              {Array.from({ length: 5 }, (_, i) => getSaoPauloYear() - 2 + i).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </Select>
+          </Box>
+          <Badge colorScheme={editingSettlement.status === "paid" ? "green" : "yellow"} alignSelf="flex-end" mb={1}>
             {editingSettlement.status === "paid" ? "Pago" : editingSettlement.status === "draft" ? "Rascunho" : "Em Aberto"}
           </Badge>
-        </HStack>
+        </Flex>
 
         {items.length === 0 ? (
           <Box py={6} textAlign="center">
