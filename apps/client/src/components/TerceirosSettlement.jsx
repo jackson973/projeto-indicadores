@@ -669,8 +669,8 @@ const TerceirosSettlement = () => {
       await createTerceirosSettlement({
         codcli,
         supplierName,
-        referenceMonth: dateFrom ? new Date(dateFrom + "T12:00:00").getMonth() + 1 : newMonth,
-        referenceYear: dateFrom ? new Date(dateFrom + "T12:00:00").getFullYear() : newYear,
+        referenceMonth: newMonth,
+        referenceYear: newYear,
         notes,
         items,
         discounts: newDiscounts.length > 0 ? newDiscounts : undefined,
@@ -690,6 +690,8 @@ const TerceirosSettlement = () => {
       setEditedGroupPrices({});
       setEditingSize(null);
       setNotes("");
+      setNewMonth(prevMonth);
+      setNewYear(prevYear);
       setNewDiscounts([]);
       await loadSettlements();
     } catch (err) {
@@ -697,7 +699,7 @@ const TerceirosSettlement = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [newSupplier, selectedOfs, unsettledOfs, getOfPrice, getOfPriceInfo, editedQuantities, editedGroupPrices, manualPrices, suppliers, newMonth, newYear, dateFrom, notes, newDiscounts, loadSettlements, toast]);
+  }, [newSupplier, selectedOfs, unsettledOfs, getOfPrice, getOfPriceInfo, editedQuantities, editedGroupPrices, manualPrices, suppliers, newMonth, newYear, prevMonth, prevYear, notes, newDiscounts, loadSettlements, toast]);
 
   // ── Draft save/restore (persisted in DB) ─────────────────────────────────
   const handleSaveDraft = useCallback(async () => {
@@ -717,6 +719,7 @@ const TerceirosSettlement = () => {
 
     const draftData = {
       dateFrom, dateTo, ofSearchNew, etapaFilter,
+      newMonth, newYear,
       selectedOfIds: ofIds,
       manualPrices, editedQuantities, editedGroupPrices,
       newDiscounts
@@ -727,8 +730,8 @@ const TerceirosSettlement = () => {
       const result = await saveTerceirosDraft({
         codcli: newSupplier,
         supplierName,
-        referenceMonth: dateFrom ? new Date(dateFrom + "T12:00:00").getMonth() + 1 : newMonth,
-        referenceYear: dateFrom ? new Date(dateFrom + "T12:00:00").getFullYear() : newYear,
+        referenceMonth: newMonth,
+        referenceYear: newYear,
         notes,
         draftData
       }, activeDraftId || undefined);
@@ -754,6 +757,8 @@ const TerceirosSettlement = () => {
       setCreating(true);
       setActiveDraftId(draft.id);
       setNewSupplier(draft.codcli || "");
+      setNewMonth(draft.reference_month || dd.newMonth || prevMonth);
+      setNewYear(draft.reference_year || dd.newYear || prevYear);
       setDateFrom(dd.dateFrom || "");
       setDateTo(dd.dateTo || "");
       setOfSearchNew(dd.ofSearchNew || "");
@@ -1887,6 +1892,36 @@ const TerceirosSettlement = () => {
           >
             Buscar
           </Button>
+        </Flex>
+
+        {/* Mês de referência do fechamento */}
+        <Flex gap={3} mb={3} wrap="wrap" align="flex-end">
+          <Box flex={{ base: "1 1 calc(50% - 6px)", md: "0 0 auto" }}>
+            <Text fontSize="xs" color="gray.500" mb={1}>Mês de Referência</Text>
+            <Select
+              size="sm"
+              value={newMonth}
+              onChange={(e) => setNewMonth(parseInt(e.target.value))}
+              w={{ base: "100%", md: "160px" }}
+            >
+              {monthNames.map((name, i) => (
+                <option key={i + 1} value={i + 1}>{name}</option>
+              ))}
+            </Select>
+          </Box>
+          <Box flex={{ base: "1 1 calc(50% - 6px)", md: "0 0 auto" }}>
+            <Text fontSize="xs" color="gray.500" mb={1}>Ano</Text>
+            <Select
+              size="sm"
+              value={newYear}
+              onChange={(e) => setNewYear(parseInt(e.target.value))}
+              w={{ base: "100%", md: "100px" }}
+            >
+              {Array.from({ length: 5 }, (_, i) => getSaoPauloYear() - 2 + i).map((y) => (
+                <option key={y} value={y}>{y}</option>
+              ))}
+            </Select>
+          </Box>
         </Flex>
 
         {/* Etapa filter (shown when OFs are loaded and have etapas) */}
