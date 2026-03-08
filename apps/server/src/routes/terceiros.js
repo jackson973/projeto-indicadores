@@ -663,23 +663,34 @@ router.get('/settlements/:id/export/excel', async (req, res) => {
     const data = await repo.getSettlementExportData(req.params.id);
     if (!data) return res.status(404).json({ message: 'Fechamento nao encontrado.' });
 
-    const rows = data.items.map(item => ({
-      'OF': item.facNumero,
-      'Produto': item.facCodigoProduto,
-      'Descricao': item.facDescProduto,
-      'Cor': item.facDesccor || item.facCor,
-      'Parte': item.facDescparte || item.facParte,
-      'Tamanho': item.facTam,
-      'Qtd Original': parseFloat(item.facQtOrig) || 0,
-      'Qtd Validada': parseFloat(item.quantity) || 0,
-      'Preco Unit': parseFloat(item.unitPrice) || 0,
-      'Total': parseFloat(item.totalPrice) || 0,
+    // Group items by OF + Parte
+    const ofGroups = new Map();
+    for (const item of data.items) {
+      const key = `${item.facNumero}|${item.facParte || ''}`;
+      if (!ofGroups.has(key)) {
+        ofGroups.set(key, {
+          ofNum: item.facNumero,
+          desc: item.facDescProduto || item.facCodigoProduto || '',
+          parte: item.facDescparte || item.facParte || '',
+          totalQty: 0, total: 0
+        });
+      }
+      const g = ofGroups.get(key);
+      g.totalQty += parseFloat(item.quantity) || 0;
+      g.total += parseFloat(item.totalPrice) || 0;
+    }
+
+    const rows = [...ofGroups.values()].map(g => ({
+      'OF': g.ofNum,
+      'Descricao': g.desc,
+      'Parte': g.parte,
+      'Quantidade': g.totalQty,
+      'Total': g.total,
     }));
 
     rows.push({
-      'OF': '', 'Produto': '', 'Descricao': '', 'Cor': '', 'Parte': '',
-      'Tamanho': '', 'Qtd Original': '', 'Qtd Validada': 'SUBTOTAL',
-      'Preco Unit': '',
+      'OF': '', 'Descricao': 'SUBTOTAL', 'Parte': '',
+      'Quantidade': '',
       'Total': parseFloat(data.totalAmount) || 0
     });
 
@@ -688,16 +699,14 @@ router.get('/settlements/:id/export/excel', async (req, res) => {
     if (discounts.length > 0) {
       for (const disc of discounts) {
         rows.push({
-          'OF': '', 'Produto': '', 'Descricao': '', 'Cor': '', 'Parte': '',
-          'Tamanho': '', 'Qtd Original': '', 'Qtd Validada': `Desconto: ${disc.description}`,
-          'Preco Unit': '',
+          'OF': '', 'Descricao': `Desconto: ${disc.description}`, 'Parte': '',
+          'Quantidade': '',
           'Total': -(parseFloat(disc.amount) || 0)
         });
       }
       rows.push({
-        'OF': '', 'Produto': '', 'Descricao': '', 'Cor': '', 'Parte': '',
-        'Tamanho': '', 'Qtd Original': '', 'Qtd Validada': 'TOTAL A PAGAR',
-        'Preco Unit': '',
+        'OF': '', 'Descricao': 'TOTAL A PAGAR', 'Parte': '',
+        'Quantidade': '',
         'Total': parseFloat(data.totalPayable) || 0
       });
     }
@@ -745,76 +754,36 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
     const monthNames = ['', 'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
       'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
 
-    // Group items by OF/Product/Color/Part (same logic as frontend)
-    const SIZE_ORDER = ['pre', 'rn', 'p', 'm', 'g', 'gg', '1', '2', '3', '4', '6', '8', '10', '12', '14', '16'];
-    const sortSizes = (sizes) => [...sizes].sort((a, b) => {
-      const ta = String(a.tam || '').trim().toLowerCase();
-      const tb = String(b.tam || '').trim().toLowerCase();
-      const ia = SIZE_ORDER.indexOf(ta);
-      const ib = SIZE_ORDER.indexOf(tb);
-      if (ia !== -1 && ib !== -1) return ia - ib;
-      if (ia !== -1) return -1;
-      if (ib !== -1) return 1;
-      const na = parseFloat(ta), nb = parseFloat(tb);
-      if (!isNaN(na) && !isNaN(nb)) return na - nb;
-      return ta.localeCompare(tb);
-    });
-
-    const groups = [];
-    const groupMap = new Map();
+    // Group items by OF + Parte
+    const pdfOfGroups = new Map();
     for (const item of data.items) {
-      const key = `${item.facNumero}|${item.facCodsetor || ''}|${item.facCodigoProduto}|${item.facCor}|${item.facParte}`;
-      if (!groupMap.has(key)) {
-        const g = {
-          key, facNumero: item.facNumero,
-          facCodsetor: item.facCodsetor, facDescsetor: item.facDescsetor,
-          facCodigoProduto: item.facCodigoProduto, facDescProduto: item.facDescProduto,
-          facCor: item.facCor, facDesccor: item.facDesccor,
-          facParte: item.facParte, facDescparte: item.facDescparte,
-          unitPrice: item.unitPrice, sizes: []
-        };
-        groupMap.set(key, g);
-        groups.push(g);
+      const key = `${item.facNumero}|${item.facParte || ''}`;
+      if (!pdfOfGroups.has(key)) {
+        pdfOfGroups.set(key, {
+          ofNum: item.facNumero,
+          desc: item.facDescProduto || item.facCodigoProduto || '',
+          parte: item.facDescparte || item.facParte || '',
+          totalQty: 0, total: 0
+        });
       }
-      groupMap.get(key).sizes.push({
-        tam: item.facTam, qty: parseFloat(item.quantity) || 0,
-        total: parseFloat(item.totalPrice) || 0, missing: false
-      });
+      const g = pdfOfGroups.get(key);
+      g.totalQty += parseFloat(item.quantity) || 0;
+      g.total += parseFloat(item.totalPrice) || 0;
     }
-    // Add missing OFs
-    const missingOfs = data.missingOfs || [];
-    for (const mof of missingOfs) {
-      const key = `${mof.facNumero}|${mof.facCodsetor || ''}|${mof.facCodigoProduto}|${mof.facCor}|${mof.facParte}`;
-      const g = groupMap.get(key);
-      if (g) {
-        g.sizes.push({ tam: mof.facTam, qty: parseFloat(mof.facQuant) || 0, total: 0, missing: true });
-      }
-    }
-    for (const g of groups) { g.sizes = sortSizes(g.sizes); }
 
     // Build table rows
     let grandTotal = 0;
     let grandQty = 0;
-    const rowsHtml = groups.map((g, idx) => {
-      const groupQty = g.sizes.filter(s => !s.missing).reduce((sum, s) => sum + s.qty, 0);
-      const groupTotal = g.sizes.filter(s => !s.missing).reduce((sum, s) => sum + s.total, 0);
-      grandTotal += groupTotal;
-      grandQty += groupQty;
-
-      const desc = [
-        g.facDescProduto || g.facCodigoProduto || '',
-        g.facDesccor && g.facDesccor !== g.facCor ? g.facDesccor : (g.facCor || ''),
-        g.facDescparte && g.facDescparte !== g.facParte ? g.facDescparte : (g.facParte || ''),
-        g.facDescsetor ? `Etapa: ${g.facDescsetor}` : (g.facCodsetor ? `Etapa: ${g.facCodsetor}` : '')
-      ].filter(Boolean).join(' / ');
+    const rowsHtml = [...pdfOfGroups.values()].map((g) => {
+      grandTotal += g.total;
+      grandQty += g.totalQty;
 
       return `<tr>
-        <td class="center">${g.facCodigoProduto || ''}</td>
-        <td class="center">${g.facNumero || ''}</td>
-        <td>${desc}</td>
-        <td class="right">R$ ${formatCur(g.unitPrice)}</td>
-        <td class="center">${formatNum(groupQty)}</td>
-        <td class="right">R$ ${formatCur(groupTotal)}</td>
+        <td class="center">${g.ofNum || ''}</td>
+        <td>${g.desc}</td>
+        <td class="center">${g.parte}</td>
+        <td class="center">${formatNum(g.totalQty)}</td>
+        <td class="right">R$ ${formatCur(g.total)}</td>
       </tr>`;
     }).join('');
 
@@ -824,7 +793,7 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
 
     const discountRowsHtml = hasDiscounts ? data.discounts.map(d =>
       `<tr class="discount-row">
-        <td colspan="5" class="right">${d.description}</td>
+        <td colspan="4" class="right">${d.description}</td>
         <td class="right discount-val">- R$ ${formatCur(d.amount)}</td>
       </tr>`
     ).join('') : '';
@@ -876,10 +845,9 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
   <table>
     <thead>
       <tr>
-        <th>Ref.</th>
         <th>OF</th>
         <th style="text-align:left;">Descricao</th>
-        <th>Valor (R$)</th>
+        <th>Parte</th>
         <th>Quant.</th>
         <th>Total (R$)</th>
       </tr>
@@ -887,13 +855,13 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
     <tbody>
       ${rowsHtml}
       <tr class="total-row">
-        <td colspan="4" class="right">Total de pecas</td>
+        <td colspan="3" class="right">Total de pecas</td>
         <td class="center">${formatNum(grandQty)}</td>
         <td class="right">${hasDiscounts ? 'SUBTOTAL' : 'TOTAL'} R$ ${formatCur(grandTotal)}</td>
       </tr>
       ${discountRowsHtml}
       ${hasDiscounts ? `<tr class="payable-row">
-        <td colspan="5" class="right">Total a pagar</td>
+        <td colspan="4" class="right">Total a pagar</td>
         <td class="right">R$ ${formatCur(totalPayable)}</td>
       </tr>` : ''}
     </tbody>
