@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from "react";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import {
   Box,
   Flex,
@@ -154,6 +154,8 @@ const TerceirosSettlement = () => {
   const [savingDraft, setSavingDraft] = useState(false);
   const [restoringDraft, setRestoringDraft] = useState(false);
   const [activeDraftId, setActiveDraftId] = useState(null);
+
+  const ofSearchNewRef = useRef(null);
 
   const toast = useToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -486,20 +488,23 @@ const TerceirosSettlement = () => {
 
   const handleNewSupplierChange = useCallback((codcli) => {
     setNewSupplier(codcli);
-    loadUnsettledOfs({ codcli, ofNumbers: ofSearchNew });
+    const currentSearch = ofSearchNewRef.current?.value || ofSearchNew;
+    loadUnsettledOfs({ codcli, ofNumbers: currentSearch });
   }, [loadUnsettledOfs, ofSearchNew]);
 
   const handleOfSearch = useCallback(() => {
+    const currentSearch = ofSearchNewRef.current?.value || "";
+    setOfSearchNew(currentSearch);
     const hasSupplier = !!newSupplier;
-    const hasOfs = ofSearchNew.trim().length > 0;
+    const hasOfs = currentSearch.trim().length > 0;
     const hasDates = !!dateFrom || !!dateTo;
 
     if (!hasSupplier && !hasOfs && !hasDates) {
       toast({ title: "Informe pelo menos um filtro: fornecedor, OFs ou período.", status: "warning", duration: 3000 });
       return;
     }
-    loadUnsettledOfs({ codcli: newSupplier || null, ofNumbers: ofSearchNew });
-  }, [newSupplier, ofSearchNew, dateFrom, dateTo, loadUnsettledOfs, toast]);
+    loadUnsettledOfs({ codcli: newSupplier || null, ofNumbers: currentSearch });
+  }, [newSupplier, dateFrom, dateTo, loadUnsettledOfs, toast]);
 
   useEffect(() => {
     if (newSupplier) {
@@ -687,6 +692,7 @@ const TerceirosSettlement = () => {
       setCreating(false);
       setNewSupplier("");
       setOfSearchNew("");
+      if (ofSearchNewRef.current) ofSearchNewRef.current.value = "";
       setEtapaFilter("");
       setUnsettledOfs([]);
       setSelectedOfs(new Set());
@@ -768,6 +774,7 @@ const TerceirosSettlement = () => {
       setDateFrom(dd.dateFrom || "");
       setDateTo(dd.dateTo || "");
       setOfSearchNew(dd.ofSearchNew || "");
+      if (ofSearchNewRef.current) ofSearchNewRef.current.value = dd.ofSearchNew || "";
       setEtapaFilter(dd.etapaFilter || "");
       setNotes(draft.notes || "");
       setNewDiscounts(dd.newDiscounts || []);
@@ -841,6 +848,7 @@ const TerceirosSettlement = () => {
     setActiveDraftId(null);
     setNewSupplier("");
     setOfSearchNew("");
+    if (ofSearchNewRef.current) ofSearchNewRef.current.value = "";
     setEtapaFilter("");
     setDateFrom("");
     setDateTo("");
@@ -1907,9 +1915,9 @@ const TerceirosSettlement = () => {
                 <SearchIcon color="gray.400" />
               </InputLeftElement>
               <Input
+                ref={ofSearchNewRef}
                 placeholder="Ex: 12345, 12346, 12347"
-                value={ofSearchNew}
-                onChange={(e) => setOfSearchNew(e.target.value)}
+                defaultValue={ofSearchNew}
                 onKeyDown={(e) => { if (e.key === "Enter") handleOfSearch(); }}
               />
             </InputGroup>
