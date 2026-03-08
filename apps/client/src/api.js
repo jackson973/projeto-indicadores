@@ -831,3 +831,63 @@ export const deleteSystemLogo = async () => {
   const response = await authFetch("/api/settings/logo", { method: "DELETE" });
   return handleResponse(response);
 };
+
+// ── Stores (Gerenciamento de Lojas) ──────────────────────────────────────────
+
+export const fetchStoresManagement = async () => {
+  const response = await authFetch("/api/lojas");
+  return handleResponse(response);
+};
+
+export const createStoreMgmt = async (data) => {
+  const response = await authFetch("/api/lojas", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+export const updateStoreMgmt = async (id, data) => {
+  const response = await authFetch(`/api/lojas/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(response);
+};
+
+export const deleteStoreMgmt = async (id) => {
+  const response = await authFetch(`/api/lojas/${id}`, { method: "DELETE" });
+  return handleResponse(response);
+};
+
+export const testStoreConnection = async (id) => {
+  const response = await authFetch(`/api/lojas/${id}/test`, { method: "POST" });
+  return handleResponse(response);
+};
+
+export const getStoreOAuthUrl = async (id) => {
+  const response = await authFetch(`/api/lojas/${id}/oauth/url`);
+  return handleResponse(response);
+};
+
+export const exchangeStoreOAuthCode = async (id, code) => {
+  const response = await authFetch(`/api/lojas/${id}/oauth/exchange`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
+  return handleResponse(response);
+};
+
+export const fetchAnuncios = async (storeId) => {
+  const response = await authFetch(`/api/anuncios?store_id=${storeId}`);
+  return handleResponse(response);
+};
+
+export const fetchMarketComparison = async (itemId, storeId, ourPrice) => {
+  const priceParam = ourPrice != null ? `&our_price=${ourPrice}` : '';
+  const response = await authFetch(`/api/anuncios/${itemId}/market?store_id=${storeId}${priceParam}`);
+  return handleResponse(response);
+};

@@ -65,6 +65,8 @@ import TerceirosSettlement from "./components/TerceirosSettlement";
 import TerceirosProductGroups from "./components/TerceirosProductGroups";
 import TerceirosSupplierPrices from "./components/TerceirosSupplierPrices";
 import SystemSettings from "./components/SystemSettings";
+import StoresManagement from "./components/StoresManagement";
+import AnunciosDashboard from "./components/AnunciosDashboard";
 import { getSaoPauloDate, getSaoPauloYear, getSaoPauloMonth } from "./utils/timezone";
 import {
   fetchSummary,
@@ -164,6 +166,18 @@ const PlayIcon = (props) => (
 const PauseIcon = (props) => (
   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
     <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+  </svg>
+);
+
+const StoreIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M20 4H4v2l8 5 8-5V4zm0 4.5-8 5-8-5V20h16V8.5z" />
+  </svg>
+);
+
+const AdsIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M3 3h18v2H3V3zm0 4h12v2H3V7zm0 4h18v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2z" />
   </svg>
 );
 
@@ -401,6 +415,15 @@ const App = () => {
           view: "terceiros-prices"
         }
       ]
+    },
+    {
+      label: "Lojas",
+      icon: <StoreIcon />,
+      show: user?.role === "admin",
+      submenu: [
+        { label: "Anúncios", view: "anuncios" },
+        { label: "Gerenc. de Lojas", view: "stores-management" },
+      ],
     },
     {
       label: "Configurações",
@@ -742,6 +765,14 @@ const App = () => {
               <UploadForm onUpload={handleUpload} />
             </Box>
           </Center>
+        )}
+
+        {activeView === "anuncios" && user?.role === "admin" && (
+          <AnunciosDashboard />
+        )}
+
+        {activeView === "stores-management" && user?.role === "admin" && (
+          <StoresManagement />
         )}
 
         {activeView === "users" && user?.role === "admin" && (
