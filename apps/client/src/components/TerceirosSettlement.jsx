@@ -66,6 +66,14 @@ import { getToken } from "../api";
 import { getSaoPauloYear, getSaoPauloMonth } from "../utils/timezone";
 import { formatCurrency } from "../utils/format";
 
+const formatUnitPrice = (value) =>
+  new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 3,
+    maximumFractionDigits: 3
+  }).format(Number(value || 0));
+
 const PdfIcon = createIcon({
   displayName: "PdfIcon",
   viewBox: "0 0 24 24",
@@ -1417,7 +1425,7 @@ const TerceirosSettlement = () => {
             ) : (
               <HStack spacing={1} justify="flex-end">
                 {originalUnitPrice != null && parseFloat(originalUnitPrice) !== parseFloat(group.unitPrice) && (
-                  <Tooltip label={`Preço original: ${formatCurrency(originalUnitPrice)}`}>
+                  <Tooltip label={`Preço original: ${formatUnitPrice(originalUnitPrice)}`}>
                     <EditIcon color="orange.500" boxSize={3} />
                   </Tooltip>
                 )}
@@ -1435,7 +1443,7 @@ const TerceirosSettlement = () => {
                     }
                   }}
                 >
-                  {formatCurrency(group.unitPrice)}
+                  {formatUnitPrice(group.unitPrice)}
                 </Text>
               </HStack>
             )}
@@ -2460,14 +2468,14 @@ const TerceirosSettlement = () => {
                               _hover={{ textDecoration: "underline" }}
                               onClick={() => setEditedGroupPrices((prev) => ({ ...prev, [groupPriceKey]: String(group.tablePrice).replace(".", ",") }))}
                             >
-                              {formatCurrency(group.tablePrice)}
+                              {formatUnitPrice(group.tablePrice)}
                             </Text>
                           </Tooltip>
                         ) : groupPriceEdited !== undefined ? (
                           <Box display="flex" justifyContent="flex-end">
                             <HStack spacing={1}>
                               {isPriceManuallyEdited && (
-                                <Tooltip label={`Preço original: ${formatCurrency(tablePriceVal)}`}>
+                                <Tooltip label={`Preço original: ${formatUnitPrice(tablePriceVal)}`}>
                                   <EditIcon color="orange.500" boxSize={3} />
                                 </Tooltip>
                               )}
