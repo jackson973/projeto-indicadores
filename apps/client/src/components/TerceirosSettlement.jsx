@@ -1586,10 +1586,12 @@ const TerceirosSettlement = () => {
     });
   }, []);
 
-  const groupUnsettledOfs = useCallback((ofs) => {
+  const groupUnsettledOfs = useCallback((ofs, globalOfs) => {
     const groups = [];
     const map = new Map();
-    ofs.forEach((of, index) => {
+    ofs.forEach((of) => {
+      // Use global index from unsettledOfs so selectedOfs indices match
+      const globalIndex = globalOfs ? globalOfs.indexOf(of) : ofs.indexOf(of);
       const key = `${of.fac_numero}|${of.fac_codsetor || ''}|${of.fac_codigo_produto}|${of.fac_cor}|${of.fac_parte}`;
       if (!map.has(key)) {
         const priceInfo = getOfPriceInfo(of);
@@ -1616,12 +1618,12 @@ const TerceirosSettlement = () => {
       }
       const g = map.get(key);
       g.sizes.push({
-        index,
+        index: globalIndex,
         tam: of.fac_tam,
         qty: parseFloat(of.fac_quant) || 0,
         ofId: of.id
       });
-      g.indices.push(index);
+      g.indices.push(globalIndex);
     });
     for (const group of groups) {
       group.sizes = sortSizes(group.sizes);
@@ -2134,13 +2136,19 @@ const TerceirosSettlement = () => {
                 Desmarcar Todos
               </Button>
               <Text fontSize="xs" color="gray.500">
-                {selectedOfs.size} de {filteredUnsettledOfs.length} selecionados
+                {(() => {
+                  let count = 0;
+                  for (const of_ of filteredUnsettledOfs) {
+                    if (selectedOfs.has(unsettledOfs.indexOf(of_))) count++;
+                  }
+                  return count;
+                })()} de {filteredUnsettledOfs.length} selecionados
                 {etapaFilter && ` (filtrado de ${unsettledOfs.length})`}
               </Text>
             </HStack>
 
             <VStack align="stretch" spacing={2}>
-              {groupByOfParte(groupUnsettledOfs(filteredUnsettledOfs)).map((ofGroup) => {
+              {groupByOfParte(groupUnsettledOfs(filteredUnsettledOfs, unsettledOfs)).map((ofGroup) => {
                 // Compute OF/Parte-level totals
                 let ofGroupQty = 0;
                 let ofGroupTotal = 0;
