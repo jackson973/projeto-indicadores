@@ -196,7 +196,7 @@ const App = () => {
   const [salesByPlatform, setSalesByPlatform] = useState([]);
   const [abc, setAbc] = useState([]);
   const [error, setError] = useState("");
-  const [activeView, setActiveView] = useState("upload");
+  const [activeView, setActiveView] = useState(() => localStorage.getItem("activeView") || "upload");
   const [expandedMenu, setExpandedMenu] = useState(null); // For submenu expansion
   const [autoplay, setAutoplay] = useState(true);
   const [sisplanActive, setSisplanActive] = useState(false);
@@ -219,6 +219,11 @@ const App = () => {
   const navActiveBg = useColorModeValue("blue.100", "whiteAlpha.200");
 
   const sidebarWidth = sidebarOpen ? SIDEBAR_EXPANDED : SIDEBAR_COLLAPSED;
+
+  // Persist active view to localStorage
+  useEffect(() => {
+    localStorage.setItem("activeView", activeView);
+  }, [activeView]);
 
   // Check for reset token in URL and restore session on mount
   useEffect(() => {
