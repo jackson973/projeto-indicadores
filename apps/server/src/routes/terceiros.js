@@ -686,6 +686,7 @@ router.get('/settlements/:id/export/excel', async (req, res) => {
           ofNum: item.facNumero,
           desc: item.facDescProduto || item.facCodigoProduto || '',
           parte: item.facDescparte || item.facParte || '',
+          unitPrice: parseFloat(item.unitPrice) || 0,
           totalQty: 0, total: 0
         });
       }
@@ -694,17 +695,19 @@ router.get('/settlements/:id/export/excel', async (req, res) => {
       g.total += parseFloat(item.totalPrice) || 0;
     }
 
-    const rows = [...ofGroups.values()].map(g => ({
+    const ofGroupsArr = [...ofGroups.values()];
+    const rows = ofGroupsArr.map(g => ({
       'OF': g.ofNum,
       'Descricao': g.desc,
       'Parte': g.parte,
       'Quantidade': g.totalQty,
+      'Preco Unit.': g.unitPrice,
       'Total': g.total,
     }));
 
     rows.push({
       'OF': '', 'Descricao': 'SUBTOTAL', 'Parte': '',
-      'Quantidade': '',
+      'Quantidade': '', 'Preco Unit.': '',
       'Total': parseFloat(data.totalAmount) || 0
     });
 
@@ -714,16 +717,21 @@ router.get('/settlements/:id/export/excel', async (req, res) => {
       for (const disc of discounts) {
         rows.push({
           'OF': '', 'Descricao': `Desconto: ${disc.description}`, 'Parte': '',
-          'Quantidade': '',
+          'Quantidade': '', 'Preco Unit.': '',
           'Total': -(parseFloat(disc.amount) || 0)
         });
       }
       rows.push({
         'OF': '', 'Descricao': 'TOTAL A PAGAR', 'Parte': '',
-        'Quantidade': '',
+        'Quantidade': '', 'Preco Unit.': '',
         'Total': parseFloat(data.totalPayable) || 0
       });
     }
+
+    rows.push({
+      'OF': '', 'Descricao': `Numero de OFs: ${ofGroupsArr.length}`, 'Parte': '',
+      'Quantidade': '', 'Preco Unit.': '', 'Total': ''
+    });
 
     const ws = xlsx.utils.json_to_sheet(rows);
     const wb = xlsx.utils.book_new();
@@ -777,6 +785,7 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
           ofNum: item.facNumero,
           desc: item.facDescProduto || item.facCodigoProduto || '',
           parte: item.facDescparte || item.facParte || '',
+          unitPrice: parseFloat(item.unitPrice) || 0,
           totalQty: 0, total: 0
         });
       }
@@ -797,6 +806,7 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
         <td>${g.desc}</td>
         <td class="center">${g.parte}</td>
         <td class="center">${formatNum(g.totalQty)}</td>
+        <td class="right">R$ ${formatPriceCur(g.unitPrice)}</td>
         <td class="right">R$ ${formatCur(g.total)}</td>
       </tr>`;
     }).join('');
@@ -807,7 +817,7 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
 
     const discountRowsHtml = hasDiscounts ? data.discounts.map(d =>
       `<tr class="discount-row">
-        <td colspan="4" class="right">${d.description}</td>
+        <td colspan="5" class="right">${d.description}</td>
         <td class="right discount-val">- R$ ${formatCur(d.amount)}</td>
       </tr>`
     ).join('') : '';
@@ -863,6 +873,7 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
         <th style="text-align:left;">Descricao</th>
         <th>Parte</th>
         <th>Quant.</th>
+        <th>Preco Unit.</th>
         <th>Total (R$)</th>
       </tr>
     </thead>
@@ -871,13 +882,19 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
       <tr class="total-row">
         <td colspan="3" class="right">Total de pecas</td>
         <td class="center">${formatNum(grandQty)}</td>
+        <td></td>
         <td class="right">${hasDiscounts ? 'SUBTOTAL' : 'TOTAL'} R$ ${formatCur(grandTotal)}</td>
       </tr>
       ${discountRowsHtml}
       ${hasDiscounts ? `<tr class="payable-row">
-        <td colspan="4" class="right">Total a pagar</td>
+        <td colspan="5" class="right">Total a pagar</td>
         <td class="right">R$ ${formatCur(totalPayable)}</td>
       </tr>` : ''}
+      <tr class="of-count-row">
+        <td colspan="6" style="text-align:right; font-size:10px; color:#555; padding-top:6px; border-top: 1px solid #ccc;">
+          Numero de OFs: <strong>${pdfOfGroups.size}</strong>
+        </td>
+      </tr>
     </tbody>
   </table>
 
