@@ -664,6 +664,14 @@ export const fetchTerceirosProducts = async () => {
   return handleResponse(response);
 };
 
+export const fetchTerceirosEtapas = async (codcli) => {
+  const params = new URLSearchParams();
+  if (codcli) params.append("codcli", codcli);
+  const qs = params.toString();
+  const response = await authFetch(`/api/terceiros/etapas${qs ? `?${qs}` : ""}`);
+  return handleResponse(response);
+};
+
 export const fetchTerceirosParts = async (codcli, groupId) => {
   const params = new URLSearchParams();
   if (codcli) params.append("codcli", codcli);

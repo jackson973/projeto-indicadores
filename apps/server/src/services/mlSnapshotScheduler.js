@@ -193,7 +193,6 @@ function startMlSnapshotScheduler() {
   cron.schedule('0 3 * * *', runSnapshotJob, {
     scheduled: true,
     timezone: 'America/Sao_Paulo',
-    recoverMissedExecutions: false,
   });
 
   console.log('[ML Snapshot] Scheduler started');

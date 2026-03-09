@@ -423,7 +423,6 @@ async function startSisplanSyncScheduler() {
     }, {
       scheduled: true,
       timezone: 'America/Sao_Paulo',
-      recoverMissedExecutions: false,
     });
 
     console.log(`[Sisplan Sync] Scheduler started (every ${interval} minutes)`);

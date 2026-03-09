@@ -532,7 +532,6 @@ async function startUpsellerSyncScheduler() {
     }, {
       scheduled: true,
       timezone: 'America/Sao_Paulo',
-      recoverMissedExecutions: false,
     });
 
     console.log(`[UpSeller] Scheduler started (every ${interval} minutes)`);

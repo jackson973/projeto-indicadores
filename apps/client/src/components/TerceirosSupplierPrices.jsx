@@ -46,6 +46,7 @@ import {
   fetchTerceirosSuppliers,
   fetchTerceirosProductGroups,
   fetchTerceirosParts,
+  fetchTerceirosEtapas,
   getToken
 } from "../api";
 const formatPrice = (value) =>
@@ -117,6 +118,9 @@ const TerceirosSupplierPrices = () => {
   const [bulkRows, setBulkRows] = useState([]);
   const [savingBulk, setSavingBulk] = useState(false);
 
+  // Etapas
+  const [etapas, setEtapas] = useState([]);
+
   // Track which groups are expanded to show history
   const [expandedGroups, setExpandedGroups] = useState(new Set());
 
@@ -134,12 +138,14 @@ const TerceirosSupplierPrices = () => {
   useEffect(() => {
     const loadRefs = async () => {
       try {
-        const [suppData, grpData] = await Promise.all([
+        const [suppData, grpData, etapasData] = await Promise.all([
           fetchTerceirosSuppliers(),
-          fetchTerceirosProductGroups()
+          fetchTerceirosProductGroups(),
+          fetchTerceirosEtapas()
         ]);
         setSuppliers(suppData);
         setGroups(grpData);
+        setEtapas(etapasData);
       } catch (err) {
         toast({ title: "Erro ao carregar dados de referência.", status: "error", duration: 3000 });
       }
@@ -876,12 +882,16 @@ const TerceirosSupplierPrices = () => {
               </FormControl>
               <FormControl>
                 <FormLabel>Etapa (opcional)</FormLabel>
-                <Input
+                <Select
                   size="sm"
-                  placeholder="Todas as etapas"
                   value={form.etapa}
                   onChange={(e) => setForm({ ...form, etapa: e.target.value })}
-                />
+                >
+                  <option value="">Todas as etapas</option>
+                  {etapas.map((et) => (
+                    <option key={et.code} value={et.code}>{et.code} - {et.name}</option>
+                  ))}
+                </Select>
               </FormControl>
               <FormControl isRequired>
                 <FormLabel>Preço (R$)</FormLabel>
@@ -943,7 +953,12 @@ const TerceirosSupplierPrices = () => {
               <Flex gap={4} direction={{ base: "column", md: "row" }}>
                 <FormControl flex={1}>
                   <FormLabel fontSize="sm">Etapa (opcional)</FormLabel>
-                  <Input size="sm" placeholder="Todas as etapas" value={bulkForm.etapa || ""} onChange={(e) => setBulkForm({ ...bulkForm, etapa: e.target.value })} />
+                  <Select size="sm" value={bulkForm.etapa || ""} onChange={(e) => setBulkForm({ ...bulkForm, etapa: e.target.value })}>
+                    <option value="">Todas as etapas</option>
+                    {etapas.map((et) => (
+                      <option key={et.code} value={et.code}>{et.code} - {et.name}</option>
+                    ))}
+                  </Select>
                 </FormControl>
                 <FormControl flex={1}>
                   <FormLabel fontSize="sm">Vigência De</FormLabel>

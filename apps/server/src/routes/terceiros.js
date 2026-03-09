@@ -133,6 +133,19 @@ router.delete('/product-groups/:groupId/products/:productCode', async (req, res)
   }
 });
 
+// ── Etapas ──────────────────────────────────────────────────────────────────
+
+router.get('/etapas', async (req, res) => {
+  try {
+    const { codcli } = req.query;
+    const etapas = await repo.getEtapas(codcli || null);
+    return res.json(etapas);
+  } catch (error) {
+    console.error('Get etapas error:', error);
+    return res.status(500).json({ message: 'Erro ao buscar etapas.' });
+  }
+});
+
 // ── Supplier Prices ─────────────────────────────────────────────────────────
 
 router.get('/supplier-prices', async (req, res) => {

@@ -525,6 +525,23 @@ async function findPrice(codcli, productCode, part, date, etapa) {
   return { price: parseFloat(priceResult.rows[0].price), source: 'table', groupId, groupName };
 }
 
+async function getEtapas(codcli) {
+  const conditions = ["o.fac_codsetor IS NOT NULL", "o.fac_codsetor != ''"];
+  const params = [];
+  if (codcli) {
+    conditions.push(`o.fac_codcli = $1`);
+    params.push(codcli);
+  }
+  const result = await db.query(
+    `SELECT DISTINCT o.fac_codsetor AS code, o.fac_descsetor AS name
+     FROM terceiros_ofs o
+     WHERE ${conditions.join(' AND ')}
+     ORDER BY o.fac_codsetor`,
+    params
+  );
+  return result.rows;
+}
+
 // ── Settlements ─────────────────────────────────────────────────────────────
 
 async function getSettlements({ codcli, month, year, status } = {}) {
@@ -1148,6 +1165,7 @@ module.exports = {
   updateSupplierPrice,
   deleteSupplierPrice,
   findPrice,
+  getEtapas,
   // Settlements
   getSettlements,
   getSettlement,
