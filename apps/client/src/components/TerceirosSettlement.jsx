@@ -154,6 +154,8 @@ const TerceirosSettlement = () => {
   const [savingDraft, setSavingDraft] = useState(false);
   const [restoringDraft, setRestoringDraft] = useState(false);
   const [activeDraftId, setActiveDraftId] = useState(null);
+  const [expandedOfGroups, setExpandedOfGroups] = useState(new Set());
+  const [expandedEditGroups, setExpandedEditGroups] = useState(new Set());
 
   const ofSearchNewRef = useRef(null);
 
@@ -340,6 +342,7 @@ const TerceirosSettlement = () => {
     setEditNotes("");
     setEditMonth(null);
     setEditYear(null);
+    setExpandedEditGroups(new Set());
   }, []);
 
   // ── Export helper ─────────────────────────────────────────────────────────
@@ -701,6 +704,7 @@ const TerceirosSettlement = () => {
       setEditedQuantities({});
       setEditedGroupPrices({});
       setEditingSize(null);
+      setExpandedOfGroups(new Set());
       setNotes("");
       setNewMonth(prevMonth);
       setNewYear(prevYear);
@@ -859,6 +863,7 @@ const TerceirosSettlement = () => {
     setEditedQuantities({});
     setEditedGroupPrices({});
     setEditingSize(null);
+    setExpandedOfGroups(new Set());
     setNotes("");
     setNewDiscounts([]);
     setNewDiscDesc("");
@@ -1480,7 +1485,40 @@ const TerceirosSettlement = () => {
         ) : (
           <>
             <VStack spacing={3} align="stretch">
-              {groups.map((group) => renderGroupCard(group, false))}
+              {groupByOfParte(groups).map((ofGroup) => {
+                const ofQty = ofGroup.colorGroups.reduce((s, g) => s + g.sizes.filter(sz => !sz.missing).reduce((ss, sz) => ss + sz.qty, 0), 0);
+                const ofTotal = ofGroup.colorGroups.reduce((s, g) => s + g.sizes.filter(sz => !sz.missing).reduce((ss, sz) => ss + sz.total, 0), 0);
+                const isExpanded = expandedEditGroups.has(ofGroup.key);
+
+                return (
+                  <Box key={ofGroup.key} borderWidth="1px" borderColor={borderColor} borderRadius="md" overflow="hidden">
+                    <Flex
+                      align="center" gap={3} px={3} py={2} bg={headerBg}
+                      cursor="pointer" _hover={{ bg: hoverBg }}
+                      onClick={() => toggleOfGroup(ofGroup.key, setExpandedEditGroups)}
+                    >
+                      <Box as={ChevronRightIcon} transform={isExpanded ? "rotate(90deg)" : "rotate(0deg)"} transition="transform 0.2s" boxSize={4} color="gray.500" flex="0 0 auto" />
+                      <HStack spacing={4} flex="1" wrap="wrap" fontSize="sm">
+                        <Text fontWeight="bold">OF {ofGroup.facNumero}</Text>
+                        <Text color="gray.600">{ofGroup.facDescProduto}</Text>
+                        {ofGroup.facParte && (
+                          <Text color="gray.500">Parte: {ofGroup.facParte}{ofGroup.facDescparte && ofGroup.facDescparte !== ofGroup.facParte ? ` - ${ofGroup.facDescparte}` : ""}</Text>
+                        )}
+                      </HStack>
+                      <HStack spacing={4} flex="0 0 auto" fontSize="sm">
+                        <Badge colorScheme="gray" variant="subtle">{ofGroup.colorGroups.length} {ofGroup.colorGroups.length === 1 ? "cor" : "cores"}</Badge>
+                        <Text fontWeight="medium" color="gray.600">{ofQty} pcs</Text>
+                        <Text fontWeight="bold" color="blue.600">{formatCurrency(ofTotal)}</Text>
+                      </HStack>
+                    </Flex>
+                    {isExpanded && (
+                      <VStack spacing={0} p={2} pt={1} align="stretch">
+                        {ofGroup.colorGroups.map((group) => renderGroupCard(group, false))}
+                      </VStack>
+                    )}
+                  </Box>
+                );
+              })}
             </VStack>
             {(() => {
               const detailDiscounts = viewingSettlement.discounts || [];
@@ -1647,6 +1685,37 @@ const TerceirosSettlement = () => {
     return groups;
   }, [sortSizes]);
 
+  // ── Group color-level groups into OF/Parte accordion groups ──────────────
+  const groupByOfParte = useCallback((colorGroups) => {
+    const map = new Map();
+    const result = [];
+    for (const cg of colorGroups) {
+      const key = `${cg.facNumero}|${cg.facParte || ''}`;
+      if (!map.has(key)) {
+        const g = {
+          key,
+          facNumero: cg.facNumero,
+          facParte: cg.facParte,
+          facDescparte: cg.facDescparte,
+          facDescProduto: cg.facDescProduto || cg.facCodigoProduto,
+          colorGroups: []
+        };
+        map.set(key, g);
+        result.push(g);
+      }
+      map.get(key).colorGroups.push(cg);
+    }
+    return result;
+  }, []);
+
+  const toggleOfGroup = useCallback((key, setter) => {
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }, []);
+
   // ── Render: Edit Settlement Panel ─────────────────────────────────────────
   const renderEditPanel = () => {
     if (!editingSettlement) return null;
@@ -1716,7 +1785,58 @@ const TerceirosSettlement = () => {
           </Box>
         ) : (
           <VStack spacing={3} align="stretch">
-            {groups.map((group) => renderGroupCard(group, true))}
+            {groupByOfParte(groups).map((ofGroup) => {
+              const ofQty = ofGroup.colorGroups.reduce((s, g) => s + g.sizes.filter(sz => !sz.missing).reduce((ss, sz) => ss + sz.qty, 0), 0);
+              const ofTotal = ofGroup.colorGroups.reduce((s, g) => s + g.sizes.filter(sz => !sz.missing).reduce((ss, sz) => ss + sz.total, 0), 0);
+              const isExpanded = expandedEditGroups.has(ofGroup.key);
+
+              return (
+                <Box
+                  key={ofGroup.key}
+                  borderWidth="1px"
+                  borderColor={borderColor}
+                  borderRadius="md"
+                  overflow="hidden"
+                >
+                  <Flex
+                    align="center"
+                    gap={3}
+                    px={3}
+                    py={2}
+                    bg={headerBg}
+                    cursor="pointer"
+                    _hover={{ bg: hoverBg }}
+                    onClick={() => toggleOfGroup(ofGroup.key, setExpandedEditGroups)}
+                  >
+                    <Box
+                      as={ChevronRightIcon}
+                      transform={isExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+                      transition="transform 0.2s"
+                      boxSize={4}
+                      color="gray.500"
+                      flex="0 0 auto"
+                    />
+                    <HStack spacing={4} flex="1" wrap="wrap" fontSize="sm">
+                      <Text fontWeight="bold">OF {ofGroup.facNumero}</Text>
+                      <Text color="gray.600">{ofGroup.facDescProduto}</Text>
+                      {ofGroup.facParte && (
+                        <Text color="gray.500">Parte: {ofGroup.facParte}{ofGroup.facDescparte && ofGroup.facDescparte !== ofGroup.facParte ? ` - ${ofGroup.facDescparte}` : ""}</Text>
+                      )}
+                    </HStack>
+                    <HStack spacing={4} flex="0 0 auto" fontSize="sm">
+                      <Badge colorScheme="gray" variant="subtle">{ofGroup.colorGroups.length} {ofGroup.colorGroups.length === 1 ? "cor" : "cores"}</Badge>
+                      <Text fontWeight="medium" color="gray.600">{ofQty} pcs</Text>
+                      <Text fontWeight="bold" color="blue.600">{formatCurrency(ofTotal)}</Text>
+                    </HStack>
+                  </Flex>
+                  {isExpanded && (
+                    <VStack spacing={0} p={2} pt={1} align="stretch">
+                      {ofGroup.colorGroups.map((group) => renderGroupCard(group, true))}
+                    </VStack>
+                  )}
+                </Box>
+              );
+            })}
           </VStack>
         )}
 
@@ -2010,7 +2130,111 @@ const TerceirosSettlement = () => {
             </HStack>
 
             <VStack align="stretch" spacing={2}>
-              {groupUnsettledOfs(filteredUnsettledOfs).map((group) => {
+              {groupByOfParte(groupUnsettledOfs(filteredUnsettledOfs)).map((ofGroup) => {
+                // Compute OF/Parte-level totals
+                let ofGroupQty = 0;
+                let ofGroupTotal = 0;
+                let ofGroupAllSelected = true;
+                let ofGroupSomeSelected = false;
+                const allOfIndices = [];
+
+                ofGroup.colorGroups.forEach((group) => {
+                  const firstIndex = group.indices[0];
+                  const manualVal = manualPrices[`${firstIndex}`];
+                  const groupPriceKey = group.key;
+                  const groupPriceEdited = editedGroupPrices[groupPriceKey];
+                  const tablePriceVal = group.tablePrice;
+                  const effectivePrice = groupPriceEdited !== undefined && groupPriceEdited !== ""
+                    ? (parseFloat(String(groupPriceEdited).replace(",", ".")) || 0)
+                    : tablePriceVal != null
+                      ? tablePriceVal
+                      : (manualVal !== undefined && manualVal !== "" ? parseFloat(manualVal) || 0 : null);
+
+                  group.sizes.forEach((sz) => {
+                    allOfIndices.push(sz.index);
+                    const isSelected = selectedOfs.has(sz.index);
+                    if (isSelected) {
+                      ofGroupSomeSelected = true;
+                      const q = editedQuantities[sz.index] !== undefined
+                        ? (parseFloat(editedQuantities[sz.index]) || 0)
+                        : sz.qty;
+                      ofGroupQty += q;
+                      if (effectivePrice != null) ofGroupTotal += effectivePrice * q;
+                    } else {
+                      ofGroupAllSelected = false;
+                    }
+                  });
+                });
+                if (allOfIndices.length === 0) ofGroupAllSelected = false;
+
+                const isExpanded = expandedOfGroups.has(ofGroup.key);
+
+                const toggleOfGroupSelect = () => {
+                  setSelectedOfs((prev) => {
+                    const next = new Set(prev);
+                    if (ofGroupAllSelected) {
+                      allOfIndices.forEach((i) => next.delete(i));
+                    } else {
+                      allOfIndices.forEach((i) => next.add(i));
+                    }
+                    return next;
+                  });
+                };
+
+                return (
+                  <Box
+                    key={ofGroup.key}
+                    borderWidth="1px"
+                    borderColor={ofGroupSomeSelected ? "blue.300" : borderColor}
+                    borderRadius="md"
+                    overflow="hidden"
+                    transition="all 0.15s"
+                  >
+                    {/* Accordion header */}
+                    <Flex
+                      align="center"
+                      gap={3}
+                      px={3}
+                      py={2}
+                      bg={ofGroupAllSelected ? selectedRowBg : headerBg}
+                      cursor="pointer"
+                      _hover={{ bg: ofGroupAllSelected ? selectedRowBg : hoverBg }}
+                      onClick={() => toggleOfGroup(ofGroup.key, setExpandedOfGroups)}
+                    >
+                      <Checkbox
+                        isChecked={ofGroupAllSelected}
+                        isIndeterminate={ofGroupSomeSelected && !ofGroupAllSelected}
+                        onChange={(e) => { e.stopPropagation(); toggleOfGroupSelect(); }}
+                        colorScheme="blue"
+                        flex="0 0 auto"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                      <Box
+                        as={ChevronRightIcon}
+                        transform={isExpanded ? "rotate(90deg)" : "rotate(0deg)"}
+                        transition="transform 0.2s"
+                        boxSize={4}
+                        color="gray.500"
+                        flex="0 0 auto"
+                      />
+                      <HStack spacing={4} flex="1" wrap="wrap" fontSize="sm">
+                        <Text fontWeight="bold">OF {ofGroup.facNumero}</Text>
+                        <Text color="gray.600">{ofGroup.facDescProduto}</Text>
+                        {ofGroup.facParte && (
+                          <Text color="gray.500">Parte: {ofGroup.facParte}{ofGroup.facDescparte && ofGroup.facDescparte !== ofGroup.facParte ? ` - ${ofGroup.facDescparte}` : ""}</Text>
+                        )}
+                      </HStack>
+                      <HStack spacing={4} flex="0 0 auto" fontSize="sm">
+                        <Badge colorScheme="gray" variant="subtle">{ofGroup.colorGroups.length} {ofGroup.colorGroups.length === 1 ? "cor" : "cores"}</Badge>
+                        <Text fontWeight="medium" color="gray.600">{ofGroupQty} pcs</Text>
+                        <Text fontWeight="bold" color="blue.600">{formatCurrency(ofGroupTotal)}</Text>
+                      </HStack>
+                    </Flex>
+
+                    {/* Expanded color-level details */}
+                    {isExpanded && (
+                      <VStack align="stretch" spacing={0} p={2} pt={1}>
+                        {ofGroup.colorGroups.map((group) => {
                 const allSelected = group.indices.every((i) => selectedOfs.has(i));
                 const someSelected = group.indices.some((i) => selectedOfs.has(i));
                 const hasError = group.priceInfo && !group.priceInfo.price && group.priceInfo.error;
@@ -2055,6 +2279,7 @@ const TerceirosSettlement = () => {
                     borderColor={hasError ? "red.300" : someSelected ? "blue.300" : borderColor}
                     borderRadius="md"
                     p={3}
+                    mt={1}
                     bg={allSelected ? selectedRowBg : undefined}
                     _hover={{ borderColor: "blue.200" }}
                     transition="all 0.15s"
@@ -2070,12 +2295,8 @@ const TerceirosSettlement = () => {
                         alignSelf="flex-start"
                       />
 
-                      {/* Left: OF + Fornecedor + Etapa + Produto + Cor + Parte */}
+                      {/* Left: Cor info */}
                       <HStack spacing={3} wrap="wrap" fontSize="sm" flex={{ base: "1 1 100%", md: "0 0 auto" }}>
-                        <Box minW="60px">
-                          <Text fontSize="xs" color="gray.500" fontWeight="medium">OF</Text>
-                          <Text fontWeight="bold">{group.facNumero}</Text>
-                        </Box>
                         {!newSupplier && group.facCodcli && (
                           <Box minW="100px">
                             <Text fontSize="xs" color="gray.500" fontWeight="medium">Fornecedor</Text>
@@ -2088,20 +2309,9 @@ const TerceirosSettlement = () => {
                             <Text>{group.facCodsetor}{group.facDescsetor ? ` - ${group.facDescsetor}` : ""}</Text>
                           </Box>
                         )}
-                        <Box minW="80px">
-                          <Text fontSize="xs" color="gray.500" fontWeight="medium">Produto</Text>
-                          <Text fontWeight="medium">{group.facCodigoProduto}</Text>
-                          {group.facDescProduto && (
-                            <Text fontSize="xs" color="gray.500" noOfLines={1}>{group.facDescProduto}</Text>
-                          )}
-                        </Box>
                         <Box minW="70px">
                           <Text fontSize="xs" color="gray.500" fontWeight="medium">Cor</Text>
                           <Text>{group.facCor}{group.facDesccor && group.facDesccor !== group.facCor ? ` - ${group.facDesccor}` : ""}</Text>
-                        </Box>
-                        <Box minW="70px">
-                          <Text fontSize="xs" color="gray.500" fontWeight="medium">Parte</Text>
-                          <Text>{group.facParte}{group.facDescparte && group.facDescparte !== group.facParte ? ` - ${group.facDescparte}` : ""}</Text>
                         </Box>
                       </HStack>
 
@@ -2295,6 +2505,11 @@ const TerceirosSettlement = () => {
                       <Text fontSize="xs" color="red.600" fontWeight="medium" mt={1}>
                         {group.priceInfo.error}
                       </Text>
+                    )}
+                  </Box>
+                );
+                        })}
+                      </VStack>
                     )}
                   </Box>
                 );
