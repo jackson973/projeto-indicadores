@@ -1501,6 +1501,9 @@ const TerceirosSettlement = () => {
                       <HStack spacing={4} flex="1" wrap="wrap" fontSize="sm">
                         <Text fontWeight="bold">OF {ofGroup.facNumero}</Text>
                         <Text color="gray.600">{ofGroup.facDescProduto}</Text>
+                        {ofGroup.facCodsetor && (
+                          <Text color="gray.500">Etapa: {ofGroup.facCodsetor}{ofGroup.facDescsetor ? ` - ${ofGroup.facDescsetor}` : ""}</Text>
+                        )}
                         {ofGroup.facParte && (
                           <Text color="gray.500">Parte: {ofGroup.facParte}{ofGroup.facDescparte && ofGroup.facDescparte !== ofGroup.facParte ? ` - ${ofGroup.facDescparte}` : ""}</Text>
                         )}
@@ -1690,11 +1693,13 @@ const TerceirosSettlement = () => {
     const map = new Map();
     const result = [];
     for (const cg of colorGroups) {
-      const key = `${cg.facNumero}|${cg.facParte || ''}`;
+      const key = `${cg.facNumero}|${cg.facCodsetor || ''}|${cg.facParte || ''}`;
       if (!map.has(key)) {
         const g = {
           key,
           facNumero: cg.facNumero,
+          facCodsetor: cg.facCodsetor,
+          facDescsetor: cg.facDescsetor,
           facParte: cg.facParte,
           facDescparte: cg.facDescparte,
           facDescProduto: cg.facDescProduto || cg.facCodigoProduto,
@@ -1819,6 +1824,9 @@ const TerceirosSettlement = () => {
                     <HStack spacing={4} flex="1" wrap="wrap" fontSize="sm">
                       <Text fontWeight="bold">OF {ofGroup.facNumero}</Text>
                       <Text color="gray.600">{ofGroup.facDescProduto}</Text>
+                      {ofGroup.facCodsetor && (
+                        <Text color="gray.500">Etapa: {ofGroup.facCodsetor}{ofGroup.facDescsetor ? ` - ${ofGroup.facDescsetor}` : ""}</Text>
+                      )}
                       {ofGroup.facParte && (
                         <Text color="gray.500">Parte: {ofGroup.facParte}{ofGroup.facDescparte && ofGroup.facDescparte !== ofGroup.facParte ? ` - ${ofGroup.facDescparte}` : ""}</Text>
                       )}
@@ -2220,6 +2228,9 @@ const TerceirosSettlement = () => {
                       <HStack spacing={4} flex="1" wrap="wrap" fontSize="sm">
                         <Text fontWeight="bold">OF {ofGroup.facNumero}</Text>
                         <Text color="gray.600">{ofGroup.facDescProduto}</Text>
+                        {ofGroup.facCodsetor && (
+                          <Text color="gray.500">Etapa: {ofGroup.facCodsetor}{ofGroup.facDescsetor ? ` - ${ofGroup.facDescsetor}` : ""}</Text>
+                        )}
                         {ofGroup.facParte && (
                           <Text color="gray.500">Parte: {ofGroup.facParte}{ofGroup.facDescparte && ofGroup.facDescparte !== ofGroup.facParte ? ` - ${ofGroup.facDescparte}` : ""}</Text>
                         )}
