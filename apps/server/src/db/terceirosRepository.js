@@ -396,34 +396,39 @@ async function getSupplierPrices({ codcli, groupId } = {}) {
   const result = await db.query(
     `SELECT sp.id, sp.codcli, sp.supplier_name AS "supplierName",
             sp.group_id AS "groupId", pg.name AS "groupName",
-            sp.part, sp.price, sp.valid_from AS "validFrom", sp.valid_until AS "validUntil",
+            sp.part, sp.etapa, sp.price, sp.valid_from AS "validFrom", sp.valid_until AS "validUntil",
             sp.created_at AS "createdAt", sp.updated_at AS "updatedAt",
             (SELECT o.fac_descparte FROM terceiros_ofs o
-             WHERE o.fac_parte = sp.part LIMIT 1) AS "partName"
+             WHERE o.fac_parte = sp.part LIMIT 1) AS "partName",
+            (SELECT o.fac_descsetor FROM terceiros_ofs o
+             WHERE o.fac_codsetor = sp.etapa LIMIT 1) AS "etapaName"
      FROM terceiros_supplier_prices sp
      INNER JOIN terceiros_product_groups pg ON pg.id = sp.group_id
      WHERE ${conditions.join(' AND ')}
-     ORDER BY sp.codcli, pg.name, sp.part, sp.valid_from DESC`,
+     ORDER BY sp.codcli, pg.name, sp.part, sp.etapa, sp.valid_from DESC`,
     params
   );
   return result.rows;
 }
 
-async function checkPriceOverlap(codcli, groupId, part, validFrom, validUntil, excludeId) {
+async function checkPriceOverlap(codcli, groupId, part, validFrom, validUntil, excludeId, etapa) {
   const partCondition = part
     ? 'sp.part = $4'
     : '(sp.part IS NULL OR sp.part = $4)';
-  const params = [codcli, groupId, validFrom, part || null, validUntil];
+  const etapaCondition = etapa
+    ? 'sp.etapa = $6'
+    : '(sp.etapa IS NULL OR sp.etapa = $6)';
+  const params = [codcli, groupId, validFrom, part || null, validUntil, etapa || null];
   let excludeClause = '';
   if (excludeId) {
-    excludeClause = ' AND sp.id != $6';
+    excludeClause = ' AND sp.id != $7';
     params.push(excludeId);
   }
 
   const result = await db.query(
     `SELECT sp.id, sp.valid_from, sp.valid_until
      FROM terceiros_supplier_prices sp
-     WHERE sp.codcli = $1 AND sp.group_id = $2 AND ${partCondition}
+     WHERE sp.codcli = $1 AND sp.group_id = $2 AND ${partCondition} AND ${etapaCondition}
        AND sp.valid_from <= $5 AND sp.valid_until >= $3
        ${excludeClause}`,
     params
@@ -431,25 +436,25 @@ async function checkPriceOverlap(codcli, groupId, part, validFrom, validUntil, e
   return result.rows;
 }
 
-async function createSupplierPrice({ codcli, supplierName, groupId, part, price, validFrom, validUntil }) {
-  const overlaps = await checkPriceOverlap(codcli, groupId, part, validFrom, validUntil);
+async function createSupplierPrice({ codcli, supplierName, groupId, part, etapa, price, validFrom, validUntil }) {
+  const overlaps = await checkPriceOverlap(codcli, groupId, part, validFrom, validUntil, null, etapa);
   if (overlaps.length > 0) {
     const o = overlaps[0];
     throw new Error(`Sobreposicao de datas com vigencia existente: ${o.valid_from} a ${o.valid_until}`);
   }
 
   const result = await db.query(
-    `INSERT INTO terceiros_supplier_prices (codcli, supplier_name, group_id, part, price, valid_from, valid_until)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)
+    `INSERT INTO terceiros_supplier_prices (codcli, supplier_name, group_id, part, etapa, price, valid_from, valid_until)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING id, codcli, supplier_name AS "supplierName", group_id AS "groupId",
-               part, price, valid_from AS "validFrom", valid_until AS "validUntil"`,
-    [codcli, supplierName, groupId, part || null, price, validFrom, validUntil]
+               part, etapa, price, valid_from AS "validFrom", valid_until AS "validUntil"`,
+    [codcli, supplierName, groupId, part || null, etapa || null, price, validFrom, validUntil]
   );
   return result.rows[0];
 }
 
-async function updateSupplierPrice(id, { codcli, supplierName, groupId, part, price, validFrom, validUntil }) {
-  const overlaps = await checkPriceOverlap(codcli, groupId, part, validFrom, validUntil, id);
+async function updateSupplierPrice(id, { codcli, supplierName, groupId, part, etapa, price, validFrom, validUntil }) {
+  const overlaps = await checkPriceOverlap(codcli, groupId, part, validFrom, validUntil, id, etapa);
   if (overlaps.length > 0) {
     const o = overlaps[0];
     throw new Error(`Sobreposicao de datas com vigencia existente: ${o.valid_from} a ${o.valid_until}`);
@@ -458,11 +463,11 @@ async function updateSupplierPrice(id, { codcli, supplierName, groupId, part, pr
   const result = await db.query(
     `UPDATE terceiros_supplier_prices
      SET codcli = $1, supplier_name = $2, group_id = $3, part = $4,
-         price = $5, valid_from = $6, valid_until = $7
-     WHERE id = $8
+         etapa = $5, price = $6, valid_from = $7, valid_until = $8
+     WHERE id = $9
      RETURNING id, codcli, supplier_name AS "supplierName", group_id AS "groupId",
-               part, price, valid_from AS "validFrom", valid_until AS "validUntil"`,
-    [codcli, supplierName, groupId, part || null, price, validFrom, validUntil, id]
+               part, etapa, price, valid_from AS "validFrom", valid_until AS "validUntil"`,
+    [codcli, supplierName, groupId, part || null, etapa || null, price, validFrom, validUntil, id]
   );
   return result.rows[0] || null;
 }
@@ -475,7 +480,7 @@ async function deleteSupplierPrice(id) {
   return result.rowCount > 0;
 }
 
-async function findPrice(codcli, productCode, part, date) {
+async function findPrice(codcli, productCode, part, date, etapa) {
   // Find the group for this product
   const groupResult = await db.query(
     `SELECT gp.group_id, pg.name AS group_name FROM terceiros_group_products gp
@@ -493,16 +498,21 @@ async function findPrice(codcli, productCode, part, date) {
   const groupId = groupResult.rows[0].group_id;
   const groupName = groupResult.rows[0].group_name;
 
-  // Find price for this supplier + group + part + date
+  // Find price for this supplier + group + part + etapa + date
+  // Priority: specific etapa+part > specific etapa > specific part > generic (null etapa + null part)
   const priceResult = await db.query(
     `SELECT price FROM terceiros_supplier_prices
      WHERE codcli = $1 AND group_id = $2
        AND (part = $3 OR part IS NULL)
+       AND (etapa = $5 OR etapa IS NULL)
        AND (valid_from IS NULL OR valid_from <= $4)
        AND (valid_until IS NULL OR valid_until >= $4)
-     ORDER BY CASE WHEN part = $3 THEN 0 ELSE 1 END, valid_from DESC NULLS LAST
+     ORDER BY
+       CASE WHEN etapa = $5 THEN 0 ELSE 1 END,
+       CASE WHEN part = $3 THEN 0 ELSE 1 END,
+       valid_from DESC NULLS LAST
      LIMIT 1`,
-    [codcli, groupId, part, date]
+    [codcli, groupId, part, date, etapa || null]
   );
 
   if (priceResult.rows.length === 0) {

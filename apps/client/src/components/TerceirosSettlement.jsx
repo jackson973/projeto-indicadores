@@ -439,7 +439,8 @@ const TerceirosSettlement = () => {
           const items = ofs.map((of) => ({
             productCode: of.fac_codigo_produto,
             parte: of.fac_parte,
-            cor: of.fac_cor
+            cor: of.fac_cor,
+            etapa: of.fac_codsetor || null
           }));
           try {
             const prices = await fetchTerceirosPricesForOfs(supplierCode, items);
@@ -809,7 +810,8 @@ const TerceirosSettlement = () => {
         const items = data.map((of) => ({
           productCode: of.fac_codigo_produto,
           parte: of.fac_parte,
-          cor: of.fac_cor
+          cor: of.fac_cor,
+          etapa: of.fac_codsetor || null
         }));
         try {
           const prices = await fetchTerceirosPricesForOfs(draft.codcli, items);

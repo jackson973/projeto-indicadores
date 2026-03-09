@@ -85,6 +85,7 @@ const emptyForm = {
   codcli: "",
   groupId: "",
   part: "",
+  etapa: "",
   price: 0,
   validFrom: "",
   validUntil: ""
@@ -263,7 +264,7 @@ const TerceirosSupplierPrices = () => {
   const groupedPrices = useMemo(() => {
     const map = new Map();
     prices.forEach((row) => {
-      const key = `${row.codcli}|${row.groupId || row.group_id}|${row.part || ""}`;
+      const key = `${row.codcli}|${row.groupId || row.group_id}|${row.part || ""}|${row.etapa || ""}`;
       if (!map.has(key)) {
         map.set(key, {
           key,
@@ -273,6 +274,8 @@ const TerceirosSupplierPrices = () => {
           groupName: row.groupName || row.group_name,
           part: row.part,
           partName: row.partName,
+          etapa: row.etapa,
+          etapaName: row.etapaName,
           entries: []
         });
       }
@@ -356,6 +359,7 @@ const TerceirosSupplierPrices = () => {
       codcli: String(row.codcli || ""),
       groupId: String(row.groupId || row.group_id || ""),
       part: row.part || "",
+      etapa: row.etapa || "",
       price: Number(row.price) || 0,
       validFrom: toDateInput(row.validFrom || row.valid_from),
       validUntil: toDateInput(row.validUntil || row.valid_until)
@@ -412,6 +416,7 @@ const TerceirosSupplierPrices = () => {
         supplierName: supplier?.nome || "",
         groupId: form.groupId,
         part: form.part || null,
+        etapa: form.etapa || null,
         price: form.price,
         validFrom: form.validFrom || null,
         validUntil: form.validUntil || null
@@ -450,6 +455,7 @@ const TerceirosSupplierPrices = () => {
         supplierName: supplier?.nome || "",
         groupId: bulkForm.groupId,
         part: r.part || null,
+        etapa: bulkForm.etapa || null,
         price: r.price,
         validFrom: bulkForm.validFrom || null,
         validUntil: bulkForm.validUntil || null
@@ -627,6 +633,7 @@ const TerceirosSupplierPrices = () => {
                       <Text fontSize="xs" color="gray.500">
                         {group.groupName || groupLabel(group.groupId)}
                         {group.part ? ` · ${group.part}${group.partName ? ` - ${group.partName}` : ""}` : ""}
+                        {group.etapa ? ` · Etapa: ${group.etapa}${group.etapaName ? ` - ${group.etapaName}` : ""}` : ""}
                       </Text>
                     </Box>
                     <HStack spacing={1} ml={2} flexShrink={0}>
@@ -740,6 +747,7 @@ const TerceirosSupplierPrices = () => {
                           <Th w="30px" px={1}></Th>
                           <Th whiteSpace="nowrap">Grupo</Th>
                           <Th whiteSpace="nowrap">Parte</Th>
+                          <Th whiteSpace="nowrap">Etapa</Th>
                           <Th isNumeric whiteSpace="nowrap">Preço Atual (R$)</Th>
                           <Th whiteSpace="nowrap">Vigência</Th>
                           <Th w="100px" whiteSpace="nowrap">Ações</Th>
@@ -770,6 +778,7 @@ const TerceirosSupplierPrices = () => {
                                 </Td>
                                 <Td><Text fontSize="sm" whiteSpace="nowrap">{group.groupName || groupLabel(group.groupId)}</Text></Td>
                                 <Td><Text fontSize="sm" whiteSpace="nowrap">{group.part ? `${group.part}${group.partName ? ` - ${group.partName}` : ""}` : "Todas"}</Text></Td>
+                                <Td><Text fontSize="sm" whiteSpace="nowrap">{group.etapa ? `${group.etapa}${group.etapaName ? ` - ${group.etapaName}` : ""}` : "Todas"}</Text></Td>
                                 <Td isNumeric><Text fontWeight="semibold" whiteSpace="nowrap">{formatPrice(current.price)}</Text></Td>
                                 <Td>
                                   <HStack spacing={2}>
@@ -799,7 +808,7 @@ const TerceirosSupplierPrices = () => {
                                 return (
                                   <Tr key={row.id} bg={historyBg} opacity={hExpired ? 0.5 : 0.75}>
                                     <Td px={1}></Td>
-                                    <Td colSpan={2}>
+                                    <Td colSpan={3}>
                                       <HStack spacing={2} pl={4}>
                                         <TimeIcon boxSize={3} color="gray.400" />
                                         <Text fontSize="xs" color="gray.500">Histórico</Text>
@@ -865,6 +874,15 @@ const TerceirosSupplierPrices = () => {
                   options={modalParts.map((p) => ({ value: p.code, label: `${p.code}${p.name ? ` - ${p.name}` : ""}` }))}
                 />
               </FormControl>
+              <FormControl>
+                <FormLabel>Etapa (opcional)</FormLabel>
+                <Input
+                  size="sm"
+                  placeholder="Todas as etapas"
+                  value={form.etapa}
+                  onChange={(e) => setForm({ ...form, etapa: e.target.value })}
+                />
+              </FormControl>
               <FormControl isRequired>
                 <FormLabel>Preço (R$)</FormLabel>
                 <Input
@@ -923,6 +941,10 @@ const TerceirosSupplierPrices = () => {
                 </FormControl>
               </Flex>
               <Flex gap={4} direction={{ base: "column", md: "row" }}>
+                <FormControl flex={1}>
+                  <FormLabel fontSize="sm">Etapa (opcional)</FormLabel>
+                  <Input size="sm" placeholder="Todas as etapas" value={bulkForm.etapa || ""} onChange={(e) => setBulkForm({ ...bulkForm, etapa: e.target.value })} />
+                </FormControl>
                 <FormControl flex={1}>
                   <FormLabel fontSize="sm">Vigência De</FormLabel>
                   <Input size="sm" type="date" value={bulkForm.validFrom} onChange={(e) => setBulkForm({ ...bulkForm, validFrom: e.target.value })} />
