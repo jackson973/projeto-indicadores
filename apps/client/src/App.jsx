@@ -254,7 +254,8 @@ const App = () => {
       .then((data) => {
         if (data && data.totalSales > 0) {
           setHasData(true);
-          setActiveView("dashboard");
+          const saved = localStorage.getItem("activeView");
+          if (!saved || saved === "upload") setActiveView("dashboard");
           loadData(filters);
         }
       })
