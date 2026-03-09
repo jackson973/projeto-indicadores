@@ -2655,6 +2655,46 @@ const TerceirosSettlement = () => {
       {/* Filters */}
       {renderFilters()}
 
+      {/* Summary cards */}
+      {!loading && filteredSettlements.length > 0 && (() => {
+        const nonDraft = filteredSettlements.filter(s => s.status !== "draft");
+        const totalFechamentos = nonDraft.length;
+        const totalPecas = nonDraft.reduce((s, x) => s + (parseInt(x.totalItems) || 0), 0);
+        const totalValor = nonDraft.reduce((s, x) => s + (parseFloat(x.totalPayable ?? x.totalAmount) || 0), 0);
+        const pagos = nonDraft.filter(s => s.status === "paid");
+        const totalPago = pagos.reduce((s, x) => s + (parseFloat(x.totalPayable ?? x.totalAmount) || 0), 0);
+        const abertos = nonDraft.filter(s => s.status === "open");
+        const totalAberto = abertos.reduce((s, x) => s + (parseFloat(x.totalPayable ?? x.totalAmount) || 0), 0);
+
+        const cards = [
+          { label: "Fechamentos", value: totalFechamentos, color: "blue" },
+          { label: "Total Peças", value: totalPecas.toLocaleString("pt-BR"), color: "purple" },
+          { label: "Valor Total", value: formatCurrency(totalValor), color: "blue" },
+          { label: "Pago", value: formatCurrency(totalPago), color: "green" },
+          { label: "Em Aberto", value: formatCurrency(totalAberto), color: "orange" },
+        ];
+
+        return (
+          <Flex gap={3} mb={4} wrap="wrap">
+            {cards.map((c) => (
+              <Box
+                key={c.label}
+                flex={{ base: "1 1 calc(50% - 6px)", md: "1 1 0" }}
+                bg={cardBg}
+                borderRadius="lg"
+                borderWidth="1px"
+                borderColor={borderColor}
+                p={3}
+                textAlign="center"
+              >
+                <Text fontSize="xs" color="gray.500" fontWeight="medium" textTransform="uppercase" letterSpacing="wide">{c.label}</Text>
+                <Text fontSize="lg" fontWeight="bold" color={`${c.color}.500`} mt={1}>{c.value}</Text>
+              </Box>
+            ))}
+          </Flex>
+        );
+      })()}
+
       {/* Settlements table */}
       {renderSettlementsTable()}
 
