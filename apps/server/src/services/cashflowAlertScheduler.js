@@ -60,7 +60,8 @@ function startCashflowAlertScheduler() {
     }
   }, {
     scheduled: true,
-    timezone: 'America/Sao_Paulo'
+    timezone: 'America/Sao_Paulo',
+    recoverMissedExecutions: false,
   });
 
   console.log('[Cashflow Alert Scheduler] Started successfully');

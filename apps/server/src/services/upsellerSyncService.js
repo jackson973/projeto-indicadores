@@ -531,7 +531,8 @@ async function startUpsellerSyncScheduler() {
       await runSync();
     }, {
       scheduled: true,
-      timezone: 'America/Sao_Paulo'
+      timezone: 'America/Sao_Paulo',
+      recoverMissedExecutions: false,
     });
 
     console.log(`[UpSeller] Scheduler started (every ${interval} minutes)`);

@@ -137,6 +137,7 @@ async function startAnalyticsScheduler() {
     }, {
       scheduled: true,
       timezone: 'America/Sao_Paulo',
+      recoverMissedExecutions: false,
     });
 
     // Fetch immediately on start
