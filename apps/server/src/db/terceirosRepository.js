@@ -1179,9 +1179,20 @@ async function getOFRastreio(ofNumero) {
 
   if (result.rows.length === 0) return null;
 
+  let dt_abertura = null;
+  let dt_ultimo_lancto = null;
+  let ultima_etapa = null;
+
   // Group rows by etapa (fac_codsetor)
   const etapaMap = new Map();
   for (const row of result.rows) {
+    // Summary fields across all rows
+    if (row.fac_dt_s && (!dt_abertura || row.fac_dt_s < dt_abertura)) dt_abertura = row.fac_dt_s;
+    if (row.fac_dt_lan && (!dt_ultimo_lancto || row.fac_dt_lan > dt_ultimo_lancto)) {
+      dt_ultimo_lancto = row.fac_dt_lan;
+      ultima_etapa = row.fac_descsetor || row.fac_codsetor;
+    }
+
     const key = row.fac_codsetor || row.fac_descsetor;
     if (!etapaMap.has(key)) {
       etapaMap.set(key, {
@@ -1223,7 +1234,9 @@ async function getOFRastreio(ofNumero) {
   const first = result.rows[0];
   return {
     fac_numero: first.fac_numero,
-    fornecedor: first.cliente_fantasia || first.cliente_nome || first.fac_codcli,
+    dt_abertura,
+    dt_ultimo_lancto,
+    ultima_etapa,
     etapas: Array.from(etapaMap.values()).map(e => ({
       ...e,
       produtos: Array.from(e.produtoMap.values()),
