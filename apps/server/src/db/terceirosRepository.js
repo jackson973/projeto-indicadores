@@ -705,7 +705,7 @@ async function createSettlement({ codcli, supplierName, referenceMonth, referenc
       );
 
       totalAmount += totalPrice;
-      totalItems++;
+      totalItems += parseFloat(item.quantity) || 0;
     }
 
     // Insert discounts if any
@@ -800,7 +800,7 @@ async function promoteDraft(id, { items, discounts }) {
 
       await client.query('UPDATE terceiros_ofs SET settlement_id = $1 WHERE id = $2', [id, item.ofId]);
       totalAmount += totalPrice;
-      totalItems++;
+      totalItems += parseFloat(item.quantity) || 0;
     }
 
     if (discounts && discounts.length > 0) {
@@ -1024,7 +1024,7 @@ async function addSettlementItems(settlementId, items) {
 
 async function recalcSettlementTotals(queryFn, settlementId) {
   const items = await queryFn(
-    `SELECT COALESCE(SUM(total_price), 0) AS total_amount, COUNT(*)::int AS total_items
+    `SELECT COALESCE(SUM(total_price), 0) AS total_amount, COALESCE(SUM(quantity), 0)::numeric AS total_items
      FROM terceiros_settlement_items WHERE settlement_id = $1`,
     [settlementId]
   );
@@ -1034,7 +1034,7 @@ async function recalcSettlementTotals(queryFn, settlementId) {
     [settlementId]
   );
   const totalAmount = parseFloat(items.rows[0].total_amount) || 0;
-  const totalItems = parseInt(items.rows[0].total_items) || 0;
+  const totalItems = parseFloat(items.rows[0].total_items) || 0;
   const totalDiscounts = parseFloat(discounts.rows[0].total_discounts) || 0;
   const totalPayable = Math.max(0, totalAmount - totalDiscounts);
 

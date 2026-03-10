@@ -1059,7 +1059,7 @@ const TerceirosSettlement = () => {
               </Flex>
               <Flex justify="space-between" align="center" mb={2}>
                 <Text fontSize="xs" color="gray.500">
-                  {monthNames[(s.referenceMonth || 1) - 1]}/{s.referenceYear} - {s.totalItems ?? 0} itens
+                  {monthNames[(s.referenceMonth || 1) - 1]}/{s.referenceYear} - {(s.totalItems ?? 0).toLocaleString("pt-BR")} pcs
                 </Text>
                 <VStack spacing={0} align="flex-end">
                   {parseFloat(s.totalDiscounts) > 0 && (
@@ -1537,10 +1537,17 @@ const TerceirosSettlement = () => {
               const detailDiscounts = viewingSettlement.discounts || [];
               const totalDiscounts = detailDiscounts.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
               const totalPayable = Math.max(0, total - totalDiscounts);
+              const totalPecas = items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0);
               return (
                 <>
                   <Flex justify="flex-end" mt={3} pr={2}>
                     <VStack spacing={0} align="flex-end">
+                      <HStack spacing={2}>
+                        <Text fontSize="xs" color="gray.500">Total de peças:</Text>
+                        <Text fontSize="xs" fontWeight="semibold" color="gray.600">
+                          {totalPecas.toLocaleString("pt-BR")} pcs
+                        </Text>
+                      </HStack>
                       <HStack spacing={2}>
                         <Text fontWeight="bold" fontSize="sm">{detailDiscounts.length > 0 ? "Subtotal:" : "Total:"}</Text>
                         <Text fontWeight="bold" fontSize="md" color="blue.500">
@@ -1864,10 +1871,17 @@ const TerceirosSettlement = () => {
           const editDiscounts = editingSettlement.discounts || [];
           const totalDiscounts = editDiscounts.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
           const totalPayable = Math.max(0, total - totalDiscounts);
+          const totalPecas = items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0);
           return (
             <>
               <Flex justify="flex-end" mt={4} pr={2}>
                 <VStack spacing={0} align="flex-end">
+                  <HStack spacing={2}>
+                    <Text fontSize="xs" color="gray.500">Total de peças:</Text>
+                    <Text fontSize="xs" fontWeight="semibold" color="gray.600">
+                      {totalPecas.toLocaleString("pt-BR")} pcs
+                    </Text>
+                  </HStack>
                   <HStack spacing={2}>
                     <Text fontWeight="bold" fontSize="sm">{editDiscounts.length > 0 ? "Subtotal:" : "Total Geral:"}</Text>
                     <Text fontWeight="bold" fontSize="lg" color="blue.500">
