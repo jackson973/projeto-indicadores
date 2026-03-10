@@ -991,6 +991,19 @@ router.post('/find-prices', async (req, res) => {
   }
 });
 
+// ── Rastreio de OF ──────────────────────────────────────────────────────────
+
+router.get('/rastreio-of/:ofNumero', async (req, res) => {
+  try {
+    const { ofNumero } = req.params;
+    const data = await repo.getOFRastreio(ofNumero.trim());
+    return res.json(data);
+  } catch (error) {
+    console.error('Rastreio OF error:', error);
+    return res.status(500).json({ message: 'Erro ao buscar rastreio da OF.' });
+  }
+});
+
 function formatNum(val) {
   const n = parseFloat(val) || 0;
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });

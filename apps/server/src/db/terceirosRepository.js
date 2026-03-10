@@ -1150,6 +1150,78 @@ async function getSettlementExportData(id) {
   };
 }
 
+async function getOFRastreio(ofNumero) {
+  const result = await db.query(
+    `SELECT
+       fac_numero,
+       fac_codsetor,
+       COALESCE(fac_descsetor, fac_codsetor) AS fac_descsetor,
+       fac_dt_s,
+       fac_dt_lan,
+       fac_dt_prev_ret,
+       fac_codigo_produto,
+       fac_desc_produto,
+       fac_parte,
+       fac_descparte,
+       fac_tam,
+       fac_cor,
+       fac_desccor,
+       fac_qt_orig,
+       fac_quant,
+       fac_codcli,
+       cliente_nome,
+       cliente_fantasia
+     FROM terceiros_ofs
+     WHERE fac_numero = $1
+     ORDER BY fac_dt_s ASC NULLS LAST, fac_codsetor ASC`,
+    [ofNumero]
+  );
+
+  if (result.rows.length === 0) return null;
+
+  // Group rows by etapa (fac_codsetor)
+  const etapaMap = new Map();
+  for (const row of result.rows) {
+    const key = row.fac_codsetor || row.fac_descsetor;
+    if (!etapaMap.has(key)) {
+      etapaMap.set(key, {
+        codsetor: row.fac_codsetor,
+        descsetor: row.fac_descsetor,
+        dt_entrada: row.fac_dt_s,
+        dt_lancto: row.fac_dt_lan,
+        dt_prev_ret: row.fac_dt_prev_ret,
+        produtos: []
+      });
+    }
+    const etapa = etapaMap.get(key);
+    // Track earliest entry and latest exit across rows in same etapa
+    if (row.fac_dt_s && (!etapa.dt_entrada || row.fac_dt_s < etapa.dt_entrada)) {
+      etapa.dt_entrada = row.fac_dt_s;
+    }
+    if (row.fac_dt_prev_ret && (!etapa.dt_prev_ret || row.fac_dt_prev_ret > etapa.dt_prev_ret)) {
+      etapa.dt_prev_ret = row.fac_dt_prev_ret;
+    }
+    etapa.produtos.push({
+      codigo: row.fac_codigo_produto,
+      descricao: row.fac_desc_produto,
+      parte: row.fac_parte,
+      desc_parte: row.fac_descparte,
+      tamanho: row.fac_tam,
+      cor: row.fac_cor,
+      desc_cor: row.fac_desccor,
+      qt_orig: parseFloat(row.fac_qt_orig) || 0,
+      qt_final: parseFloat(row.fac_quant) || 0
+    });
+  }
+
+  const first = result.rows[0];
+  return {
+    fac_numero: first.fac_numero,
+    fornecedor: first.cliente_fantasia || first.cliente_nome || first.fac_codcli,
+    etapas: Array.from(etapaMap.values())
+  };
+}
+
 module.exports = {
   // OFs
   batchUpsertOfs,
@@ -1194,5 +1266,7 @@ module.exports = {
   getSettlementDiscounts,
   addSettlementDiscount,
   updateSettlementDiscount,
-  removeSettlementDiscount
+  removeSettlementDiscount,
+  // Rastreio
+  getOFRastreio
 };

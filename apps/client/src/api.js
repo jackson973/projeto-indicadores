@@ -899,3 +899,9 @@ export const fetchMarketComparison = async (itemId, storeId, ourPrice) => {
   const response = await authFetch(`/api/anuncios/${itemId}/market?store_id=${storeId}${priceParam}`);
   return handleResponse(response);
 };
+
+
+export const fetchOFRastreio = async (ofNumero) => {
+  const response = await authFetch(`/api/terceiros/rastreio-of/${encodeURIComponent(ofNumero)}`);
+  return handleResponse(response);
+};

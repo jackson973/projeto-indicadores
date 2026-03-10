@@ -64,6 +64,7 @@ import CashFlowDashboard from "./components/CashFlowDashboard";
 import TerceirosSettlement from "./components/TerceirosSettlement";
 import TerceirosProductGroups from "./components/TerceirosProductGroups";
 import TerceirosSupplierPrices from "./components/TerceirosSupplierPrices";
+import OFRastreio from "./components/OFRastreio";
 import SystemSettings from "./components/SystemSettings";
 import StoresManagement from "./components/StoresManagement";
 import AnunciosDashboard from "./components/AnunciosDashboard";
@@ -419,6 +420,10 @@ const App = () => {
         {
           label: "Precos por Fornecedor",
           view: "terceiros-prices"
+        },
+        {
+          label: "Rastreio de OF",
+          view: "terceiros-rastreio"
         }
       ]
     },
@@ -765,7 +770,7 @@ const App = () => {
           </Alert>
         )}
 
-        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && activeView !== "terceiros-settlement" && activeView !== "terceiros-groups" && activeView !== "terceiros-prices" && activeView !== "system-settings" && (
+        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && activeView !== "terceiros-settlement" && activeView !== "terceiros-groups" && activeView !== "terceiros-prices" && activeView !== "terceiros-rastreio" && activeView !== "system-settings" && (
           <Center py={10}>
             <Box maxW="680px" w="full">
               <UploadForm onUpload={handleUpload} />
@@ -827,6 +832,10 @@ const App = () => {
 
         {activeView === "terceiros-prices" && (
           <TerceirosSupplierPrices />
+        )}
+
+        {activeView === "terceiros-rastreio" && (
+          <OFRastreio />
         )}
 
         {activeView === "system-settings" && user?.role === "admin" && (
