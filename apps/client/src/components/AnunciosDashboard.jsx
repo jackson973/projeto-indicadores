@@ -632,7 +632,13 @@ function ItemCard({ item, period, storeId }) {
         {/* Badges */}
         <HStack spacing={2} flexShrink={0}>
           {isFull && (
-            <Badge colorScheme="yellow" fontSize="xs" variant="solid">Full</Badge>
+            <Flex align="center" gap="3px" bg="green.50" border="1px solid" borderColor="green.200"
+              borderRadius="full" px={2} py="2px">
+              <svg width="10" height="13" viewBox="0 0 10 15" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M6 0L0 8.5H4.5L4 15L10 6.5H5.5L6 0Z" fill="#38A169"/>
+              </svg>
+              <Text fontSize="10px" fontWeight="bold" color="green.600" letterSpacing="0.5px">FULL</Text>
+            </Flex>
           )}
           {item.listing_type_label && item.listing_type_label !== "—" && (
             <Badge
