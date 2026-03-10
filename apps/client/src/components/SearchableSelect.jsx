@@ -51,10 +51,13 @@ const SearchableSelect = ({
     [options, value]
   );
 
+  const normalize = (s) =>
+    s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
   const filtered = useMemo(() => {
     if (!search.trim()) return options;
-    const term = search.toLowerCase();
-    return options.filter((o) => o.label.toLowerCase().includes(term));
+    const term = normalize(search);
+    return options.filter((o) => normalize(o.label).includes(term));
   }, [options, search]);
 
   const handleSelect = (val) => {

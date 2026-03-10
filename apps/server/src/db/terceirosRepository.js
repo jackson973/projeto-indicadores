@@ -223,11 +223,12 @@ async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, unsett
 
 async function getDistinctSuppliers() {
   const result = await db.query(
-    `SELECT DISTINCT fac_codcli AS "codcli", cliente_nome AS "nome", cliente_fantasia AS "fantasia",
-            cliente_cnpj AS "cnpj"
+    `SELECT fac_codcli AS "codcli",
+            MAX(COALESCE(NULLIF(TRIM(cliente_fantasia), ''), NULLIF(TRIM(cliente_nome), ''), fac_codcli)) AS "nome"
      FROM terceiros_ofs
      WHERE fac_codcli IS NOT NULL
-     ORDER BY cliente_nome`
+     GROUP BY fac_codcli
+     ORDER BY 2`
   );
   return result.rows;
 }
