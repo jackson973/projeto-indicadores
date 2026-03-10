@@ -198,7 +198,10 @@ const TerceirosSupplierPrices = () => {
       }
       setLoadingSizes(true);
       try {
-        const sizesData = await fetchTerceirossizes(form.codcli, form.groupId);
+        let sizesData = await fetchTerceirossizes(form.codcli, form.groupId);
+        if (sizesData.length === 0 && form.codcli) {
+          sizesData = await fetchTerceirossizes(null, form.groupId);
+        }
         setModalSizes(sizesData);
       } catch {
         setModalSizes([]);
@@ -229,7 +232,8 @@ const TerceirosSupplierPrices = () => {
         if (partsData.length > 0) {
           setBulkRows(partsData.map((p) => ({ part: p.code, partLabel: `${p.code}${p.name ? ` - ${p.name}` : ""}`, price: 0, _key: p.code })));
         } else {
-          setBulkRows([]);
+          // No specific parts — allow a generic "all parts" row
+          setBulkRows([{ part: null, partLabel: "Todas as partes", price: 0, _key: "_all" }]);
         }
       } catch {
         setBulkParts([]);
@@ -237,9 +241,12 @@ const TerceirosSupplierPrices = () => {
       } finally {
         setLoadingBulkParts(false);
       }
-      // Sizes are loaded independently so a failure doesn't affect parts
+      // Sizes loaded independently; fallback to group-only if empty
       try {
-        const sizesData = await fetchTerceirossizes(bulkForm.codcli, bulkForm.groupId);
+        let sizesData = await fetchTerceirossizes(bulkForm.codcli, bulkForm.groupId);
+        if (sizesData.length === 0 && bulkForm.codcli) {
+          sizesData = await fetchTerceirossizes(null, bulkForm.groupId);
+        }
         setBulkSizes(sizesData);
       } catch {
         setBulkSizes([]);
@@ -1112,10 +1119,6 @@ const TerceirosSupplierPrices = () => {
               {!bulkForm.codcli || !bulkForm.groupId ? (
                 <Center py={6}>
                   <Text fontSize="sm" color="gray.500">Selecione fornecedor e grupo para carregar as partes.</Text>
-                </Center>
-              ) : !loadingBulkParts && bulkRows.length === 0 ? (
-                <Center py={6}>
-                  <Text fontSize="sm" color="orange.500" fontWeight="medium">Nenhuma parte/OF encontrada para este fornecedor/grupo. Não é possível cadastrar preços.</Text>
                 </Center>
               ) : (
                 /* Grid */
