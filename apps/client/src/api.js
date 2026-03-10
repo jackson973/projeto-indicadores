@@ -681,6 +681,15 @@ export const fetchTerceirosParts = async (codcli, groupId) => {
   return handleResponse(response);
 };
 
+export const fetchTerceirossizes = async (codcli, groupId) => {
+  const params = new URLSearchParams();
+  if (codcli) params.append("codcli", codcli);
+  if (groupId) params.append("groupId", groupId);
+  const qs = params.toString();
+  const response = await authFetch(`/api/terceiros/ofs/sizes${qs ? `?${qs}` : ""}`);
+  return handleResponse(response);
+};
+
 // ── Terceiros: Settlements ──────────────────────────────────────────────────
 
 export const fetchTerceirosSettlements = async (params) => {

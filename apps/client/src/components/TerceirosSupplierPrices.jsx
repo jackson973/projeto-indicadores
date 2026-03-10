@@ -47,6 +47,7 @@ import {
   fetchTerceirosProductGroups,
   fetchTerceirosParts,
   fetchTerceirosEtapas,
+  fetchTerceirossizes,
   getToken
 } from "../api";
 const formatPrice = (value) =>
@@ -87,6 +88,7 @@ const emptyForm = {
   groupId: "",
   part: "",
   etapa: "",
+  tamanho: [],  // array of selected sizes
   price: 0,
   validFrom: "",
   validUntil: ""
@@ -110,6 +112,8 @@ const TerceirosSupplierPrices = () => {
   const [saving, setSaving] = useState(false);
   const [modalParts, setModalParts] = useState([]);
   const [loadingParts, setLoadingParts] = useState(false);
+  const [modalSizes, setModalSizes] = useState([]);
+  const [loadingSizes, setLoadingSizes] = useState(false);
 
   // Bulk create modal
   const [bulkForm, setBulkForm] = useState({ codcli: "", groupId: "", validFrom: "", validUntil: "" });
@@ -174,24 +178,32 @@ const TerceirosSupplierPrices = () => {
     }
   }, [filterSupplier, filterGroup]);
 
-  // ── Load parts dynamically in single edit modal ───────────────────────────
+  // ── Load parts + sizes dynamically in single edit modal ──────────────────
   useEffect(() => {
     if (!form.codcli || !form.groupId) {
       setModalParts([]);
+      setModalSizes([]);
       return;
     }
-    const loadModalParts = async () => {
+    const load = async () => {
       setLoadingParts(true);
+      setLoadingSizes(true);
       try {
-        const data = await fetchTerceirosParts(form.codcli, form.groupId);
-        setModalParts(data);
+        const [partsData, sizesData] = await Promise.all([
+          fetchTerceirosParts(form.codcli, form.groupId),
+          fetchTerceirossizes(form.codcli, form.groupId)
+        ]);
+        setModalParts(partsData);
+        setModalSizes(sizesData);
       } catch {
         setModalParts([]);
+        setModalSizes([]);
       } finally {
         setLoadingParts(false);
+        setLoadingSizes(false);
       }
     };
-    loadModalParts();
+    load();
   }, [form.codcli, form.groupId]);
 
   // ── Load parts dynamically in bulk modal and auto-populate grid ────────────
@@ -270,7 +282,7 @@ const TerceirosSupplierPrices = () => {
   const groupedPrices = useMemo(() => {
     const map = new Map();
     prices.forEach((row) => {
-      const key = `${row.codcli}|${row.groupId || row.group_id}|${row.part || ""}|${row.etapa || ""}`;
+      const key = `${row.codcli}|${row.groupId || row.group_id}|${row.part || ""}|${row.etapa || ""}|${row.tamanho || ""}`;
       if (!map.has(key)) {
         map.set(key, {
           key,
@@ -282,6 +294,7 @@ const TerceirosSupplierPrices = () => {
           partName: row.partName,
           etapa: row.etapa,
           etapaName: row.etapaName,
+          tamanho: row.tamanho,
           entries: []
         });
       }
@@ -366,6 +379,7 @@ const TerceirosSupplierPrices = () => {
       groupId: String(row.groupId || row.group_id || ""),
       part: row.part || "",
       etapa: row.etapa || "",
+      tamanho: row.tamanho ? row.tamanho.split(",").map((s) => s.trim()).filter(Boolean) : [],
       price: Number(row.price) || 0,
       validFrom: toDateInput(row.validFrom || row.valid_from),
       validUntil: toDateInput(row.validUntil || row.valid_until)
@@ -423,6 +437,7 @@ const TerceirosSupplierPrices = () => {
         groupId: form.groupId,
         part: form.part || null,
         etapa: form.etapa || null,
+        tamanho: form.tamanho.length > 0 ? form.tamanho.join(",") : null,
         price: form.price,
         validFrom: form.validFrom || null,
         validUntil: form.validUntil || null
@@ -640,6 +655,7 @@ const TerceirosSupplierPrices = () => {
                         {group.groupName || groupLabel(group.groupId)}
                         {group.part ? ` · ${group.part}${group.partName ? ` - ${group.partName}` : ""}` : ""}
                         {group.etapa ? ` · Etapa: ${group.etapa}${group.etapaName ? ` - ${group.etapaName}` : ""}` : ""}
+                        {group.tamanho ? ` · Tam: ${group.tamanho}` : ""}
                       </Text>
                     </Box>
                     <HStack spacing={1} ml={2} flexShrink={0}>
@@ -754,6 +770,7 @@ const TerceirosSupplierPrices = () => {
                           <Th whiteSpace="nowrap">Grupo</Th>
                           <Th whiteSpace="nowrap">Parte</Th>
                           <Th whiteSpace="nowrap">Etapa</Th>
+                          <Th whiteSpace="nowrap">Tamanho</Th>
                           <Th isNumeric whiteSpace="nowrap">Preço Atual (R$)</Th>
                           <Th whiteSpace="nowrap">Vigência</Th>
                           <Th w="100px" whiteSpace="nowrap">Ações</Th>
@@ -785,6 +802,17 @@ const TerceirosSupplierPrices = () => {
                                 <Td><Text fontSize="sm" whiteSpace="nowrap">{group.groupName || groupLabel(group.groupId)}</Text></Td>
                                 <Td><Text fontSize="sm" whiteSpace="nowrap">{group.part ? `${group.part}${group.partName ? ` - ${group.partName}` : ""}` : "Todas"}</Text></Td>
                                 <Td><Text fontSize="sm" whiteSpace="nowrap">{group.etapa ? `${group.etapa}${group.etapaName ? ` - ${group.etapaName}` : ""}` : "Todas"}</Text></Td>
+                                <Td>
+                                  {group.tamanho ? (
+                                    <Flex flexWrap="wrap" gap={1}>
+                                      {group.tamanho.split(",").map((t) => (
+                                        <Badge key={t} colorScheme="purple" variant="subtle" fontSize="xs">{t.trim()}</Badge>
+                                      ))}
+                                    </Flex>
+                                  ) : (
+                                    <Text fontSize="sm" color="gray.400">Todos</Text>
+                                  )}
+                                </Td>
                                 <Td isNumeric><Text fontWeight="semibold" whiteSpace="nowrap">{formatPrice(current.price)}</Text></Td>
                                 <Td>
                                   <HStack spacing={2}>
@@ -892,6 +920,47 @@ const TerceirosSupplierPrices = () => {
                     <option key={et.code} value={et.code}>{et.code} - {et.name}</option>
                   ))}
                 </Select>
+              </FormControl>
+              <FormControl>
+                <FormLabel>
+                  Tamanho (opcional)
+                  {loadingSizes && <Spinner size="xs" ml={2} />}
+                </FormLabel>
+                {modalSizes.length === 0 && !loadingSizes ? (
+                  <Text fontSize="xs" color="gray.400">Nenhum tamanho encontrado para este grupo/fornecedor</Text>
+                ) : (
+                  <Flex flexWrap="wrap" gap={2} mt={1}>
+                    {modalSizes.map((tam) => {
+                      const selected = form.tamanho.includes(tam);
+                      return (
+                        <Badge
+                          key={tam}
+                          px={3}
+                          py={1}
+                          borderRadius="full"
+                          cursor="pointer"
+                          colorScheme={selected ? "blue" : "gray"}
+                          variant={selected ? "solid" : "outline"}
+                          onClick={() => {
+                            const next = selected
+                              ? form.tamanho.filter((t) => t !== tam)
+                              : [...form.tamanho, tam];
+                            setForm({ ...form, tamanho: next });
+                          }}
+                          userSelect="none"
+                          fontSize="sm"
+                        >
+                          {tam}
+                        </Badge>
+                      );
+                    })}
+                  </Flex>
+                )}
+                {form.tamanho.length > 0 && (
+                  <Text fontSize="xs" color="blue.600" mt={1}>
+                    Selecionado: {form.tamanho.join(", ")}
+                  </Text>
+                )}
               </FormControl>
               <FormControl isRequired>
                 <FormLabel>Preço (R$)</FormLabel>

@@ -161,7 +161,7 @@ router.get('/supplier-prices', async (req, res) => {
 
 router.post('/supplier-prices', async (req, res) => {
   try {
-    const { codcli, supplierName, groupId, part, etapa, price, validFrom, validUntil } = req.body;
+    const { codcli, supplierName, groupId, part, etapa, tamanho, price, validFrom, validUntil } = req.body;
     if (!codcli || !groupId || price == null) {
       return res.status(400).json({ message: 'Fornecedor, grupo e preco sao obrigatorios.' });
     }
@@ -169,8 +169,8 @@ router.post('/supplier-prices', async (req, res) => {
       return res.status(400).json({ message: 'Data inicial deve ser anterior a data final.' });
     }
     const result = await repo.createSupplierPrice({
-      codcli, supplierName, groupId, part: part || null, etapa: etapa || null, price,
-      validFrom: validFrom || null, validUntil: validUntil || null
+      codcli, supplierName, groupId, part: part || null, etapa: etapa || null,
+      tamanho: tamanho || null, price, validFrom: validFrom || null, validUntil: validUntil || null
     });
     return res.status(201).json(result);
   } catch (error) {
@@ -198,6 +198,7 @@ router.post('/supplier-prices/batch', async (req, res) => {
           groupId: item.groupId,
           part: item.part || null,
           etapa: item.etapa || null,
+          tamanho: item.tamanho || null,
           price: item.price,
           validFrom: item.validFrom || null,
           validUntil: item.validUntil || null
@@ -216,7 +217,7 @@ router.post('/supplier-prices/batch', async (req, res) => {
 
 router.put('/supplier-prices/:id', async (req, res) => {
   try {
-    const { codcli, supplierName, groupId, part, etapa, price, validFrom, validUntil } = req.body;
+    const { codcli, supplierName, groupId, part, etapa, tamanho, price, validFrom, validUntil } = req.body;
     if (!codcli || !groupId || price == null) {
       return res.status(400).json({ message: 'Fornecedor, grupo e preco sao obrigatorios.' });
     }
@@ -224,8 +225,8 @@ router.put('/supplier-prices/:id', async (req, res) => {
       return res.status(400).json({ message: 'Data inicial deve ser anterior a data final.' });
     }
     const result = await repo.updateSupplierPrice(req.params.id, {
-      codcli, supplierName, groupId, part: part || null, etapa: etapa || null, price,
-      validFrom: validFrom || null, validUntil: validUntil || null
+      codcli, supplierName, groupId, part: part || null, etapa: etapa || null,
+      tamanho: tamanho || null, price, validFrom: validFrom || null, validUntil: validUntil || null
     });
     if (!result) return res.status(404).json({ message: 'Preco nao encontrado.' });
     return res.json(result);
@@ -468,6 +469,17 @@ router.get('/ofs/suppliers', async (req, res) => {
   } catch (error) {
     console.error('Get suppliers error:', error);
     return res.status(500).json({ message: 'Erro ao buscar fornecedores.' });
+  }
+});
+
+router.get('/ofs/sizes', async (req, res) => {
+  try {
+    const { codcli, groupId } = req.query;
+    const sizes = await repo.getDistinctSizes(codcli || null, groupId ? parseInt(groupId) : null);
+    return res.json(sizes);
+  } catch (error) {
+    console.error('Get sizes error:', error);
+    return res.status(500).json({ message: 'Erro ao buscar tamanhos.' });
   }
 });
 
@@ -976,7 +988,7 @@ router.post('/find-prices', async (req, res) => {
 
     const results = [];
     for (const item of items) {
-      const priceInfo = await repo.findPrice(codcli, item.productCode, item.parte, item.date || new Date().toISOString().slice(0, 10), item.etapa || null);
+      const priceInfo = await repo.findPrice(codcli, item.productCode, item.parte, item.date || new Date().toISOString().slice(0, 10), item.etapa || null, item.tamanho || null);
       results.push({
         productCode: item.productCode,
         parte: item.parte,
