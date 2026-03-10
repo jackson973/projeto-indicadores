@@ -325,7 +325,12 @@ export default function OFRastreio() {
                     const diff = p.qt_final - p.qt_orig;
                     const hasDiff = diff !== 0;
                     return (
-                      <Tr key={pi} bg={hasDiff ? "orange.50" : undefined}>
+                      <Tr
+                        key={pi}
+                        bg={hasDiff ? "orange.50" : undefined}
+                        borderLeft={hasDiff ? "3px solid" : undefined}
+                        borderLeftColor={hasDiff ? "orange.400" : undefined}
+                      >
                         <Td>
                           <Text fontSize="sm" color="gray.800">{p.descricao || p.codigo || "—"}</Text>
                           {p.codigo && p.descricao && (
