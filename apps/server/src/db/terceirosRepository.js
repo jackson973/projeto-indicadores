@@ -557,7 +557,23 @@ async function getDistinctSizes(codcli, groupId) {
      WHERE o.fac_tam IS NOT NULL
        AND TRIM(o.fac_tam) != ''
        ${whereExtra}
-     ORDER BY TRIM(o.fac_tam)`,
+     ORDER BY
+       CASE UPPER(TRIM(o.fac_tam))
+         WHEN 'RN' THEN 1
+         WHEN 'P'  THEN 2
+         WHEN 'M'  THEN 3
+         WHEN 'G'  THEN 4
+         WHEN 'GG' THEN 5
+         WHEN '1'  THEN 6
+         WHEN '2'  THEN 7
+         WHEN '3'  THEN 8
+         WHEN '4'  THEN 9
+         WHEN '6'  THEN 10
+         WHEN '8'  THEN 11
+         WHEN '10' THEN 12
+         ELSE 99
+       END,
+       TRIM(o.fac_tam)`,
     params
   );
   return result.rows.map((r) => r.tamanho);
