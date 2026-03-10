@@ -556,27 +556,20 @@ async function getDistinctSizes(codcli, groupId) {
       AND gp.group_id = $1
      WHERE o.fac_tam IS NOT NULL
        AND TRIM(o.fac_tam) != ''
-       ${whereExtra}
-     ORDER BY
-       CASE UPPER(TRIM(o.fac_tam))
-         WHEN 'RN' THEN 1
-         WHEN 'P'  THEN 2
-         WHEN 'M'  THEN 3
-         WHEN 'G'  THEN 4
-         WHEN 'GG' THEN 5
-         WHEN '1'  THEN 6
-         WHEN '2'  THEN 7
-         WHEN '3'  THEN 8
-         WHEN '4'  THEN 9
-         WHEN '6'  THEN 10
-         WHEN '8'  THEN 11
-         WHEN '10' THEN 12
-         ELSE 99
-       END,
-       TRIM(o.fac_tam)`,
+       ${whereExtra}`,
     params
   );
-  return result.rows.map((r) => r.tamanho);
+
+  const SIZE_ORDER = ['RN','P','M','G','GG','1','2','3','4','6','8','10'];
+  const sizes = result.rows.map((r) => r.tamanho);
+  return sizes.sort((a, b) => {
+    const ia = SIZE_ORDER.indexOf(a.toUpperCase());
+    const ib = SIZE_ORDER.indexOf(b.toUpperCase());
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
 }
 
 async function getEtapas(codcli) {
