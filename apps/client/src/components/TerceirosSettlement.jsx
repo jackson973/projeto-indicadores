@@ -27,7 +27,13 @@ import {
   Textarea,
   useBreakpointValue,
   useToast,
-  useColorModeValue
+  useColorModeValue,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
 } from "@chakra-ui/react";
 import {
   AddIcon,
@@ -974,16 +980,6 @@ const TerceirosSettlement = () => {
           <option value="open">Em Aberto</option>
           <option value="paid">Pago</option>
         </Select>
-        <InputGroup size="sm" w={isMobile ? "100%" : "160px"}>
-          <InputLeftElement pointerEvents="none">
-            <SearchIcon color="gray.400" />
-          </InputLeftElement>
-          <Input
-            placeholder="Buscar OF..."
-            value={ofSearch}
-            onChange={(e) => setOfSearch(e.target.value)}
-          />
-        </InputGroup>
         <Button
           leftIcon={<AddIcon />}
           colorScheme="blue"
@@ -1756,26 +1752,14 @@ const TerceirosSettlement = () => {
     const groups = groupSettlementItems(items, missingOfs);
 
     return (
-      <Box
-        bg={cardBg}
-        borderRadius="lg"
-        borderWidth="2px"
-        borderColor="orange.300"
-        p={isMobile ? 3 : 5}
-        mb={6}
-      >
-        <Flex justify="space-between" align="center" mb={4} gap={2}>
-          <Heading size="sm" noOfLines={2} flex="1">
-            Editar Fechamento - {editingSettlement.supplierName || getSupplierName(editingSettlement.codcli)}
-          </Heading>
-          <IconButton
-            icon={<CloseIcon />}
-            size="sm"
-            variant="ghost"
-            aria-label="Fechar"
-            onClick={handleCancelEdit}
-          />
-        </Flex>
+      <Modal isOpen={!!editingSettlement} onClose={handleCancelEdit} size="5xl" scrollBehavior="inside">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader fontSize="md">
+            Editar Fechamento — {editingSettlement.supplierName || getSupplierName(editingSettlement.codcli)}
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6} px={isMobile ? 3 : 6}>
 
         <Flex gap={3} mb={4} wrap="wrap" align="center">
           <Box>
@@ -2002,7 +1986,9 @@ const TerceirosSettlement = () => {
             </>
           );
         })()}
-      </Box>
+        </ModalBody>
+        </ModalContent>
+      </Modal>
     );
   };
 
@@ -2011,27 +1997,17 @@ const TerceirosSettlement = () => {
     if (!creating) return null;
 
     return (
-      <Box
-        bg={cardBg}
-        borderRadius="lg"
-        borderWidth="2px"
-        borderColor="blue.300"
-        p={isMobile ? 3 : 5}
-        mb={6}
-      >
-        <Flex justify="space-between" align="center" mb={4}>
-          <HStack spacing={2}>
-            <Heading size="sm">{activeDraftId ? "Continuar Rascunho" : "Novo Fechamento"}</Heading>
-            {activeDraftId && <Badge colorScheme="purple" fontSize="2xs">#{activeDraftId}</Badge>}
-          </HStack>
-          <IconButton
-            icon={<CloseIcon />}
-            size="sm"
-            variant="ghost"
-            aria-label="Fechar"
-            onClick={handleCancelCreate}
-          />
-        </Flex>
+      <Modal isOpen={creating} onClose={handleCancelCreate} size="5xl" scrollBehavior="inside">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader fontSize="md">
+            <HStack spacing={2}>
+              <Text>{activeDraftId ? "Continuar Rascunho" : "Novo Fechamento"}</Text>
+              {activeDraftId && <Badge colorScheme="purple" fontSize="2xs">#{activeDraftId}</Badge>}
+            </HStack>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={6} px={isMobile ? 3 : 6}>
 
         {/* Supplier + period + OF search selectors */}
         <Flex gap={3} mb={3} wrap="wrap" align="flex-end">
@@ -2686,7 +2662,9 @@ const TerceirosSettlement = () => {
           </>
         ) : null}
 
-      </Box>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     );
   };
 
