@@ -116,8 +116,9 @@ const TerceirosSupplierPrices = () => {
   const [loadingSizes, setLoadingSizes] = useState(false);
 
   // Bulk create modal
-  const [bulkForm, setBulkForm] = useState({ codcli: "", groupId: "", validFrom: "", validUntil: "" });
+  const [bulkForm, setBulkForm] = useState({ codcli: "", groupId: "", etapa: "", tamanho: [], validFrom: "", validUntil: "" });
   const [bulkParts, setBulkParts] = useState([]);
+  const [bulkSizes, setBulkSizes] = useState([]);
   const [loadingBulkParts, setLoadingBulkParts] = useState(false);
   const [bulkRows, setBulkRows] = useState([]);
   const [savingBulk, setSavingBulk] = useState(false);
@@ -206,29 +207,33 @@ const TerceirosSupplierPrices = () => {
     load();
   }, [form.codcli, form.groupId]);
 
-  // ── Load parts dynamically in bulk modal and auto-populate grid ────────────
+  // ── Load parts + sizes dynamically in bulk modal ─────────────────────────
   useEffect(() => {
     if (!bulkForm.groupId) {
       setBulkParts([]);
+      setBulkSizes([]);
       setBulkRows([]);
       return;
     }
     const load = async () => {
       setLoadingBulkParts(true);
       try {
-        // First try with supplier+group, then fallback to group only
-        let data = await fetchTerceirosParts(bulkForm.codcli, bulkForm.groupId);
-        if (data.length === 0 && bulkForm.codcli) {
-          data = await fetchTerceirosParts(null, bulkForm.groupId);
+        // First try with supplier+group, then fallback to group only for parts
+        let partsData = await fetchTerceirosParts(bulkForm.codcli, bulkForm.groupId);
+        if (partsData.length === 0 && bulkForm.codcli) {
+          partsData = await fetchTerceirosParts(null, bulkForm.groupId);
         }
-        setBulkParts(data);
-        if (data.length > 0) {
-          setBulkRows(data.map((p) => ({ part: p.code, partLabel: `${p.code}${p.name ? ` - ${p.name}` : ""}`, price: 0, _key: p.code })));
+        const sizesData = await fetchTerceirossizes(bulkForm.codcli, bulkForm.groupId);
+        setBulkParts(partsData);
+        setBulkSizes(sizesData);
+        if (partsData.length > 0) {
+          setBulkRows(partsData.map((p) => ({ part: p.code, partLabel: `${p.code}${p.name ? ` - ${p.name}` : ""}`, price: 0, _key: p.code })));
         } else {
           setBulkRows([]);
         }
       } catch {
         setBulkParts([]);
+        setBulkSizes([]);
         setBulkRows([]);
       } finally {
         setLoadingBulkParts(false);
@@ -477,6 +482,7 @@ const TerceirosSupplierPrices = () => {
         groupId: bulkForm.groupId,
         part: r.part || null,
         etapa: bulkForm.etapa || null,
+        tamanho: bulkForm.tamanho?.length > 0 ? bulkForm.tamanho.join(",") : null,
         price: r.price,
         validFrom: bulkForm.validFrom || null,
         validUntil: bulkForm.validUntil || null
@@ -1038,6 +1044,45 @@ const TerceirosSupplierPrices = () => {
                   <Input size="sm" type="date" value={bulkForm.validUntil} onChange={(e) => setBulkForm({ ...bulkForm, validUntil: e.target.value })} />
                 </FormControl>
               </Flex>
+              {bulkSizes.length > 0 && (
+                <FormControl>
+                  <FormLabel fontSize="sm">
+                    Tamanho (opcional)
+                    <Text as="span" fontSize="xs" color="gray.400" ml={2}>selecione um ou mais</Text>
+                  </FormLabel>
+                  <Flex flexWrap="wrap" gap={2}>
+                    {bulkSizes.map((tam) => {
+                      const selected = (bulkForm.tamanho || []).includes(tam);
+                      return (
+                        <Badge
+                          key={tam}
+                          px={3}
+                          py={1}
+                          borderRadius="full"
+                          cursor="pointer"
+                          colorScheme={selected ? "blue" : "gray"}
+                          variant={selected ? "solid" : "outline"}
+                          onClick={() => {
+                            const next = selected
+                              ? bulkForm.tamanho.filter((t) => t !== tam)
+                              : [...(bulkForm.tamanho || []), tam];
+                            setBulkForm({ ...bulkForm, tamanho: next });
+                          }}
+                          userSelect="none"
+                          fontSize="sm"
+                        >
+                          {tam}
+                        </Badge>
+                      );
+                    })}
+                  </Flex>
+                  {bulkForm.tamanho?.length > 0 && (
+                    <Text fontSize="xs" color="blue.600" mt={1}>
+                      Selecionado: {bulkForm.tamanho.join(", ")}
+                    </Text>
+                  )}
+                </FormControl>
+              )}
 
               <Divider />
 
