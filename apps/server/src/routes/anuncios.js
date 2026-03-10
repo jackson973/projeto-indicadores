@@ -974,12 +974,12 @@ async function getAppToken(store) {
 
 function mapListingType(typeId) {
   const types = {
-    gold_special: 'Gold Special',
-    gold_pro:     'Gold Pro',
+    gold_special: 'Full',
+    gold_pro:     'Premium',
     gold:         'Gold',
     silver:       'Prata',
     bronze:       'Bronze',
-    free:         'Clássico',
+    free:         'Grátis',
   };
   return types[typeId] || typeId || '—';
 }

@@ -512,6 +512,7 @@ function ItemCard({ item, period, storeId }) {
 
   const hasAlerts = item.alerts?.length > 0;
   const hasAds    = !!item.ads;
+  const isFull    = item.listing_type_id === 'gold_special';
 
   // Period-aware metrics
   const periodVisits      = getVisits(item, period);
@@ -533,7 +534,9 @@ function ItemCard({ item, period, storeId }) {
     : "Sem histórico";
 
   return (
-    <Box bg={cardBg} border="1px solid" borderColor={open ? activeBorder : border}
+    <Box bg={cardBg}
+      border="1px solid" borderColor={open ? activeBorder : isFull ? "yellow.400" : border}
+      borderLeftWidth={isFull ? "4px" : "1px"} borderLeftColor={isFull ? "yellow.400" : undefined}
       borderRadius="lg" overflow="hidden" transition="border-color 0.2s">
 
       {/* ── Collapsed header ─────────────────────────────────────────────── */}
@@ -630,8 +633,8 @@ function ItemCard({ item, period, storeId }) {
         <HStack spacing={2} flexShrink={0}>
           {item.listing_type_label && item.listing_type_label !== "—" && (
             <Badge
-              colorScheme={item.listing_type_id?.startsWith("gold") ? "yellow" : "gray"}
-              fontSize="xs" variant="subtle">
+              colorScheme={isFull ? "yellow" : item.listing_type_id?.startsWith("gold") ? "yellow" : "gray"}
+              fontSize="xs" variant={isFull ? "solid" : "subtle"}>
               {item.listing_type_label}
             </Badge>
           )}
