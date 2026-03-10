@@ -34,6 +34,7 @@ import {
   ModalHeader,
   ModalCloseButton,
   ModalBody,
+  ModalFooter,
 } from "@chakra-ui/react";
 import {
   AddIcon,
@@ -2113,24 +2114,26 @@ const TerceirosSettlement = () => {
                 />
               </Box>
 
-              <HStack spacing={3} mt={4} justify="flex-end">
-                <Button variant="outline" size="sm" onClick={handleCancelEdit}>
-                  Cancelar
-                </Button>
-                <Button
-                  colorScheme="blue"
-                  size="sm"
-                  onClick={handleSaveEdit}
-                  isLoading={savingEdit}
-                  loadingText="Salvando..."
-                >
-                  Salvar
-                </Button>
-              </HStack>
             </>
           );
         })()}
         </ModalBody>
+        <ModalFooter borderTopWidth="1px">
+          <HStack spacing={3}>
+            <Button variant="outline" size="sm" onClick={handleCancelEdit}>
+              Cancelar
+            </Button>
+            <Button
+              colorScheme="blue"
+              size="sm"
+              onClick={handleSaveEdit}
+              isLoading={savingEdit}
+              loadingText="Salvando..."
+            >
+              Salvar
+            </Button>
+          </HStack>
+        </ModalFooter>
         </ModalContent>
       </Modal>
     );
@@ -2783,7 +2786,12 @@ const TerceirosSettlement = () => {
               />
             </Box>
 
-            <HStack spacing={3} mt={4} justify="flex-end">
+          </>
+        ) : null}
+
+          </ModalBody>
+          <ModalFooter borderTopWidth="1px">
+            <HStack spacing={3}>
               <Button
                 variant="outline"
                 size="sm"
@@ -2803,10 +2811,7 @@ const TerceirosSettlement = () => {
                 Criar Fechamento
               </Button>
             </HStack>
-          </>
-        ) : null}
-
-          </ModalBody>
+          </ModalFooter>
         </ModalContent>
       </Modal>
     );
