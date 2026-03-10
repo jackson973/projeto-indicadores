@@ -1119,7 +1119,7 @@ const TerceirosSettlement = () => {
               <Tr bg={headerBg}>
                 <Th>Fornecedor</Th>
                 <Th>Mês/Ano</Th>
-                <Th isNumeric>Itens</Th>
+                <Th isNumeric>Peças</Th>
                 <Th isNumeric>Valor Total</Th>
                 <Th>Status</Th>
                 <Th textAlign="right">Ações</Th>
@@ -1141,7 +1141,7 @@ const TerceirosSettlement = () => {
                     </HStack>
                   </Td>
                   <Td fontSize="sm">{monthNames[(s.referenceMonth || 1) - 1]}/{s.referenceYear}</Td>
-                  <Td fontSize="sm" isNumeric>{s.totalItems ?? 0}</Td>
+                  <Td fontSize="sm" isNumeric>{(s.totalItems ?? 0).toLocaleString("pt-BR")}</Td>
                   <Td fontSize="sm" isNumeric>
                     {parseFloat(s.totalDiscounts) > 0 && (
                       <Text fontSize="xs" color="gray.400" textDecoration="line-through">
