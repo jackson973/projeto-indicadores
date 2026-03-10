@@ -362,20 +362,20 @@ export default function OFRastreio() {
               </Table>
 
               {/* Detail totals */}
-              <Flex justify="flex-end" mt={3} gap={6} fontSize="sm" pt={3} borderTop="1px solid" borderColor="gray.100">
-                <HStack spacing={1}>
-                  <Text color="gray.500">Total Original:</Text>
-                  <Text fontWeight="bold" color="gray.700">
+              <Box className="css-zgubbz" mt={3} pt={3} borderTop="1px solid" borderColor="gray.100" display="flex" justifyContent="flex-end" gap={6} fontSize="sm">
+                <HStack className="css-926vde" spacing={1}>
+                  <Text className="css-q9k0mw" color="gray.500">Qt. Orig:</Text>
+                  <Text className="css-2catvg" fontWeight="bold" color="gray.700">
                     {formatQty(selectedEtapa.produtos.reduce((s, p) => s + p.qt_orig, 0))}
                   </Text>
                 </HStack>
-                <HStack spacing={1}>
-                  <Text color="gray.500">Total Final:</Text>
-                  <Text fontWeight="bold" color="gray.700">
+                <HStack className="css-926vde" spacing={1}>
+                  <Text className="css-q9k0mw" color="gray.500">Qt. Final:</Text>
+                  <Text className="css-164rdht" fontWeight="bold" color="gray.700">
                     {formatQty(selectedEtapa.produtos.reduce((s, p) => s + p.qt_final, 0))}
                   </Text>
                 </HStack>
-              </Flex>
+              </Box>
             </Box>
           )}
         </Box>
