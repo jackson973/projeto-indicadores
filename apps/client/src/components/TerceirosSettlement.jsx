@@ -141,6 +141,14 @@ const TerceirosSettlement = () => {
   const [editYear, setEditYear] = useState(null);
   const [editingGroupPrice, setEditingGroupPrice] = useState(null);
   const [editingGroupPriceValue, setEditingGroupPriceValue] = useState("");
+  const [editDateFrom, setEditDateFrom] = useState("");
+  const [editDateTo, setEditDateTo] = useState("");
+  const [editOfSearchInput, setEditOfSearchInput] = useState("");
+  const editOfSearchRef = useRef(null);
+  const [editUnsettledOfs, setEditUnsettledOfs] = useState([]);
+  const [editSelectedOfs, setEditSelectedOfs] = useState(new Set());
+  const [editOfPrices, setEditOfPrices] = useState({});
+  const [loadingEditOfs, setLoadingEditOfs] = useState(false);
 
   // ── New settlement creation ───────────────────────────────────────────────
   const [creating, setCreating] = useState(false);
@@ -357,7 +365,73 @@ const TerceirosSettlement = () => {
     setEditMonth(null);
     setEditYear(null);
     setExpandedEditGroups(new Set());
+    setEditDateFrom("");
+    setEditDateTo("");
+    setEditOfSearchInput("");
+    setEditUnsettledOfs([]);
+    setEditSelectedOfs(new Set());
+    setEditOfPrices({});
   }, []);
+
+  // ── Edit: load unsettled OFs for adding to settlement ────────────────────
+  const loadEditUnsettledOfs = useCallback(async () => {
+    if (!editingSettlement) return;
+    const codcli = editingSettlement.codcli;
+    const ofNumbers = editOfSearchRef.current?.value || editOfSearchInput;
+    const hasDates = !!editDateFrom || !!editDateTo;
+    const hasOfs = ofNumbers && ofNumbers.trim().length > 0;
+    if (!hasDates && !hasOfs) { setEditUnsettledOfs([]); return; }
+    setLoadingEditOfs(true);
+    try {
+      const params = new URLSearchParams();
+      params.append("codcli", codcli);
+      params.append("unsettledOnly", "true");
+      if (editDateFrom) params.append("dateFrom", editDateFrom);
+      if (editDateTo) params.append("dateTo", editDateTo);
+      if (hasOfs) params.append("facNumero", ofNumbers.trim());
+      const result = await fetchTerceirosOfs(params.toString());
+      const data = result.rows || result || [];
+      setEditUnsettledOfs(data);
+      setEditSelectedOfs(new Set());
+      if (data.length > 0) {
+        const items = data.map((of) => ({ productCode: of.fac_codigo_produto, parte: of.fac_parte, cor: of.fac_cor, etapa: of.fac_codsetor || null }));
+        try {
+          const prices = await fetchTerceirosPricesForOfs(codcli, items);
+          const pm = {};
+          if (Array.isArray(prices)) {
+            prices.forEach((p) => { pm[`${p.productCode}|${p.parte}|${p.cor}`] = { price: p.price }; });
+          }
+          setEditOfPrices(pm);
+          const auto = new Set();
+          data.forEach((of, idx) => { if (pm[`${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`]?.price != null) auto.add(idx); });
+          setEditSelectedOfs(auto);
+        } catch { setEditOfPrices({}); }
+      } else { setEditOfPrices({}); }
+    } catch { toast({ title: "Erro ao carregar OFs.", status: "error", duration: 3000 }); }
+    finally { setLoadingEditOfs(false); }
+  }, [editingSettlement, editDateFrom, editDateTo, editOfSearchInput, toast]);
+
+  const handleAddSelectedEditOfs = useCallback(async () => {
+    if (!editingSettlement || editSelectedOfs.size === 0) return;
+    const ofsToAdd = editUnsettledOfs
+      .filter((_, idx) => editSelectedOfs.has(idx))
+      .map((of) => {
+        const price = editOfPrices[`${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`]?.price ?? 0;
+        return { ofId: of.id, quantity: parseFloat(of.fac_quant) || 0, unitPrice: price, priceSource: "table" };
+      });
+    try {
+      await addSettlementItems(editingSettlement.id, ofsToAdd);
+      toast({ title: `${ofsToAdd.length} OF(s) adicionada(s).`, status: "success", duration: 2000 });
+      const updated = await fetchTerceirosSettlement(editingSettlement.id);
+      setEditingSettlement(updated);
+      setEditUnsettledOfs([]);
+      setEditSelectedOfs(new Set());
+      setEditDateFrom(""); setEditDateTo("");
+      setEditOfSearchInput("");
+      if (editOfSearchRef.current) editOfSearchRef.current.value = "";
+      await loadSettlements();
+    } catch { toast({ title: "Erro ao adicionar OFs.", status: "error", duration: 3000 }); }
+  }, [editingSettlement, editSelectedOfs, editUnsettledOfs, editOfPrices, loadSettlements, toast]);
 
   // ── Export helper ─────────────────────────────────────────────────────────
   const buildExportFilename = useCallback((settlement, ext) => {
@@ -1792,6 +1866,76 @@ const TerceirosSettlement = () => {
             {editingSettlement.status === "paid" ? "Pago" : editingSettlement.status === "draft" ? "Rascunho" : "Em Aberto"}
           </Badge>
         </Flex>
+
+        {/* ── Add OFs section ──────────────────────────────────────────── */}
+        <Box borderWidth="1px" borderColor={borderColor} borderRadius="md" p={3} mb={4}>
+          <Text fontSize="sm" fontWeight="bold" mb={2}>Adicionar OFs</Text>
+          <Flex gap={3} mb={2} wrap="wrap" align="flex-end">
+            <Box>
+              <Text fontSize="xs" color="gray.500" mb={1}>De</Text>
+              <Input size="sm" type="date" value={editDateFrom} onChange={(e) => setEditDateFrom(e.target.value)} w="140px" />
+            </Box>
+            <Box>
+              <Text fontSize="xs" color="gray.500" mb={1}>Até</Text>
+              <Input size="sm" type="date" value={editDateTo} onChange={(e) => setEditDateTo(e.target.value)} w="140px" />
+            </Box>
+            <Box flex="1" minW="200px">
+              <Text fontSize="xs" color="gray.500" mb={1}>Buscar OFs (separadas por vírgula)</Text>
+              <InputGroup size="sm">
+                <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
+                <Input ref={editOfSearchRef} placeholder="Ex: 12345, 12346, 12347"
+                  defaultValue={editOfSearchInput}
+                  onChange={(e) => setEditOfSearchInput(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && loadEditUnsettledOfs()} />
+              </InputGroup>
+            </Box>
+            <Button size="sm" colorScheme="blue" leftIcon={<SearchIcon />}
+              onClick={loadEditUnsettledOfs} isLoading={loadingEditOfs}>
+              Buscar
+            </Button>
+          </Flex>
+          {editUnsettledOfs.length > 0 && (
+            <Box>
+              <Flex justify="space-between" align="center" mb={2}>
+                <Text fontSize="xs" color="gray.500">{editUnsettledOfs.length} OF(s) encontrada(s)</Text>
+                <Button size="xs" colorScheme="blue" onClick={handleAddSelectedEditOfs}
+                  isDisabled={editSelectedOfs.size === 0}>
+                  Adicionar{editSelectedOfs.size > 0 ? ` (${editSelectedOfs.size})` : ""} Selecionadas
+                </Button>
+              </Flex>
+              <VStack align="stretch" spacing={1} maxH="220px" overflowY="auto">
+                {editUnsettledOfs.map((of, idx) => {
+                  const priceKey = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+                  const price = editOfPrices[priceKey]?.price;
+                  const isSelected = editSelectedOfs.has(idx);
+                  return (
+                    <Flex key={of.id} align="center" gap={2} px={2} py={1}
+                      borderWidth="1px" borderColor={isSelected ? "blue.300" : borderColor}
+                      borderRadius="md" bg={isSelected ? "blue.50" : "transparent"}
+                      cursor="pointer"
+                      onClick={() => setEditSelectedOfs(prev => {
+                        const next = new Set(prev);
+                        if (next.has(idx)) next.delete(idx); else next.add(idx);
+                        return next;
+                      })}>
+                      <Checkbox size="sm" isChecked={isSelected} onChange={() => {}} pointerEvents="none" />
+                      <Text fontSize="xs" fontWeight="bold" flexShrink={0}>OF {of.fac_numero}</Text>
+                      <Text fontSize="xs" flex="1" noOfLines={1}>{of.fac_desc_produto || of.fac_codigo_produto}</Text>
+                      <Text fontSize="xs" color="gray.500" flexShrink={0}>{of.fac_parte}</Text>
+                      <Text fontSize="xs" fontWeight="semibold" flexShrink={0}
+                        color={price != null ? "green.600" : "red.500"}>
+                        {price != null ? formatUnitPrice(price) : "Sem preço"}
+                      </Text>
+                    </Flex>
+                  );
+                })}
+              </VStack>
+            </Box>
+          )}
+          {!loadingEditOfs && editUnsettledOfs.length === 0 && (editDateFrom || editDateTo || editOfSearchInput) && (
+            <Text fontSize="xs" color="gray.500" mt={1}>Nenhuma OF encontrada para os filtros informados.</Text>
+          )}
+        </Box>
 
         {items.length === 0 ? (
           <Box py={6} textAlign="center">
