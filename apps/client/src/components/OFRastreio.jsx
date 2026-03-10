@@ -17,8 +17,6 @@ import {
   VStack,
   HStack,
   InputGroup,
-  InputRightElement,
-  IconButton,
   Tooltip,
 } from "@chakra-ui/react";
 import { useState, useRef } from "react";
@@ -34,54 +32,6 @@ function formatDate(d) {
 function formatQty(v) {
   const n = parseFloat(v) || 0;
   return n.toLocaleString("pt-BR");
-}
-
-// Timeline node circle
-function TimelineNode({ index, total }) {
-  return (
-    <Flex direction="column" align="center" position="relative">
-      {/* Connector line left */}
-      {index > 0 && (
-        <Box
-          position="absolute"
-          top="16px"
-          right="50%"
-          width="100%"
-          height="2px"
-          bg="blue.300"
-          zIndex={0}
-        />
-      )}
-      {/* Connector line right */}
-      {index < total - 1 && (
-        <Box
-          position="absolute"
-          top="16px"
-          left="50%"
-          width="100%"
-          height="2px"
-          bg="blue.300"
-          zIndex={0}
-        />
-      )}
-      {/* Circle */}
-      <Flex
-        w="32px"
-        h="32px"
-        borderRadius="full"
-        bg="blue.500"
-        color="white"
-        align="center"
-        justify="center"
-        fontWeight="bold"
-        fontSize="sm"
-        zIndex={1}
-        flexShrink={0}
-      >
-        {index + 1}
-      </Flex>
-    </Flex>
-  );
 }
 
 export default function OFRastreio() {
@@ -175,19 +125,53 @@ export default function OFRastreio() {
 
           {/* Horizontal Timeline */}
           <Box overflowX="auto" pb={4}>
-            <Flex minW={`${data.etapas.length * 220}px`} align="flex-start" gap={0}>
-              {data.etapas.map((etapa, idx) => (
-                <Flex key={idx} flex="1" direction="column" align="center" px={2}>
-                  {/* Node with connectors */}
-                  <TimelineNode index={idx} total={data.etapas.length} />
+            <Box minW={`${data.etapas.length * 220}px`}>
 
-                  {/* Card */}
+              {/* Rail + Circles row */}
+              <Box position="relative" mb={4} px={`${100 / (data.etapas.length * 2)}%`}>
+                {/* Horizontal line */}
+                <Box
+                  position="absolute"
+                  top="16px"
+                  left={`${100 / (data.etapas.length * 2)}%`}
+                  right={`${100 / (data.etapas.length * 2)}%`}
+                  height="2px"
+                  bg="blue.300"
+                  zIndex={0}
+                />
+                {/* Circles */}
+                <Flex justify="space-between" position="relative" zIndex={1}>
+                  {data.etapas.map((etapa, idx) => (
+                    <Tooltip key={idx} label={etapa.descsetor} placement="top" hasArrow>
+                      <Flex
+                        w="32px"
+                        h="32px"
+                        borderRadius="full"
+                        bg="blue.500"
+                        color="white"
+                        align="center"
+                        justify="center"
+                        fontWeight="bold"
+                        fontSize="sm"
+                        flexShrink={0}
+                        cursor="default"
+                      >
+                        {idx + 1}
+                      </Flex>
+                    </Tooltip>
+                  ))}
+                </Flex>
+              </Box>
+
+              {/* Cards row */}
+              <Flex align="flex-start" gap={3}>
+                {data.etapas.map((etapa, idx) => (
                   <Box
-                    mt={3}
-                    w="100%"
+                    key={idx}
+                    flex="1"
                     bg="white"
                     border="1px solid"
-                    borderColor="blue.200"
+                    borderColor="gray.200"
                     borderRadius="lg"
                     p={3}
                     boxShadow="sm"
@@ -196,10 +180,12 @@ export default function OFRastreio() {
                     {/* Etapa name */}
                     <Text
                       fontWeight="bold"
-                      fontSize="sm"
+                      fontSize="xs"
                       color="blue.700"
                       mb={2}
                       textAlign="center"
+                      textTransform="uppercase"
+                      letterSpacing="wide"
                     >
                       {etapa.descsetor}
                     </Text>
@@ -207,24 +193,18 @@ export default function OFRastreio() {
                     <Divider mb={2} />
 
                     {/* Dates */}
-                    <VStack align="stretch" spacing={1} mb={3}>
-                      <HStack justify="space-between" fontSize="xs">
+                    <VStack align="stretch" spacing={0} mb={3}>
+                      <HStack justify="space-between" fontSize="xs" py="2px">
                         <Text color="gray.500">Entrada:</Text>
-                        <Text fontWeight="medium" color="gray.700">
-                          {formatDate(etapa.dt_entrada)}
-                        </Text>
+                        <Text color="gray.700">{formatDate(etapa.dt_entrada)}</Text>
                       </HStack>
-                      <HStack justify="space-between" fontSize="xs">
+                      <HStack justify="space-between" fontSize="xs" py="2px">
                         <Text color="gray.500">Lancto:</Text>
-                        <Text fontWeight="medium" color="gray.700">
-                          {formatDate(etapa.dt_lancto)}
-                        </Text>
+                        <Text color="gray.700">{formatDate(etapa.dt_lancto)}</Text>
                       </HStack>
-                      <HStack justify="space-between" fontSize="xs">
+                      <HStack justify="space-between" fontSize="xs" py="2px">
                         <Text color="gray.500">Prev. Retorno:</Text>
-                        <Text fontWeight="medium" color="gray.700">
-                          {formatDate(etapa.dt_prev_ret)}
-                        </Text>
+                        <Text color="gray.700">{formatDate(etapa.dt_prev_ret)}</Text>
                       </HStack>
                     </VStack>
 
@@ -234,15 +214,15 @@ export default function OFRastreio() {
                         <Table size="xs" variant="simple">
                           <Thead>
                             <Tr>
-                              <Th fontSize="10px" px={1} py={1} color="gray.500">Produto / Parte</Th>
-                              <Th fontSize="10px" px={1} py={1} color="gray.500" isNumeric>Qt.Orig</Th>
-                              <Th fontSize="10px" px={1} py={1} color="gray.500" isNumeric>Qt.Final</Th>
+                              <Th fontSize="10px" px={1} py={1} color="gray.400">Produto / Parte</Th>
+                              <Th fontSize="10px" px={1} py={1} color="gray.400" isNumeric>Orig</Th>
+                              <Th fontSize="10px" px={1} py={1} color="gray.400" isNumeric>Final</Th>
                             </Tr>
                           </Thead>
                           <Tbody>
                             {etapa.produtos.map((p, pi) => (
                               <Tr key={pi}>
-                                <Td px={1} py={1} maxW="140px">
+                                <Td px={1} py="2px" maxW="140px">
                                   <Tooltip
                                     label={[p.descricao, p.desc_parte, p.tamanho, p.desc_cor]
                                       .filter(Boolean)
@@ -251,7 +231,7 @@ export default function OFRastreio() {
                                     hasArrow
                                   >
                                     <Box>
-                                      <Text fontSize="10px" fontWeight="medium" noOfLines={1}>
+                                      <Text fontSize="10px" color="gray.700" noOfLines={1}>
                                         {p.descricao || p.codigo || "—"}
                                       </Text>
                                       {p.desc_parte && (
@@ -267,16 +247,11 @@ export default function OFRastreio() {
                                     </Box>
                                   </Tooltip>
                                 </Td>
-                                <Td px={1} py={1} isNumeric fontSize="10px">
+                                <Td px={1} py="2px" isNumeric fontSize="10px" color="gray.600">
                                   {formatQty(p.qt_orig)}
                                 </Td>
-                                <Td px={1} py={1} isNumeric fontSize="10px">
-                                  <Text
-                                    fontWeight="medium"
-                                    color={p.qt_final < p.qt_orig ? "orange.600" : "green.600"}
-                                  >
-                                    {formatQty(p.qt_final)}
-                                  </Text>
+                                <Td px={1} py="2px" isNumeric fontSize="10px" color="gray.700">
+                                  {formatQty(p.qt_final)}
                                 </Td>
                               </Tr>
                             ))}
@@ -296,16 +271,16 @@ export default function OFRastreio() {
                         </HStack>
                         <HStack justify="space-between" fontSize="xs">
                           <Text color="gray.500">Total Final:</Text>
-                          <Text fontWeight="bold" color="orange.600">
+                          <Text fontWeight="bold" color="gray.700">
                             {formatQty(etapa.produtos.reduce((s, p) => s + p.qt_final, 0))}
                           </Text>
                         </HStack>
                       </Box>
                     )}
                   </Box>
-                </Flex>
-              ))}
-            </Flex>
+                ))}
+              </Flex>
+            </Box>
           </Box>
         </Box>
       )}
