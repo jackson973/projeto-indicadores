@@ -512,7 +512,7 @@ function ItemCard({ item, period, storeId }) {
 
   const hasAlerts = item.alerts?.length > 0;
   const hasAds    = !!item.ads;
-  const isFull    = item.listing_type_id === 'gold_special';
+  const isFull    = !!item.fulfillment;
 
   // Period-aware metrics
   const periodVisits      = getVisits(item, period);
@@ -631,10 +631,13 @@ function ItemCard({ item, period, storeId }) {
 
         {/* Badges */}
         <HStack spacing={2} flexShrink={0}>
+          {isFull && (
+            <Badge colorScheme="yellow" fontSize="xs" variant="solid">Full</Badge>
+          )}
           {item.listing_type_label && item.listing_type_label !== "—" && (
             <Badge
-              colorScheme={isFull ? "yellow" : item.listing_type_id?.startsWith("gold") ? "yellow" : "gray"}
-              fontSize="xs" variant={isFull ? "solid" : "subtle"}>
+              colorScheme={item.listing_type_id?.startsWith("gold") ? "yellow" : "gray"}
+              fontSize="xs" variant="subtle">
               {item.listing_type_label}
             </Badge>
           )}

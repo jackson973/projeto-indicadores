@@ -74,6 +74,8 @@ router.get('/', async (req, res) => {
       // Listing type + shipping (already present on item from ML batch response)
       const listingTypeLabel = mapListingType(item.listing_type_id);
       const freeShipping     = item.shipping?.free_shipping || false;
+      const isFulfillment    = item.shipping?.logistic_type === 'fulfillment'
+                               || (item.tags || []).includes('fulfillment');
 
       // Trend refs (still from snapshots — for visits trend)
       const prev = trendsMap[item.id] || {};
@@ -158,6 +160,7 @@ router.get('/', async (req, res) => {
         listing_type_id:    item.listing_type_id,
         listing_type_label: listingTypeLabel,
         free_shipping:      freeShipping,
+        fulfillment:        isFulfillment,
         date_created:       item.date_created,
         last_updated:       item.last_updated,
         // Health score
@@ -974,7 +977,7 @@ async function getAppToken(store) {
 
 function mapListingType(typeId) {
   const types = {
-    gold_special: 'Full',
+    gold_special: 'Clássico',
     gold_pro:     'Premium',
     gold:         'Gold',
     silver:       'Prata',
