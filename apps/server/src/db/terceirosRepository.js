@@ -533,23 +533,30 @@ async function findPrice(codcli, productCode, part, date, etapa, tamanho) {
 }
 
 async function getDistinctSizes(codcli, groupId) {
-  const conditions = ["o.fac_tam IS NOT NULL", "TRIM(o.fac_tam) != ''"];
-  const params = [];
+  // groupId is required to ensure sizes are scoped to products in the group
+  if (!groupId) return [];
+
+  const params = [groupId];
+  const extraConditions = [];
+
   if (codcli) {
-    conditions.push(`o.fac_codcli = $${params.length + 1}`);
+    extraConditions.push(`o.fac_codcli = $${params.length + 1}`);
     params.push(codcli);
   }
-  if (groupId) {
-    conditions.push(`EXISTS (
-      SELECT 1 FROM terceiros_group_products gp
-      WHERE gp.product_code = o.fac_codigo_produto AND gp.group_id = $${params.length + 1}
-    )`);
-    params.push(groupId);
-  }
+
+  const whereExtra = extraConditions.length > 0
+    ? `AND ${extraConditions.join(' AND ')}`
+    : '';
+
   const result = await db.query(
     `SELECT DISTINCT TRIM(o.fac_tam) AS tamanho
      FROM terceiros_ofs o
-     WHERE ${conditions.join(' AND ')}
+     INNER JOIN terceiros_group_products gp
+       ON TRIM(gp.product_code) = TRIM(o.fac_codigo_produto)
+      AND gp.group_id = $1
+     WHERE o.fac_tam IS NOT NULL
+       AND TRIM(o.fac_tam) != ''
+       ${whereExtra}
      ORDER BY TRIM(o.fac_tam)`,
     params
   );
