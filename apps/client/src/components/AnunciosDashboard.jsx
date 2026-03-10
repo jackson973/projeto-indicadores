@@ -579,8 +579,18 @@ function ItemCard({ item, period, storeId }) {
               </HStack>
             )}
             {item.questions?.unanswered > 0 && (
-              <Text fontSize="10px" color="orange.500">
-                {item.questions.unanswered} perg. sem resposta
+              <Text
+                as="a"
+                href={`https://www.mercadolivre.com.br/preguntas/detalhe/${item.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                fontSize="10px"
+                color="orange.500"
+                textDecoration="underline"
+                _hover={{ color: "orange.600" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {item.questions.unanswered} perg. sem resposta ↗
               </Text>
             )}
           </HStack>
@@ -760,8 +770,17 @@ function ItemCard({ item, period, storeId }) {
                   {item.questions.unanswered === 0 ? (
                     <Text fontSize="xs" color="green.500">✓ Nenhuma pergunta pendente</Text>
                   ) : (
-                    <Text fontSize="xs" color="red.500">
-                      ⚠ {item.questions.unanswered} sem resposta
+                    <Text
+                      as="a"
+                      href={`https://www.mercadolivre.com.br/preguntas/detalhe/${item.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      fontSize="xs"
+                      color="red.500"
+                      textDecoration="underline"
+                      _hover={{ color: "red.600" }}
+                    >
+                      ⚠ {item.questions.unanswered} sem resposta — Responder ↗
                     </Text>
                   )}
                   <Text fontSize="xs" color={muted}>Responder rápido = +ranking</Text>
