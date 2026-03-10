@@ -221,7 +221,12 @@ export default function OFRastreio() {
                           </Thead>
                           <Tbody>
                             {etapa.produtos.map((p, pi) => (
-                              <Tr key={pi}>
+                              <Tr
+                                key={pi}
+                                bg={p.qt_final !== p.qt_orig ? "orange.50" : undefined}
+                                borderLeft={p.qt_final !== p.qt_orig ? "3px solid" : undefined}
+                                borderLeftColor={p.qt_final !== p.qt_orig ? "orange.400" : undefined}
+                              >
                                 <Td px={1} py="2px" maxW="140px">
                                   <Tooltip
                                     label={[p.descricao, p.desc_parte].filter(Boolean).join(" | ")}
@@ -244,14 +249,9 @@ export default function OFRastreio() {
                                   {formatQty(p.qt_orig)}
                                 </Td>
                                 <Td px={1} py="2px" isNumeric fontSize="10px">
-                                  <Flex align="center" justify="flex-end" gap={1}>
-                                    {p.qt_final !== p.qt_orig && (
-                                      <Tooltip label={`Divergência: orig ${formatQty(p.qt_orig)} → final ${formatQty(p.qt_final)}`} hasArrow placement="top">
-                                        <Text color="orange.500" fontSize="10px" lineHeight={1}>⚠</Text>
-                                      </Tooltip>
-                                    )}
-                                    <Text color="gray.700">{formatQty(p.qt_final)}</Text>
-                                  </Flex>
+                                  <Text color={p.qt_final !== p.qt_orig ? "orange.600" : "gray.700"} fontWeight={p.qt_final !== p.qt_orig ? "bold" : "normal"}>
+                                    {formatQty(p.qt_final)}
+                                  </Text>
                                 </Td>
                               </Tr>
                             ))}

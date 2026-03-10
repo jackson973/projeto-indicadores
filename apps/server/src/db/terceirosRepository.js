@@ -1190,7 +1190,7 @@ async function getOFRastreio(ofNumero) {
         dt_entrada: row.fac_dt_s,
         dt_lancto: row.fac_dt_lan,
         dt_prev_ret: row.fac_dt_prev_ret,
-        produtos: []
+        produtoMap: new Map()
       });
     }
     const etapa = etapaMap.get(key);
@@ -1201,24 +1201,34 @@ async function getOFRastreio(ofNumero) {
     if (row.fac_dt_prev_ret && (!etapa.dt_prev_ret || row.fac_dt_prev_ret > etapa.dt_prev_ret)) {
       etapa.dt_prev_ret = row.fac_dt_prev_ret;
     }
-    etapa.produtos.push({
-      codigo: row.fac_codigo_produto,
-      descricao: row.fac_desc_produto,
-      parte: row.fac_parte,
-      desc_parte: row.fac_descparte,
-      tamanho: row.fac_tam,
-      cor: row.fac_cor,
-      desc_cor: row.fac_desccor,
-      qt_orig: parseFloat(row.fac_qt_orig) || 0,
-      qt_final: parseFloat(row.fac_quant) || 0
-    });
+    // Group products by codigo+parte, summing quantities (ignore cor/tamanho)
+    const prodKey = `${row.fac_codigo_produto}|${row.fac_parte || ''}`;
+    const existing = etapa.produtoMap.get(prodKey);
+    if (existing) {
+      existing.qt_orig += parseFloat(row.fac_qt_orig) || 0;
+      existing.qt_final += parseFloat(row.fac_quant) || 0;
+    } else {
+      const prod = {
+        codigo: row.fac_codigo_produto,
+        descricao: row.fac_desc_produto,
+        parte: row.fac_parte,
+        desc_parte: row.fac_descparte,
+        qt_orig: parseFloat(row.fac_qt_orig) || 0,
+        qt_final: parseFloat(row.fac_quant) || 0
+      };
+      etapa.produtoMap.set(prodKey, prod);
+    }
   }
 
   const first = result.rows[0];
   return {
     fac_numero: first.fac_numero,
     fornecedor: first.cliente_fantasia || first.cliente_nome || first.fac_codcli,
-    etapas: Array.from(etapaMap.values())
+    etapas: Array.from(etapaMap.values()).map(e => ({
+      ...e,
+      produtos: Array.from(e.produtoMap.values()),
+      produtoMap: undefined
+    }))
   };
 }
 
