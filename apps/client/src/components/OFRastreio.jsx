@@ -224,9 +224,7 @@ export default function OFRastreio() {
                               <Tr key={pi}>
                                 <Td px={1} py="2px" maxW="140px">
                                   <Tooltip
-                                    label={[p.descricao, p.desc_parte, p.tamanho, p.desc_cor]
-                                      .filter(Boolean)
-                                      .join(" | ")}
+                                    label={[p.descricao, p.desc_parte].filter(Boolean).join(" | ")}
                                     placement="top"
                                     hasArrow
                                   >
@@ -239,19 +237,21 @@ export default function OFRastreio() {
                                           {p.desc_parte}
                                         </Text>
                                       )}
-                                      {(p.tamanho || p.desc_cor) && (
-                                        <Text fontSize="9px" color="gray.400" noOfLines={1}>
-                                          {[p.tamanho, p.desc_cor].filter(Boolean).join(" / ")}
-                                        </Text>
-                                      )}
                                     </Box>
                                   </Tooltip>
                                 </Td>
                                 <Td px={1} py="2px" isNumeric fontSize="10px" color="gray.600">
                                   {formatQty(p.qt_orig)}
                                 </Td>
-                                <Td px={1} py="2px" isNumeric fontSize="10px" color="gray.700">
-                                  {formatQty(p.qt_final)}
+                                <Td px={1} py="2px" isNumeric fontSize="10px">
+                                  <Flex align="center" justify="flex-end" gap={1}>
+                                    {p.qt_final !== p.qt_orig && (
+                                      <Tooltip label={`Divergência: orig ${formatQty(p.qt_orig)} → final ${formatQty(p.qt_final)}`} hasArrow placement="top">
+                                        <Text color="orange.500" fontSize="10px" lineHeight={1}>⚠</Text>
+                                      </Tooltip>
+                                    )}
+                                    <Text color="gray.700">{formatQty(p.qt_final)}</Text>
+                                  </Flex>
                                 </Td>
                               </Tr>
                             ))}
