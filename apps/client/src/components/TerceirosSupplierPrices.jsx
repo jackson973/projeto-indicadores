@@ -188,19 +188,21 @@ const TerceirosSupplierPrices = () => {
     }
     const load = async () => {
       setLoadingParts(true);
-      setLoadingSizes(true);
       try {
-        const [partsData, sizesData] = await Promise.all([
-          fetchTerceirosParts(form.codcli, form.groupId),
-          fetchTerceirossizes(form.codcli, form.groupId)
-        ]);
+        const partsData = await fetchTerceirosParts(form.codcli, form.groupId);
         setModalParts(partsData);
-        setModalSizes(sizesData);
       } catch {
         setModalParts([]);
-        setModalSizes([]);
       } finally {
         setLoadingParts(false);
+      }
+      setLoadingSizes(true);
+      try {
+        const sizesData = await fetchTerceirossizes(form.codcli, form.groupId);
+        setModalSizes(sizesData);
+      } catch {
+        setModalSizes([]);
+      } finally {
         setLoadingSizes(false);
       }
     };
@@ -223,9 +225,7 @@ const TerceirosSupplierPrices = () => {
         if (partsData.length === 0 && bulkForm.codcli) {
           partsData = await fetchTerceirosParts(null, bulkForm.groupId);
         }
-        const sizesData = await fetchTerceirossizes(bulkForm.codcli, bulkForm.groupId);
         setBulkParts(partsData);
-        setBulkSizes(sizesData);
         if (partsData.length > 0) {
           setBulkRows(partsData.map((p) => ({ part: p.code, partLabel: `${p.code}${p.name ? ` - ${p.name}` : ""}`, price: 0, _key: p.code })));
         } else {
@@ -233,10 +233,16 @@ const TerceirosSupplierPrices = () => {
         }
       } catch {
         setBulkParts([]);
-        setBulkSizes([]);
         setBulkRows([]);
       } finally {
         setLoadingBulkParts(false);
+      }
+      // Sizes are loaded independently so a failure doesn't affect parts
+      try {
+        const sizesData = await fetchTerceirossizes(bulkForm.codcli, bulkForm.groupId);
+        setBulkSizes(sizesData);
+      } catch {
+        setBulkSizes([]);
       }
     };
     load();
