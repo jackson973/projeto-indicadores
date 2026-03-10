@@ -1118,6 +1118,7 @@ const TerceirosSettlement = () => {
             <Thead>
               <Tr bg={headerBg}>
                 <Th>Fornecedor</Th>
+                <Th>Etapa</Th>
                 <Th>Mês/Ano</Th>
                 <Th isNumeric>Peças</Th>
                 <Th isNumeric>Valor Total</Th>
@@ -1139,6 +1140,11 @@ const TerceirosSettlement = () => {
                         </Tooltip>
                       )}
                     </HStack>
+                  </Td>
+                  <Td fontSize="sm" color="gray.600" maxW="200px">
+                    <Tooltip label={s.etapas || "—"} isDisabled={!s.etapas} placement="top">
+                      <Text noOfLines={1}>{s.etapas || "—"}</Text>
+                    </Tooltip>
                   </Td>
                   <Td fontSize="sm">{monthNames[(s.referenceMonth || 1) - 1]}/{s.referenceYear}</Td>
                   <Td fontSize="sm" isNumeric>{(s.totalItems ?? 0).toLocaleString("pt-BR")}</Td>

@@ -588,7 +588,15 @@ async function getSettlements({ codcli, month, year, status } = {}) {
                     AND COALESCE(o2.fac_cor, '') = COALESCE(o.fac_cor, '')
                     AND COALESCE(o2.fac_parte, '') = COALESCE(o.fac_parte, '')
                 )
-            ) AS "missingCount"
+            ) AS "missingCount",
+            (
+              SELECT STRING_AGG(DISTINCT COALESCE(o.fac_descsetor, o.fac_codsetor, ''), ', '
+                     ORDER BY COALESCE(o.fac_descsetor, o.fac_codsetor, ''))
+              FROM terceiros_settlement_items si
+              JOIN terceiros_ofs o ON o.id = si.of_id
+              WHERE si.settlement_id = s.id
+                AND COALESCE(o.fac_descsetor, o.fac_codsetor, '') != ''
+            ) AS "etapas"
      FROM terceiros_settlements s
      LEFT JOIN users u ON u.id = s.created_by
      WHERE ${conditions.join(' AND ')}
