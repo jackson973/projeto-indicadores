@@ -88,8 +88,10 @@ async function updateKitQty(storeVariationKey, kitQty, meta = {}) {
     return result.rows[0];
   } else {
     const sepIdx = storeVariationKey.indexOf(KEY_SEP);
-    const codStore = sepIdx > -1 ? storeVariationKey.substring(0, sepIdx) : null;
+    const codStoreRaw = sepIdx > -1 ? storeVariationKey.substring(0, sepIdx) : null;
     const adName = sepIdx > -1 ? storeVariationKey.substring(sepIdx + KEY_SEP.length) : storeVariationKey;
+    // cod_store é BIGINT — só salvar se for numérico
+    const codStore = codStoreRaw && /^\d+$/.test(codStoreRaw) ? codStoreRaw : null;
 
     const result = await db.query(
       `INSERT INTO products (nome, cod_store, store_variation_key, kit_qty)
