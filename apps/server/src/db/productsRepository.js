@@ -5,7 +5,8 @@ const db = require('./connection');
  * Agrupa por loja (id) + nome do anúncio — ignora variação/tamanho.
  */
 const KEY_SEP = '|||';
-const keyExpr = `s.cod_store || '|||' || TRIM(s.ad_name)`;
+// Usa cod_store quando disponível, senão usa store name
+const keyExpr = `COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name)`;
 
 /**
  * Lista produtos distintos da tabela sales, agrupados por cod_store + ad_name.
@@ -18,7 +19,6 @@ async function listProducts({ codigo, nome, lojas, page = 1, limit = 50 } = {}) 
   conditions.push("s.ad_name IS NOT NULL");
   conditions.push("TRIM(s.ad_name) != ''");
   conditions.push("s.ad_name != 'Geral'");
-  conditions.push("s.cod_store IS NOT NULL");
 
   if (codigo) {
     params.push(`%${codigo}%`);
@@ -31,7 +31,7 @@ async function listProducts({ codigo, nome, lojas, page = 1, limit = 50 } = {}) 
   if (lojas && lojas.length > 0) {
     const placeholders = lojas.map((_, i) => `$${params.length + i + 1}`);
     params.push(...lojas);
-    conditions.push(`s.cod_store::text IN (${placeholders.join(', ')})`);
+    conditions.push(`COALESCE(s.cod_store::text, s.store) IN (${placeholders.join(', ')})`);
   }
 
   const where = `WHERE ${conditions.join(' AND ')}`;
@@ -55,14 +55,14 @@ async function listProducts({ codigo, nome, lojas, page = 1, limit = 50 } = {}) 
        TRIM(s.ad_name) AS nome,
        MAX(CASE WHEN s.sku IS NOT NULL AND TRIM(s.sku) != '' THEN s.sku END) AS codigo,
        MAX(CASE WHEN s.image IS NOT NULL AND TRIM(s.image) != '' THEN s.image END) AS thumbnail,
-       MAX(st.name) AS loja,
+       COALESCE(MAX(st.name), s.store) AS loja,
        COALESCE(p.kit_qty, 1) AS kit_qty,
        p.id AS product_id
      FROM sales s
      LEFT JOIN stores st ON st.id = s.cod_store
      LEFT JOIN products p ON p.store_variation_key = (${keyExpr})
      ${where}
-     GROUP BY ${keyExpr}, s.cod_store, TRIM(s.ad_name), p.kit_qty, p.id
+     GROUP BY ${keyExpr}, s.cod_store, s.store, TRIM(s.ad_name), p.kit_qty, p.id
      ORDER BY TRIM(s.ad_name) ASC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
@@ -105,11 +105,14 @@ async function updateKitQty(storeVariationKey, kitQty, meta = {}) {
  */
 async function getDistinctStores() {
   const result = await db.query(
-    `SELECT DISTINCT s.cod_store::text AS id, st.name
+    `SELECT
+       COALESCE(s.cod_store::text, s.store) AS id,
+       COALESCE(st.name, s.store) AS name
      FROM sales s
-     INNER JOIN stores st ON st.id = s.cod_store
-     WHERE s.cod_store IS NOT NULL
-     ORDER BY st.name`
+     LEFT JOIN stores st ON st.id = s.cod_store
+     WHERE s.store IS NOT NULL AND TRIM(s.store) != '' AND s.store != 'Todas'
+     GROUP BY COALESCE(s.cod_store::text, s.store), COALESCE(st.name, s.store)
+     ORDER BY name`
   );
   return result.rows;
 }
@@ -195,7 +198,7 @@ async function removeItemsFromGroupBatch(groupId, adNames) {
  * Agrupa por cod_store|||ad_name.
  */
 async function getAllAdsWithGroup() {
-  const saKeyExpr = `sa.cod_store || '|||' || TRIM(sa.ad_name)`;
+  const saKeyExpr = `COALESCE(sa.cod_store::text, sa.store) || '|||' || TRIM(sa.ad_name)`;
   const result = await db.query(`
     SELECT
       s.store_variation_key,
@@ -207,12 +210,11 @@ async function getAllAdsWithGroup() {
       SELECT
         ${saKeyExpr} AS store_variation_key,
         TRIM(sa.ad_name) AS ad_name,
-        MAX(st.name) AS loja
+        COALESCE(MAX(st.name), sa.store) AS loja
       FROM sales sa
-      INNER JOIN stores st ON st.id = sa.cod_store
+      LEFT JOIN stores st ON st.id = sa.cod_store
       WHERE sa.ad_name IS NOT NULL AND TRIM(sa.ad_name) != '' AND sa.ad_name != 'Geral'
-        AND sa.cod_store IS NOT NULL
-      GROUP BY ${saKeyExpr}, TRIM(sa.ad_name)
+      GROUP BY ${saKeyExpr}, TRIM(sa.ad_name), sa.store
     ) s
     LEFT JOIN product_group_items gi ON gi.ad_name = s.store_variation_key
     LEFT JOIN product_groups g ON g.id = gi.group_id
