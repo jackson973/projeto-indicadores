@@ -13,10 +13,13 @@ async function batchUpsertSales(salesData, saleChannel = 'online') {
   }
 
   // Build store name → id map for cod_store resolution
-  const storesResult = await db.query('SELECT id, name FROM stores');
+  const storesResult = await db.query('SELECT id, name, platform_seller_name FROM stores');
   const storeMap = new Map();
   storesResult.rows.forEach((s) => {
     storeMap.set(s.name.toLowerCase().trim(), s.id);
+    if (s.platform_seller_name) {
+      storeMap.set(s.platform_seller_name.toLowerCase().trim(), s.id);
+    }
   });
 
   // Deduplicate data by (order_id, product, variation) - keep last occurrence
