@@ -255,25 +255,24 @@ const ProductsManagement = () => {
               const isExpanded = expandedKey === p.store_variation_key;
               const hasVariations = isExpanded && variations.length > 0;
               return (
-                <Box key={p.store_variation_key} bg={panelBg} p={3} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
+                <Box key={p.store_variation_key} bg={panelBg} p={3} borderRadius="md" borderWidth="1px" borderColor={borderColor}
+                  cursor="pointer" onClick={() => toggleAccordion(p)}>
                   <Flex gap={3}>
                     {p.thumbnail && (
                       <Image src={p.thumbnail} alt="" boxSize="50px" borderRadius="md" objectFit="cover" flexShrink={0} />
                     )}
                     <Box flex={1} minW={0}>
                       <Flex align="center" gap={1}>
-                        <IconButton
-                          size="xs" variant="ghost" aria-label="Expandir variações"
-                          icon={isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-                          onClick={() => toggleAccordion(p)}
-                        />
+                        <Box as="span" flexShrink={0} color="gray.400">
+                          {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                        </Box>
                         <Text fontSize="sm" fontWeight="bold" noOfLines={2}>{p.nome}</Text>
                       </Flex>
                       {p.loja && (
                         <Tag size="sm" fontSize="10px" variant="subtle" mt={1}>{p.loja}</Tag>
                       )}
                       {(!isExpanded || !hasVariations) && (
-                        <Flex mt={2} align="center" gap={2}>
+                        <Flex mt={2} align="center" gap={2} onClick={(e) => e.stopPropagation()}>
                           <Text fontSize="xs" fontWeight="medium">Qtd Kit:</Text>
                           {editingKey === p.store_variation_key ? (
                             <HStack spacing={1}>
@@ -295,7 +294,7 @@ const ProductsManagement = () => {
                     </Box>
                   </Flex>
                   {isExpanded && (
-                    <Box mt={2} ml={8}>
+                    <Box mt={2} ml={8} onClick={(e) => e.stopPropagation()}>
                       {loadingVariations ? (
                         <Flex justify="center" py={2}><Spinner size="sm" /></Flex>
                       ) : hasVariations ? (
@@ -350,7 +349,7 @@ const ProductsManagement = () => {
                   const hasVariations = isExpanded && variations.length > 0;
                   return (
                     <React.Fragment key={p.store_variation_key}>
-                      <Tr _hover={{ bg: hoverBg }}>
+                      <Tr _hover={{ bg: hoverBg }} cursor="pointer" onClick={() => toggleAccordion(p)}>
                         <Td p={1}>
                           {p.thumbnail ? (
                             <Image src={p.thumbnail} alt="" boxSize="32px" borderRadius="4px" objectFit="contain" />
@@ -360,18 +359,16 @@ const ProductsManagement = () => {
                         </Td>
                         <Td fontSize="sm" isTruncated title={p.nome}>
                           <Flex align="center" gap={1}>
-                            <IconButton
-                              size="xs" variant="ghost" aria-label="Expandir variações"
-                              icon={isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-                              onClick={() => toggleAccordion(p)}
-                            />
+                            <Box as="span" flexShrink={0} color="gray.400">
+                              {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                            </Box>
                             {p.nome}
                           </Flex>
                         </Td>
                         <Td>
                           {p.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue">{p.loja}</Tag>}
                         </Td>
-                        <Td textAlign="center">
+                        <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                           {(!isExpanded || !hasVariations) && (
                             editingKey === p.store_variation_key ? (
                               <HStack spacing={1} justify="center">
