@@ -12,6 +12,13 @@ async function batchUpsertSales(salesData, saleChannel = 'online') {
     return { inserted: 0, updated: 0 };
   }
 
+  // Build store name → id map for cod_store resolution
+  const storesResult = await db.query('SELECT id, name FROM stores');
+  const storeMap = new Map();
+  storesResult.rows.forEach((s) => {
+    storeMap.set(s.name.toLowerCase().trim(), s.id);
+  });
+
   // Deduplicate data by (order_id, product, variation) - keep last occurrence
   // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" error
   const deduped = new Map();
@@ -31,7 +38,7 @@ async function batchUpsertSales(salesData, saleChannel = 'online') {
 
   for (let i = 0; i < uniqueSalesData.length; i += BATCH_SIZE) {
     const batch = uniqueSalesData.slice(i, i + BATCH_SIZE);
-    const result = await upsertBatch(batch, saleChannel);
+    const result = await upsertBatch(batch, saleChannel, storeMap);
     totalInserted += result.inserted;
     totalUpdated += result.updated;
   }
@@ -42,7 +49,7 @@ async function batchUpsertSales(salesData, saleChannel = 'online') {
 /**
  * Internal function to upsert a single batch
  */
-async function upsertBatch(batch, saleChannel = 'online') {
+async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) {
   const client = await db.getClient();
 
   try {
@@ -54,10 +61,13 @@ async function upsertBatch(batch, saleChannel = 'online') {
     let paramIndex = 1;
 
     batch.forEach((sale) => {
+      const storeName = (sale.store || 'Todas').trim();
+      const codStore = storeMap.get(storeName.toLowerCase()) || null;
+
       const rowParams = [
         sale.orderId || '',
         sale.date,
-        sale.store || 'Todas',
+        storeName,
         sale.product || 'Geral',
         sale.adName || 'Geral',
         sale.variation || '',
@@ -75,7 +85,8 @@ async function upsertBatch(batch, saleChannel = 'online') {
         sale.clientName || '',
         sale.codcli || '',
         sale.nomeFantasia || '',
-        sale.cnpjCpf || ''
+        sale.cnpjCpf || '',
+        codStore
       ];
 
       values.push(
@@ -84,10 +95,10 @@ async function upsertBatch(batch, saleChannel = 'online') {
         `$${paramIndex+8}, $${paramIndex+9}, $${paramIndex+10}, $${paramIndex+11}, ` +
         `$${paramIndex+12}, $${paramIndex+13}, $${paramIndex+14}, $${paramIndex+15}, ` +
         `$${paramIndex+16}, $${paramIndex+17}, $${paramIndex+18}, $${paramIndex+19}, ` +
-        `$${paramIndex+20})`
+        `$${paramIndex+20}, $${paramIndex+21})`
       );
       params.push(...rowParams);
-      paramIndex += 21;
+      paramIndex += 22;
     });
 
     const query = `
@@ -95,7 +106,7 @@ async function upsertBatch(batch, saleChannel = 'online') {
         order_id, date, store, product, ad_name, variation, sku,
         quantity, total, unit_price, state, platform, status,
         cancel_by, cancel_reason, image, sale_channel,
-        client_name, codcli, nome_fantasia, cnpj_cpf
+        client_name, codcli, nome_fantasia, cnpj_cpf, cod_store
       ) VALUES ${values.join(', ')}
       ON CONFLICT (order_id, product, COALESCE(variation, ''))
       DO UPDATE SET
@@ -117,6 +128,7 @@ async function upsertBatch(batch, saleChannel = 'online') {
         codcli = EXCLUDED.codcli,
         nome_fantasia = EXCLUDED.nome_fantasia,
         cnpj_cpf = EXCLUDED.cnpj_cpf,
+        cod_store = EXCLUDED.cod_store,
         updated_at = CURRENT_TIMESTAMP
       RETURNING (xmax = 0) AS inserted
     `;

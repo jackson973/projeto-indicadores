@@ -16,6 +16,7 @@ const terceirosRouter = require("./routes/terceiros");
 const settingsRouter = require("./routes/settings");
 const storesRouter = require("./routes/stores");
 const anunciosRouter = require("./routes/anuncios");
+const productsRouter = require("./routes/products");
 const path = require("path");
 const { authenticate, requireAdmin } = require("./middleware/auth");
 
@@ -86,6 +87,7 @@ async function start() {
   app.use("/api/database", authenticate, requireAdmin, databaseRouter);
   app.use("/api/lojas", storesRouter);
   app.use("/api/anuncios", anunciosRouter);
+  app.use("/api/products", productsRouter);
   app.use("/api", authenticate, apiRouter);
 
   // Serve uploaded files (logos, etc)

@@ -68,6 +68,8 @@ import OFRastreio from "./components/OFRastreio";
 import SystemSettings from "./components/SystemSettings";
 import StoresManagement from "./components/StoresManagement";
 import AnunciosDashboard from "./components/AnunciosDashboard";
+import ProductsManagement from "./components/ProductsManagement";
+import ProductGroups from "./components/ProductGroups";
 import { getSaoPauloDate, getSaoPauloYear, getSaoPauloMonth } from "./utils/timezone";
 import {
   fetchSummary,
@@ -173,6 +175,12 @@ const PauseIcon = (props) => (
 const StoreIcon = (props) => (
   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
     <path d="M20 4H4v2l8 5 8-5V4zm0 4.5-8 5-8-5V20h16V8.5z" />
+  </svg>
+);
+
+const ProductIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M21 5l-9-4-9 4v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5zm-9 9H5.08c-.48-3.07.68-6.23 2.92-8.38V11h6V5.62c2.24 2.15 3.4 5.31 2.92 8.38H12v5z" />
   </svg>
 );
 
@@ -403,6 +411,21 @@ const App = () => {
       icon: <ChartBarIcon />,
       view: "financial-dashboard",
       show: true
+    },
+    {
+      label: "Produtos",
+      icon: <ProductIcon />,
+      show: user?.role === "admin",
+      submenu: [
+        {
+          label: "Gerenciar Produtos",
+          view: "products-management"
+        },
+        {
+          label: "Grupos de Produtos",
+          view: "product-groups"
+        }
+      ]
     },
     {
       label: "Terceiros",
@@ -770,7 +793,7 @@ const App = () => {
           </Alert>
         )}
 
-        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && activeView !== "terceiros-settlement" && activeView !== "terceiros-groups" && activeView !== "terceiros-prices" && activeView !== "terceiros-rastreio" && activeView !== "system-settings" && (
+        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && activeView !== "terceiros-settlement" && activeView !== "terceiros-groups" && activeView !== "terceiros-prices" && activeView !== "terceiros-rastreio" && activeView !== "system-settings" && activeView !== "products-management" && activeView !== "product-groups" && (
           <Center py={10}>
             <Box maxW="680px" w="full">
               <UploadForm onUpload={handleUpload} />
@@ -840,6 +863,14 @@ const App = () => {
 
         {activeView === "system-settings" && user?.role === "admin" && (
           <SystemSettings onLogoChange={() => loadSystemLogo()} />
+        )}
+
+        {activeView === "products-management" && user?.role === "admin" && (
+          <ProductsManagement />
+        )}
+
+        {activeView === "product-groups" && user?.role === "admin" && (
+          <ProductGroups />
         )}
 
         {hasData && activeView === "dashboard" && (

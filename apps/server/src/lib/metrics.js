@@ -287,13 +287,15 @@ const getAbc = (sales, { start, end, store }) => {
   const map = new Map();
 
   filtered.forEach((sale) => {
-    const adName = sale.adName || sale.product;
     const storeName = sale.store || "Todas";
-    const key = `${adName}|||${storeName}`;
+    const variation = sale.variation || sale.adName || sale.product;
+    const adName = sale.adName || sale.product;
+    const key = `${storeName}|||${variation}`;
     const current = map.get(key) || {
       product: adName,
       adName,
       store: storeName,
+      variation,
       total: 0,
       quantity: 0,
       image: "",
@@ -303,6 +305,10 @@ const getAbc = (sales, { start, end, store }) => {
     current.quantity += sale.quantity;
     if (!current.image && sale.image) {
       current.image = sale.image;
+    }
+    // Prefer the most recent adName (MAX equivalent)
+    if (adName && adName !== 'Geral') {
+      current.adName = adName;
     }
     const platformKey = sale.platform || "Não informado";
     current.platformTotals[platformKey] = (current.platformTotals[platformKey] || 0) + sale.total;
@@ -336,11 +342,19 @@ const getAbc = (sales, { start, end, store }) => {
   });
 };
 
-const getAbcDetails = (sales, { start, end, store, adName }) => {
-  if (!adName) return { adName: "", variations: [], sizes: [] };
+const getAbcDetails = (sales, { start, end, store, adName, variation }) => {
+  if (!adName && !variation) return { adName: "", variations: [], sizes: [] };
   const filtered = filterSales(sales, { start, end, store }).filter(
-    (sale) => (sale.adName || sale.product || "") === adName
-      && (!store || sale.store === store)
+    (sale) => {
+      if (variation && store) {
+        // Match by store|||variation key
+        const saleVariation = sale.variation || sale.adName || sale.product;
+        return saleVariation === variation && sale.store === store;
+      }
+      // Fallback: match by adName + store
+      return (sale.adName || sale.product || "") === adName
+        && (!store || sale.store === store);
+    }
   );
 
   const variationMap = new Map();

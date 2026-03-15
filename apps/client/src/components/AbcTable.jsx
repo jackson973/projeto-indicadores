@@ -76,7 +76,9 @@ const AbcTable = ({ data, filters, autoplay = true }) => {
 
   const toggleItem = async (item) => {
     const adName = item.adName || item.product;
-    const itemKey = item.store ? `${adName}|||${item.store}` : adName;
+    const variation = item.variation || adName;
+    const storeName = item.store || "Todas";
+    const itemKey = `${storeName}|||${variation}`;
     const isOpen = expanded === itemKey;
     const next = isOpen ? "" : itemKey;
     setExpanded(next);
@@ -84,6 +86,7 @@ const AbcTable = ({ data, filters, autoplay = true }) => {
       setLoading((current) => ({ ...current, [itemKey]: true }));
       const params = new URLSearchParams(paramsBase);
       params.set("adName", adName);
+      params.set("variation", variation);
       if (item.store) params.set("store", item.store);
       try {
         const payload = await fetchAbcDetails(params.toString());
@@ -215,7 +218,7 @@ const AbcTable = ({ data, filters, autoplay = true }) => {
     <VStack align="stretch" spacing={3}>
       {pageItems.map((item) => {
         const adName = item.adName || item.product;
-        const itemKey = item.store ? `${adName}|||${item.store}` : adName;
+        const itemKey = `${item.store || "Todas"}|||${item.variation || adName}`;
         const isOpen = expanded === itemKey;
         const platformMeta = getPlatformMeta(item.platformLabel || "");
 
@@ -308,7 +311,7 @@ const AbcTable = ({ data, filters, autoplay = true }) => {
         <Tbody>
           {pageItems.map((item) => {
             const adName = item.adName || item.product;
-            const itemKey = item.store ? `${adName}|||${item.store}` : adName;
+            const itemKey = `${item.store || "Todas"}|||${item.variation || adName}`;
             const isOpen = expanded === itemKey;
             const platformMeta = getPlatformMeta(item.platformLabel || "");
 

@@ -914,3 +914,104 @@ export const fetchOFRastreio = async (ofNumero) => {
   const response = await authFetch(`/api/terceiros/rastreio-of/${encodeURIComponent(ofNumero)}`);
   return handleResponse(response);
 };
+
+// ── Products Management ──────────────────────────────────────────────────────
+
+export const fetchProducts = async ({ codigo, nome, lojas, page, limit } = {}) => {
+  const params = new URLSearchParams();
+  if (codigo) params.set('codigo', codigo);
+  if (nome) params.set('nome', nome);
+  if (lojas && lojas.length > 0) params.set('lojas', lojas.join(','));
+  if (page) params.set('page', page);
+  if (limit) params.set('limit', limit);
+  const response = await authFetch(`/api/products?${params.toString()}`);
+  return handleResponse(response);
+};
+
+export const fetchProductStores = async () => {
+  const response = await authFetch('/api/products/stores');
+  return handleResponse(response);
+};
+
+export const updateProductKitQty = async (storeVariationKey, kitQty, nome) => {
+  const response = await authFetch('/api/products/kit-qty', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store_variation_key: storeVariationKey, kit_qty: kitQty, nome }),
+  });
+  return handleResponse(response);
+};
+
+// ── Product Groups ───────────────────────────────────────────────────────────
+
+export const fetchProductGroups = async () => {
+  const response = await authFetch('/api/products/groups');
+  return handleResponse(response);
+};
+
+export const createProductGroup = async (name) => {
+  const response = await authFetch('/api/products/groups', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  return handleResponse(response);
+};
+
+export const updateProductGroup = async (id, name) => {
+  const response = await authFetch(`/api/products/groups/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  return handleResponse(response);
+};
+
+export const deleteProductGroup = async (id) => {
+  const response = await authFetch(`/api/products/groups/${id}`, { method: 'DELETE' });
+  return handleResponse(response);
+};
+
+export const fetchProductGroupItems = async (groupId) => {
+  const response = await authFetch(`/api/products/groups/${groupId}/items`);
+  return handleResponse(response);
+};
+
+export const addProductGroupItem = async (groupId, adName) => {
+  const response = await authFetch(`/api/products/groups/${groupId}/items`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ad_name: adName }),
+  });
+  return handleResponse(response);
+};
+
+export const addProductGroupItemsBatch = async (groupId, adNames) => {
+  const response = await authFetch(`/api/products/groups/${groupId}/items/batch`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ad_names: adNames }),
+  });
+  return handleResponse(response);
+};
+
+export const removeProductGroupItem = async (groupId, adName) => {
+  const response = await authFetch(`/api/products/groups/${groupId}/items/${encodeURIComponent(adName)}`, {
+    method: 'DELETE',
+  });
+  return handleResponse(response);
+};
+
+export const removeProductGroupItemsBatch = async (groupId, adNames) => {
+  const response = await authFetch(`/api/products/groups/${groupId}/items/batch`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ad_names: adNames }),
+  });
+  return handleResponse(response);
+};
+
+export const fetchAllAdsWithGroup = async () => {
+  const response = await authFetch('/api/products/ads');
+  return handleResponse(response);
+};
