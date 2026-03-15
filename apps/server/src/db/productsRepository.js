@@ -254,13 +254,19 @@ async function getAllAdsWithGroup() {
       s.store_variation_key,
       s.ad_name,
       s.loja,
+      s.thumbnail,
+      s.platform,
+      s.sku,
       gi.group_id,
       g.name AS group_name
     FROM (
       SELECT
         ${saKeyExpr} AS store_variation_key,
         TRIM(sa.ad_name) AS ad_name,
-        COALESCE(MAX(st.name), sa.store) AS loja
+        COALESCE(MAX(st.name), sa.store) AS loja,
+        MAX(CASE WHEN sa.image IS NOT NULL AND TRIM(sa.image) != '' THEN sa.image END) AS thumbnail,
+        MAX(sa.platform) AS platform,
+        MAX(CASE WHEN sa.sku IS NOT NULL AND TRIM(sa.sku) != '' THEN sa.sku END) AS sku
       FROM sales sa
       LEFT JOIN stores st ON st.id = sa.cod_store
       WHERE sa.ad_name IS NOT NULL AND TRIM(sa.ad_name) != '' AND sa.ad_name != 'Geral'

@@ -11,7 +11,9 @@ import {
   InputLeftElement,
   Button,
   IconButton,
+  Image,
   Badge,
+  Link,
   Spinner,
   Center,
   Modal,
@@ -34,7 +36,8 @@ import {
   DeleteIcon,
   CheckIcon,
   CloseIcon,
-  SearchIcon
+  SearchIcon,
+  ExternalLinkIcon
 } from "@chakra-ui/icons";
 import SearchableSelect from "./SearchableSelect";
 import {
@@ -138,6 +141,27 @@ const ProductGroups = () => {
   const getAdLoja = (key) => {
     const a = adsMap.get(key);
     return a ? a.loja : null;
+  };
+
+  const getAdThumbnail = (key) => {
+    const a = adsMap.get(key);
+    return a ? a.thumbnail : null;
+  };
+
+  const getMarketplaceUrl = (ad) => {
+    const platform = (ad.platform || "").toLowerCase();
+    const name = ad.ad_name || "";
+    if (platform.includes("shopee")) {
+      const slug = name.replace(/\s+/g, "-").replace(/[^\w-]/g, "");
+      const sku = ad.sku || "";
+      // Shopee SKU numérico longo = item ID
+      if (/^\d{10,}$/.test(sku)) return `https://shopee.com.br/${slug}-i.${sku}`;
+      return `https://shopee.com.br/search?keyword=${encodeURIComponent(name)}`;
+    }
+    if (platform.includes("mercado")) {
+      return `https://www.mercadolivre.com.br/jm/search?as_word=${encodeURIComponent(name)}`;
+    }
+    return null;
   };
 
   const filteredGroupItems = useMemo(() => {
@@ -413,20 +437,31 @@ const ProductGroups = () => {
                 </Center>
               ) : (
                 <VStack spacing={0} align="stretch" maxH="500px" overflowY="auto">
-                  {ungroupedAds.map((a) => (
-                    <Flex key={a.store_variation_key} align="center" px={3} py={2}
-                      borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }} _hover={{ bg: hoverBg }}>
-                      <Checkbox size="sm" mr={2} isChecked={selectedUngrouped.has(a.store_variation_key)}
-                        onChange={() => toggleItem(a.store_variation_key, selectedUngrouped, setSelectedUngrouped)} />
-                      <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.ad_name}</Text>
-                      {a.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{a.loja}</Tag>}
-                      <IconButton
-                        icon={assigningAd === a.store_variation_key ? <Spinner size="xs" /> : <AddIcon />}
-                        size="xs" colorScheme="blue" variant="ghost" aria-label="Adicionar ao grupo" ml={2} flexShrink={0}
-                        isDisabled={!assignTargetGroupId || assigningAd === a.store_variation_key}
-                        onClick={() => handleAssignToGroup(a)} />
-                    </Flex>
-                  ))}
+                  {ungroupedAds.map((a) => {
+                    const url = getMarketplaceUrl(a);
+                    return (
+                      <Flex key={a.store_variation_key} align="center" px={3} py={2}
+                        borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }} _hover={{ bg: hoverBg }}>
+                        <Checkbox size="sm" mr={2} isChecked={selectedUngrouped.has(a.store_variation_key)}
+                          onChange={() => toggleItem(a.store_variation_key, selectedUngrouped, setSelectedUngrouped)} />
+                        {a.thumbnail && (
+                          <Image src={a.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
+                        )}
+                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.ad_name}</Text>
+                        {url && (
+                          <Link href={url} isExternal ml={1} flexShrink={0}>
+                            <ExternalLinkIcon boxSize={3} color="gray.400" />
+                          </Link>
+                        )}
+                        {a.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{a.loja}</Tag>}
+                        <IconButton
+                          icon={assigningAd === a.store_variation_key ? <Spinner size="xs" /> : <AddIcon />}
+                          size="xs" colorScheme="blue" variant="ghost" aria-label="Adicionar ao grupo" ml={2} flexShrink={0}
+                          isDisabled={!assignTargetGroupId || assigningAd === a.store_variation_key}
+                          onClick={() => handleAssignToGroup(a)} />
+                      </Flex>
+                    );
+                  })}
                 </VStack>
               )}
             </Box>
@@ -469,7 +504,15 @@ const ProductGroups = () => {
                         _hover={{ bg: searchResultHover }} borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }}>
                         <Checkbox size="sm" mr={2} isChecked={selectedSearchResults.has(ad.store_variation_key)}
                           onChange={() => toggleItem(ad.store_variation_key, selectedSearchResults, setSelectedSearchResults)} />
+                        {ad.thumbnail && (
+                          <Image src={ad.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
+                        )}
                         <Text fontSize="sm" flex={1} minW={0} isTruncated>{ad.ad_name}</Text>
+                        {(() => { const url = getMarketplaceUrl(ad); return url ? (
+                          <Link href={url} isExternal onClick={(e) => e.stopPropagation()} ml={1} flexShrink={0}>
+                            <ExternalLinkIcon boxSize={3} color="gray.400" />
+                          </Link>
+                        ) : null; })()}
                         {ad.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{ad.loja}</Tag>}
                         {ad.group_name && (
                           <Badge colorScheme="orange" fontSize="2xs" ml={2} flexShrink={0}>{ad.group_name}</Badge>
@@ -526,19 +569,32 @@ const ProductGroups = () => {
                 </Center>
               ) : (
                 <VStack spacing={0} align="stretch" maxH="500px" overflowY="auto">
-                  {filteredGroupItems.map((i) => (
-                    <Flex key={i.ad_name} align="center" px={3} py={2}
-                      borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }} _hover={{ bg: hoverBg }}>
-                      <Checkbox size="sm" mr={2} isChecked={selectedItems.has(i.ad_name)}
-                        onChange={() => toggleItem(i.ad_name, selectedItems, setSelectedItems)} />
-                      <Text fontSize="sm" flex={1} minW={0} isTruncated>{getAdDisplay(i.ad_name)}</Text>
-                      {getAdLoja(i.ad_name) && (
-                        <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{getAdLoja(i.ad_name)}</Tag>
-                      )}
-                      <IconButton icon={<CloseIcon />} size="xs" variant="ghost" colorScheme="red"
-                        aria-label="Remover" ml={2} flexShrink={0} onClick={() => handleRemoveItem(i.ad_name)} />
-                    </Flex>
-                  ))}
+                  {filteredGroupItems.map((i) => {
+                    const adInfo = adsMap.get(i.ad_name);
+                    const thumb = adInfo?.thumbnail;
+                    const url = adInfo ? getMarketplaceUrl(adInfo) : null;
+                    return (
+                      <Flex key={i.ad_name} align="center" px={3} py={2}
+                        borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }} _hover={{ bg: hoverBg }}>
+                        <Checkbox size="sm" mr={2} isChecked={selectedItems.has(i.ad_name)}
+                          onChange={() => toggleItem(i.ad_name, selectedItems, setSelectedItems)} />
+                        {thumb && (
+                          <Image src={thumb} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
+                        )}
+                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{getAdDisplay(i.ad_name)}</Text>
+                        {url && (
+                          <Link href={url} isExternal onClick={(e) => e.stopPropagation()} ml={1} flexShrink={0}>
+                            <ExternalLinkIcon boxSize={3} color="gray.400" />
+                          </Link>
+                        )}
+                        {getAdLoja(i.ad_name) && (
+                          <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{getAdLoja(i.ad_name)}</Tag>
+                        )}
+                        <IconButton icon={<CloseIcon />} size="xs" variant="ghost" colorScheme="red"
+                          aria-label="Remover" ml={2} flexShrink={0} onClick={() => handleRemoveItem(i.ad_name)} />
+                      </Flex>
+                    );
+                  })}
                 </VStack>
               )}
             </Box>
