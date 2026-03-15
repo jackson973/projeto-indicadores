@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Button,
@@ -38,11 +38,12 @@ import {
   useToast,
   useBreakpointValue,
 } from "@chakra-ui/react";
-import { SearchIcon, CheckIcon, ChevronDownIcon, SmallCloseIcon } from "@chakra-ui/icons";
+import { SearchIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, SmallCloseIcon } from "@chakra-ui/icons";
 import {
   fetchProducts,
   fetchProductStores,
   updateProductKitQty,
+  fetchProductVariations,
 } from "../api";
 
 const ProductsManagement = () => {
@@ -61,11 +62,20 @@ const ProductsManagement = () => {
   const [editKitQty, setEditKitQty] = useState(1);
   const [savingKit, setSavingKit] = useState(false);
 
+  // accordion / variations state
+  const [expandedKey, setExpandedKey] = useState(null);
+  const [variations, setVariations] = useState([]);
+  const [loadingVariations, setLoadingVariations] = useState(false);
+  const [editingVarPrefix, setEditingVarPrefix] = useState(null);
+  const [editVarKitQty, setEditVarKitQty] = useState(1);
+  const [savingVarKit, setSavingVarKit] = useState(false);
+
   const toast = useToast();
   const panelBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
   const hoverBg = useColorModeValue("gray.50", "gray.700");
   const menuBg = useColorModeValue("white", "gray.800");
+  const varRowBg = useColorModeValue("gray.50", "gray.750");
   const isMobile = useBreakpointValue({ base: true, md: false });
   const LIMIT = 50;
 
@@ -123,6 +133,50 @@ const ProductsManagement = () => {
       toast({ title: "Erro ao salvar", description: err.message, status: "error", duration: 3000 });
     } finally {
       setSavingKit(false);
+    }
+  };
+
+  const toggleAccordion = async (product) => {
+    const key = product.store_variation_key;
+    if (expandedKey === key) {
+      setExpandedKey(null);
+      setVariations([]);
+      return;
+    }
+    setExpandedKey(key);
+    setLoadingVariations(true);
+    setEditingVarPrefix(null);
+    try {
+      const storeKey = key.split("|||")[0];
+      const adName = key.split("|||").slice(1).join("|||");
+      const data = await fetchProductVariations(storeKey, adName);
+      setVariations(data);
+    } catch {
+      setVariations([]);
+    } finally {
+      setLoadingVariations(false);
+    }
+  };
+
+  const startEditVarKit = (prefix, currentKitQty) => {
+    setEditingVarPrefix(prefix);
+    setEditVarKitQty(currentKitQty || 1);
+  };
+
+  const saveVarKitQty = async (product, prefix) => {
+    setSavingVarKit(true);
+    try {
+      const varKey = `${product.store_variation_key}|||${prefix}`;
+      await updateProductKitQty(varKey, editVarKitQty, prefix);
+      setVariations((prev) =>
+        prev.map((v) => (v.prefix === prefix ? { ...v, kit_qty: editVarKitQty } : v))
+      );
+      setEditingVarPrefix(null);
+      toast({ title: "Qtd Kit variação atualizada", status: "success", duration: 2000 });
+    } catch (err) {
+      toast({ title: "Erro ao salvar", description: err.message, status: "error", duration: 3000 });
+    } finally {
+      setSavingVarKit(false);
     }
   };
 
@@ -197,39 +251,87 @@ const ProductsManagement = () => {
           </Box>
         ) : isMobile ? (
           <VStack spacing={3} align="stretch">
-            {products.map((p) => (
-              <Box key={p.store_variation_key} bg={panelBg} p={3} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
-                <Flex gap={3}>
-                  {p.thumbnail && (
-                    <Image src={p.thumbnail} alt="" boxSize="50px" borderRadius="md" objectFit="cover" flexShrink={0} />
-                  )}
-                  <Box flex={1} minW={0}>
-                    <Text fontSize="sm" fontWeight="bold" noOfLines={2}>{p.nome}</Text>
-                    {p.loja && (
-                      <Tag size="sm" fontSize="10px" variant="subtle" mt={1}>{p.loja}</Tag>
+            {products.map((p) => {
+              const isExpanded = expandedKey === p.store_variation_key;
+              const hasVariations = isExpanded && variations.length > 0;
+              return (
+                <Box key={p.store_variation_key} bg={panelBg} p={3} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
+                  <Flex gap={3}>
+                    {p.thumbnail && (
+                      <Image src={p.thumbnail} alt="" boxSize="50px" borderRadius="md" objectFit="cover" flexShrink={0} />
                     )}
-                    <Flex mt={2} align="center" gap={2}>
-                      <Text fontSize="xs" fontWeight="medium">Qtd Kit:</Text>
-                      {editingKey === p.store_variation_key ? (
-                        <HStack spacing={1}>
-                          <NumberInput size="xs" min={1} max={999} w="70px" value={editKitQty}
-                            onChange={(_, val) => setEditKitQty(val || 1)}>
-                            <NumberInputField />
-                            <NumberInputStepper><NumberIncrementStepper /><NumberDecrementStepper /></NumberInputStepper>
-                          </NumberInput>
-                          <IconButton size="xs" icon={<CheckIcon />} colorScheme="green"
-                            isLoading={savingKit} onClick={() => saveKitQty(p)} aria-label="Salvar" />
-                        </HStack>
-                      ) : (
-                        <Badge colorScheme={p.kit_qty > 1 ? "purple" : "gray"} cursor="pointer" onClick={() => startEditKit(p)}>
-                          {p.kit_qty || 1}
-                        </Badge>
+                    <Box flex={1} minW={0}>
+                      <Flex align="center" gap={1}>
+                        <IconButton
+                          size="xs" variant="ghost" aria-label="Expandir variações"
+                          icon={isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                          onClick={() => toggleAccordion(p)}
+                        />
+                        <Text fontSize="sm" fontWeight="bold" noOfLines={2}>{p.nome}</Text>
+                      </Flex>
+                      {p.loja && (
+                        <Tag size="sm" fontSize="10px" variant="subtle" mt={1}>{p.loja}</Tag>
                       )}
-                    </Flex>
-                  </Box>
-                </Flex>
-              </Box>
-            ))}
+                      {(!isExpanded || !hasVariations) && (
+                        <Flex mt={2} align="center" gap={2}>
+                          <Text fontSize="xs" fontWeight="medium">Qtd Kit:</Text>
+                          {editingKey === p.store_variation_key ? (
+                            <HStack spacing={1}>
+                              <NumberInput size="xs" min={1} max={999} w="70px" value={editKitQty}
+                                onChange={(_, val) => setEditKitQty(val || 1)}>
+                                <NumberInputField />
+                                <NumberInputStepper><NumberIncrementStepper /><NumberDecrementStepper /></NumberInputStepper>
+                              </NumberInput>
+                              <IconButton size="xs" icon={<CheckIcon />} colorScheme="green"
+                                isLoading={savingKit} onClick={() => saveKitQty(p)} aria-label="Salvar" />
+                            </HStack>
+                          ) : (
+                            <Badge colorScheme={p.kit_qty > 1 ? "purple" : "gray"} cursor="pointer" onClick={() => startEditKit(p)}>
+                              {p.kit_qty || 1}
+                            </Badge>
+                          )}
+                        </Flex>
+                      )}
+                    </Box>
+                  </Flex>
+                  {isExpanded && (
+                    <Box mt={2} ml={8}>
+                      {loadingVariations ? (
+                        <Flex justify="center" py={2}><Spinner size="sm" /></Flex>
+                      ) : hasVariations ? (
+                        <VStack spacing={2} align="stretch">
+                          {variations.map((v) => (
+                            <Flex key={v.prefix} align="center" justify="space-between" py={1} px={2} bg={varRowBg} borderRadius="md">
+                              <Text fontSize="xs" color="gray.600">
+                                {v.prefix} <Text as="span" color="gray.400">({v.count})</Text>
+                              </Text>
+                              {editingVarPrefix === v.prefix ? (
+                                <HStack spacing={1}>
+                                  <NumberInput size="xs" min={1} max={999} w="65px" value={editVarKitQty}
+                                    onChange={(_, val) => setEditVarKitQty(val || 1)}>
+                                    <NumberInputField textAlign="center" />
+                                    <NumberInputStepper><NumberIncrementStepper /><NumberDecrementStepper /></NumberInputStepper>
+                                  </NumberInput>
+                                  <IconButton size="xs" icon={<CheckIcon />} colorScheme="green"
+                                    isLoading={savingVarKit} onClick={() => saveVarKitQty(p, v.prefix)} aria-label="Salvar" />
+                                </HStack>
+                              ) : (
+                                <Badge colorScheme={v.kit_qty > 1 ? "purple" : "gray"} cursor="pointer"
+                                  onClick={() => startEditVarKit(v.prefix, v.kit_qty)} fontSize="xs">
+                                  {v.kit_qty || 1}
+                                </Badge>
+                              )}
+                            </Flex>
+                          ))}
+                        </VStack>
+                      ) : (
+                        <Text fontSize="xs" color="gray.400" textAlign="center">Sem sub-variações</Text>
+                      )}
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
           </VStack>
         ) : (
           <Box bg={panelBg} borderRadius="md" borderWidth="1px" borderColor={borderColor} overflowX="auto">
@@ -243,39 +345,91 @@ const ProductsManagement = () => {
                 </Tr>
               </Thead>
               <Tbody>
-                {products.map((p) => (
-                  <Tr key={p.store_variation_key} _hover={{ bg: hoverBg }}>
-                    <Td p={1}>
-                      {p.thumbnail ? (
-                        <Image src={p.thumbnail} alt="" boxSize="32px" borderRadius="4px" objectFit="contain" />
-                      ) : (
-                        <Box boxSize="32px" borderRadius="4px" bg="gray.100" />
+                {products.map((p) => {
+                  const isExpanded = expandedKey === p.store_variation_key;
+                  const hasVariations = isExpanded && variations.length > 0;
+                  return (
+                    <React.Fragment key={p.store_variation_key}>
+                      <Tr _hover={{ bg: hoverBg }}>
+                        <Td p={1}>
+                          {p.thumbnail ? (
+                            <Image src={p.thumbnail} alt="" boxSize="32px" borderRadius="4px" objectFit="contain" />
+                          ) : (
+                            <Box boxSize="32px" borderRadius="4px" bg="gray.100" />
+                          )}
+                        </Td>
+                        <Td fontSize="sm" isTruncated title={p.nome}>
+                          <Flex align="center" gap={1}>
+                            <IconButton
+                              size="xs" variant="ghost" aria-label="Expandir variações"
+                              icon={isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+                              onClick={() => toggleAccordion(p)}
+                            />
+                            {p.nome}
+                          </Flex>
+                        </Td>
+                        <Td>
+                          {p.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue">{p.loja}</Tag>}
+                        </Td>
+                        <Td textAlign="center">
+                          {(!isExpanded || !hasVariations) && (
+                            editingKey === p.store_variation_key ? (
+                              <HStack spacing={1} justify="center">
+                                <NumberInput size="xs" min={1} max={999} w="70px" value={editKitQty}
+                                  onChange={(_, val) => setEditKitQty(val || 1)}>
+                                  <NumberInputField textAlign="center" />
+                                  <NumberInputStepper><NumberIncrementStepper /><NumberDecrementStepper /></NumberInputStepper>
+                                </NumberInput>
+                                <IconButton size="xs" icon={<CheckIcon />} colorScheme="green"
+                                  isLoading={savingKit} onClick={() => saveKitQty(p)} aria-label="Salvar" />
+                              </HStack>
+                            ) : (
+                              <Badge colorScheme={p.kit_qty > 1 ? "purple" : "gray"} cursor="pointer"
+                                onClick={() => startEditKit(p)} px={3} py={1} fontSize="sm">
+                                {p.kit_qty || 1}
+                              </Badge>
+                            )
+                          )}
+                        </Td>
+                      </Tr>
+                      {isExpanded && (
+                        loadingVariations ? (
+                          <Tr><Td colSpan={4} textAlign="center" py={3}><Spinner size="sm" /></Td></Tr>
+                        ) : hasVariations ? (
+                          variations.map((v) => (
+                            <Tr key={v.prefix} bg={varRowBg}>
+                              <Td p={1} />
+                              <Td fontSize="xs" pl={12} color="gray.600">
+                                {v.prefix} <Text as="span" color="gray.400">({v.count} vendas)</Text>
+                              </Td>
+                              <Td />
+                              <Td textAlign="center">
+                                {editingVarPrefix === v.prefix ? (
+                                  <HStack spacing={1} justify="center">
+                                    <NumberInput size="xs" min={1} max={999} w="70px" value={editVarKitQty}
+                                      onChange={(_, val) => setEditVarKitQty(val || 1)}>
+                                      <NumberInputField textAlign="center" />
+                                      <NumberInputStepper><NumberIncrementStepper /><NumberDecrementStepper /></NumberInputStepper>
+                                    </NumberInput>
+                                    <IconButton size="xs" icon={<CheckIcon />} colorScheme="green"
+                                      isLoading={savingVarKit} onClick={() => saveVarKitQty(p, v.prefix)} aria-label="Salvar" />
+                                  </HStack>
+                                ) : (
+                                  <Badge colorScheme={v.kit_qty > 1 ? "purple" : "gray"} cursor="pointer"
+                                    onClick={() => startEditVarKit(v.prefix, v.kit_qty)} px={3} py={1} fontSize="sm">
+                                    {v.kit_qty || 1}
+                                  </Badge>
+                                )}
+                              </Td>
+                            </Tr>
+                          ))
+                        ) : (
+                          <Tr><Td colSpan={4} textAlign="center" py={2}><Text fontSize="xs" color="gray.400">Sem sub-variações</Text></Td></Tr>
+                        )
                       )}
-                    </Td>
-                    <Td fontSize="sm" isTruncated title={p.nome}>{p.nome}</Td>
-                    <Td>
-                      {p.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue">{p.loja}</Tag>}
-                    </Td>
-                    <Td textAlign="center">
-                      {editingKey === p.store_variation_key ? (
-                        <HStack spacing={1} justify="center">
-                          <NumberInput size="xs" min={1} max={999} w="70px" value={editKitQty}
-                            onChange={(_, val) => setEditKitQty(val || 1)}>
-                            <NumberInputField textAlign="center" />
-                            <NumberInputStepper><NumberIncrementStepper /><NumberDecrementStepper /></NumberInputStepper>
-                          </NumberInput>
-                          <IconButton size="xs" icon={<CheckIcon />} colorScheme="green"
-                            isLoading={savingKit} onClick={() => saveKitQty(p)} aria-label="Salvar" />
-                        </HStack>
-                      ) : (
-                        <Badge colorScheme={p.kit_qty > 1 ? "purple" : "gray"} cursor="pointer"
-                          onClick={() => startEditKit(p)} px={3} py={1} fontSize="sm">
-                          {p.kit_qty || 1}
-                        </Badge>
-                      )}
-                    </Td>
-                  </Tr>
-                ))}
+                    </React.Fragment>
+                  );
+                })}
               </Tbody>
             </Table>
           </Box>

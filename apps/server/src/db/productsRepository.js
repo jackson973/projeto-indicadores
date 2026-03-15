@@ -101,7 +101,55 @@ async function updateKitQty(storeVariationKey, kitQty, meta = {}) {
 }
 
 /**
- * Retorna lojas distintas que possuem vendas com cod_store preenchido.
+ * Retorna os prefixos de variação distintos de um produto (parte antes da vírgula).
+ * Ex: "Kit com 5 Shorts,10 anos" → "Kit com 5 Shorts"
+ * Se não tem vírgula, retorna a variação inteira.
+ * Retorna [] se todas as variações forem iguais (sem sub-variações).
+ */
+async function getVariationPrefixes(storeKey, adName) {
+  const result = await db.query(
+    `SELECT
+       TRIM(SPLIT_PART(s.variation, ',', 1)) AS prefix,
+       COUNT(*)::int AS qty
+     FROM sales s
+     WHERE COALESCE(s.cod_store::text, s.store) = $1
+       AND TRIM(s.ad_name) = $2
+       AND s.variation IS NOT NULL
+       AND TRIM(s.variation) != ''
+     GROUP BY TRIM(SPLIT_PART(s.variation, ',', 1))
+     ORDER BY prefix`,
+    [storeKey, adName]
+  );
+
+  // Se só tem 1 prefixo, não há sub-variações relevantes
+  if (result.rows.length <= 1) return [];
+
+  // Buscar kit_qty salvo para cada prefixo
+  const prefixes = result.rows.map((r) => r.prefix);
+  const key = `${storeKey}${KEY_SEP}${adName}`;
+
+  const pricesResult = await db.query(
+    `SELECT store_variation_key, kit_qty FROM products
+     WHERE store_variation_key = ANY($1::text[])`,
+    [prefixes.map((p) => `${key}${KEY_SEP}${p}`)]
+  );
+
+  const kitMap = new Map();
+  pricesResult.rows.forEach((r) => {
+    const parts = r.store_variation_key.split(KEY_SEP);
+    const pfx = parts.slice(2).join(KEY_SEP);
+    kitMap.set(pfx, r.kit_qty);
+  });
+
+  return result.rows.map((r) => ({
+    prefix: r.prefix,
+    count: r.qty,
+    kit_qty: kitMap.get(r.prefix) || 1,
+  }));
+}
+
+/**
+ * Retorna lojas distintas que possuem vendas.
  */
 async function getDistinctStores() {
   const result = await db.query(
@@ -226,6 +274,7 @@ async function getAllAdsWithGroup() {
 module.exports = {
   listProducts,
   updateKitQty,
+  getVariationPrefixes,
   getDistinctStores,
   getProductGroups,
   createProductGroup,

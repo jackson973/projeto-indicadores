@@ -51,6 +51,19 @@ router.put('/kit-qty', async (req, res) => {
   }
 });
 
+// ── GET /api/products/variations — get variation prefixes for a product ───────
+router.get('/variations', async (req, res) => {
+  try {
+    const { store_key, ad_name } = req.query;
+    if (!store_key || !ad_name) return res.status(400).json({ message: 'store_key e ad_name são obrigatórios.' });
+    const prefixes = await productsRepo.getVariationPrefixes(store_key, ad_name);
+    res.json(prefixes);
+  } catch (err) {
+    console.error('[Products] variations error:', err);
+    res.status(500).json({ message: 'Erro ao buscar variações.' });
+  }
+});
+
 // ══════════════════════════════════════════════════════════════════════════════
 // Product Groups
 // ══════════════════════════════════════════════════════════════════════════════

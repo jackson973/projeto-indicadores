@@ -942,6 +942,12 @@ export const updateProductKitQty = async (storeVariationKey, kitQty, nome) => {
   return handleResponse(response);
 };
 
+export const fetchProductVariations = async (storeKey, adName) => {
+  const params = new URLSearchParams({ store_key: storeKey, ad_name: adName });
+  const response = await authFetch(`/api/products/variations?${params.toString()}`);
+  return handleResponse(response);
+};
+
 // ── Product Groups ───────────────────────────────────────────────────────────
 
 export const fetchProductGroups = async () => {
