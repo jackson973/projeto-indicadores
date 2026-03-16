@@ -334,27 +334,27 @@ const ProductDashboard = () => {
               </Box>
             ) : (
               /* Desktop: table */
-              <Table size="sm" variant="simple">
+              <Table size="sm" variant="simple" sx={{ tableLayout: "fixed", width: "100%" }}>
                 <Thead>
                   <Tr>
                     <Th w="36px" p={1}></Th>
-                    <Th cursor="pointer" onClick={() => handleSort("ad_name")} maxW="300px">
+                    <Th cursor="pointer" onClick={() => handleSort("ad_name")}>
                       Produto <SortIcon field="ad_name" />
                     </Th>
-                    <Th cursor="pointer" onClick={() => handleSort("loja")}>Loja</Th>
-                    <Th>Grupo</Th>
-                    <Th textAlign="right" cursor="pointer" onClick={() => handleSort("raw_quantity")} whiteSpace="nowrap">
-                      Qtd Venda <SortIcon field="raw_quantity" />
+                    <Th w="13%" cursor="pointer" onClick={() => handleSort("loja")}>Loja</Th>
+                    <Th w="10%">Grupo</Th>
+                    <Th w="7%" textAlign="right" cursor="pointer" onClick={() => handleSort("raw_quantity")} px={1} fontSize="xs">
+                      Vendas <SortIcon field="raw_quantity" />
                     </Th>
-                    <Th textAlign="center" whiteSpace="nowrap">Kit</Th>
-                    <Th textAlign="right" cursor="pointer" onClick={() => handleSort("adjusted_quantity")} whiteSpace="nowrap">
-                      Qtd Ajust. <SortIcon field="adjusted_quantity" />
+                    <Th w="5%" textAlign="center" px={1} fontSize="xs">Kit</Th>
+                    <Th w="7%" textAlign="right" cursor="pointer" onClick={() => handleSort("adjusted_quantity")} px={1} fontSize="xs">
+                      Ajust. <SortIcon field="adjusted_quantity" />
                     </Th>
-                    <Th textAlign="right" cursor="pointer" onClick={() => handleSort("revenue")} whiteSpace="nowrap">
+                    <Th w="9%" textAlign="right" cursor="pointer" onClick={() => handleSort("revenue")} px={1} fontSize="xs">
                       Receita <SortIcon field="revenue" />
                     </Th>
-                    <Th textAlign="right" cursor="pointer" onClick={() => handleSort("orders")} whiteSpace="nowrap">
-                      Pedidos <SortIcon field="orders" />
+                    <Th w="6%" textAlign="right" cursor="pointer" onClick={() => handleSort("orders")} px={1} fontSize="xs">
+                      Ped. <SortIcon field="orders" />
                     </Th>
                   </Tr>
                 </Thead>
@@ -368,16 +368,16 @@ const ProductDashboard = () => {
                           <Box boxSize="28px" borderRadius="4px" bg="gray.100" />
                         )}
                       </Td>
-                      <Td fontSize="xs" maxW="300px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={p.ad_name}>{p.ad_name}</Td>
-                      <Td>{p.loja && <Tag size="sm" fontSize="9px" variant="subtle" colorScheme="blue" whiteSpace="nowrap">{p.loja}</Tag>}</Td>
-                      <Td>{p.group_name && <Tag size="sm" fontSize="9px" variant="subtle" colorScheme="purple" whiteSpace="nowrap">{p.group_name}</Tag>}</Td>
-                      <Td textAlign="right" fontSize="xs">{fmt(p.raw_quantity)}</Td>
-                      <Td textAlign="center" fontSize="xs" fontWeight="bold" color={p.kit_qty > 1 ? "purple.500" : "gray.500"}>
+                      <Td fontSize="xs" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={p.ad_name}>{p.ad_name}</Td>
+                      <Td px={1}>{p.loja && <Tag size="sm" fontSize="8px" variant="subtle" colorScheme="blue" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis" maxW="100%">{p.loja}</Tag>}</Td>
+                      <Td px={1}>{p.group_name && <Tag size="sm" fontSize="8px" variant="subtle" colorScheme="purple" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis" maxW="100%">{p.group_name}</Tag>}</Td>
+                      <Td textAlign="right" fontSize="xs" px={1}>{fmt(p.raw_quantity)}</Td>
+                      <Td textAlign="center" fontSize="xs" fontWeight="bold" color={p.kit_qty > 1 ? "purple.500" : "gray.500"} px={1}>
                         x{p.kit_qty}
                       </Td>
-                      <Td textAlign="right" fontSize="sm" fontWeight="bold" color="blue.500">{fmt(p.adjusted_quantity)}</Td>
-                      <Td textAlign="right" fontSize="xs" whiteSpace="nowrap">{fmtCur(p.revenue)}</Td>
-                      <Td textAlign="right" fontSize="xs">{p.orders}</Td>
+                      <Td textAlign="right" fontSize="sm" fontWeight="bold" color="blue.500" px={1}>{fmt(p.adjusted_quantity)}</Td>
+                      <Td textAlign="right" fontSize="xs" whiteSpace="nowrap" px={1}>{fmtCur(p.revenue)}</Td>
+                      <Td textAlign="right" fontSize="xs" px={1}>{p.orders}</Td>
                     </Tr>
                   ))}
                 </Tbody>
