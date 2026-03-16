@@ -20,6 +20,19 @@ router.get('/dashboard', async (req, res) => {
   }
 });
 
+// ── GET /api/products/dashboard/orders — orders for a specific product ────────
+router.get('/dashboard/orders', async (req, res) => {
+  try {
+    const { svk, start, end } = req.query;
+    if (!svk || !start || !end) return res.status(400).json({ message: 'svk, start e end são obrigatórios.' });
+    const orders = await productsRepo.getProductOrders(svk, start, end);
+    res.json(orders);
+  } catch (err) {
+    console.error('[Products] dashboard orders error:', err);
+    res.status(500).json({ message: 'Erro ao buscar pedidos do produto.' });
+  }
+});
+
 // ── GET /api/products — list distinct products from sales ────────────────────
 router.get('/', async (req, res) => {
   try {

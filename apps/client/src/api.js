@@ -956,6 +956,12 @@ export const fetchProductDashboard = async (start, end, groupIds, lojas) => {
   return handleResponse(response);
 };
 
+export const fetchProductOrders = async (svk, start, end) => {
+  const params = new URLSearchParams({ svk, start, end });
+  const response = await authFetch(`/api/products/dashboard/orders?${params.toString()}`);
+  return handleResponse(response);
+};
+
 // ── Product Groups ───────────────────────────────────────────────────────────
 
 export const fetchProductGroups = async () => {

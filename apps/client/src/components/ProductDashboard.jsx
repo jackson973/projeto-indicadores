@@ -29,9 +29,17 @@ import {
   Tag,
   Wrap,
   WrapItem,
+  Modal,
+  ModalOverlay,
+  ModalContent,
+  ModalHeader,
+  ModalCloseButton,
+  ModalBody,
+  Badge,
   useToast,
   useColorModeValue,
   useBreakpointValue,
+  useDisclosure,
 } from "@chakra-ui/react";
 import { ChevronDownIcon, SmallCloseIcon, TriangleDownIcon, TriangleUpIcon } from "@chakra-ui/icons";
 import {
@@ -48,7 +56,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { fetchProductDashboard, fetchProductGroups, fetchProductStores } from "../api";
+import { fetchProductDashboard, fetchProductGroups, fetchProductStores, fetchProductOrders } from "../api";
 
 const PIE_COLORS = ["#0ea5e9", "#6366f1", "#22c55e", "#f97316", "#e11d48", "#8b5cf6", "#14b8a6", "#f59e0b", "#ec4899", "#06b6d4"];
 
@@ -79,6 +87,8 @@ const ProductDashboard = () => {
   const [sortField, setSortField] = useState("adjusted_quantity");
   const [sortDir, setSortDir] = useState("desc");
   const [chartGrouping, setChartGrouping] = useState("auto");
+  const [ordersModal, setOrdersModal] = useState({ product: null, orders: [], loading: false });
+  const { isOpen: isOrdersOpen, onOpen: onOrdersOpen, onClose: onOrdersClose } = useDisclosure();
 
   const toast = useToast();
   const panelBg = useColorModeValue("white", "gray.800");
@@ -131,6 +141,18 @@ const ProductDashboard = () => {
   const getStoreName = (id) => {
     const s = stores.find((st) => st.id === id);
     return s ? s.name : id;
+  };
+
+  const openOrders = async (product) => {
+    setOrdersModal({ product, orders: [], loading: true });
+    onOrdersOpen();
+    try {
+      const orders = await fetchProductOrders(product.store_variation_key, startDate, endDate);
+      setOrdersModal({ product, orders, loading: false });
+    } catch {
+      toast({ title: "Erro ao buscar pedidos", status: "error", duration: 3000 });
+      setOrdersModal((prev) => ({ ...prev, loading: false }));
+    }
   };
 
   const handleSort = (field) => {
@@ -419,7 +441,7 @@ const ProductDashboard = () => {
                         </Flex>
                       </Box>
                     </Flex>
-                    <SimpleGrid columns={4} spacing={1} mt={1.5} ml="44px">
+                    <SimpleGrid columns={5} spacing={1} mt={1.5} ml="44px">
                       <Box>
                         <Text fontSize="9px" color="gray.500">Qtd Venda</Text>
                         <Text fontSize="xs">{fmt(p.raw_quantity)}</Text>
@@ -435,6 +457,10 @@ const ProductDashboard = () => {
                       <Box>
                         <Text fontSize="9px" color="gray.500">Receita</Text>
                         <Text fontSize="xs">{fmtCur(p.revenue)}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="9px" color="gray.500">Ped.</Text>
+                        <Text fontSize="xs" cursor="pointer" color="blue.500" onClick={() => openOrders(p)}>{p.orders}</Text>
                       </Box>
                     </SimpleGrid>
                   </Box>
@@ -485,7 +511,11 @@ const ProductDashboard = () => {
                       </Td>
                       <Td textAlign="right" fontSize="sm" fontWeight="bold" color="blue.500" px={1}>{fmt(p.adjusted_quantity)}</Td>
                       <Td textAlign="right" fontSize="xs" whiteSpace="nowrap" px={1}>{fmtCur(p.revenue)}</Td>
-                      <Td textAlign="right" fontSize="xs" px={1}>{p.orders}</Td>
+                      <Td textAlign="right" fontSize="xs" px={1}>
+                        <Text as="span" cursor="pointer" color="blue.500" _hover={{ textDecoration: "underline" }} onClick={() => openOrders(p)}>
+                          {p.orders}
+                        </Text>
+                      </Td>
                     </Tr>
                   ))}
                 </Tbody>
@@ -494,6 +524,98 @@ const ProductDashboard = () => {
           </Box>
         </>
       )}
+      {/* Orders Detail Modal */}
+      <Modal isOpen={isOrdersOpen} onClose={onOrdersClose} size="full">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader fontSize="md" pb={2}>
+            <Text noOfLines={1}>{ordersModal.product?.ad_name}</Text>
+            <Flex gap={2} mt={1} align="center" wrap="wrap">
+              {ordersModal.product?.loja && <Tag size="sm" colorScheme="blue">{ordersModal.product.loja}</Tag>}
+              <Badge colorScheme="gray" fontSize="xs">{ordersModal.orders.length} pedidos</Badge>
+              <Text fontSize="xs" color="gray.500">{startDate} a {endDate}</Text>
+            </Flex>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody px={{ base: 2, md: 6 }} pb={6} overflowX="auto">
+            {ordersModal.loading ? (
+              <Center py={20}><Spinner size="xl" /></Center>
+            ) : ordersModal.orders.length === 0 ? (
+              <Center py={20}><Text color="gray.500">Nenhum pedido encontrado.</Text></Center>
+            ) : isMobile ? (
+              <Box>
+                {ordersModal.orders.map((o, i) => (
+                  <Box key={i} py={2} borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }}>
+                    <Flex justify="space-between" align="center">
+                      <Text fontSize="xs" fontWeight="bold" color="blue.600">{o.orderId}</Text>
+                      <Text fontSize="xs" color="gray.500">
+                        {new Date(o.date).toLocaleDateString("pt-BR")} {new Date(o.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </Text>
+                    </Flex>
+                    <SimpleGrid columns={3} spacing={1} mt={1}>
+                      <Box>
+                        <Text fontSize="9px" color="gray.500">Qtd</Text>
+                        <Text fontSize="xs">{o.quantity}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="9px" color="gray.500">Unit.</Text>
+                        <Text fontSize="xs">{fmtCur(o.unitPrice)}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="9px" color="gray.500">Total</Text>
+                        <Text fontSize="xs" fontWeight="bold">{fmtCur(o.total)}</Text>
+                      </Box>
+                    </SimpleGrid>
+                    {o.variation && <Text fontSize="9px" color="gray.500" mt={0.5}>Var: {o.variation}</Text>}
+                    {o.clientName && o.clientName !== "-" && <Text fontSize="9px" color="gray.500">Cliente: {o.clientName}</Text>}
+                  </Box>
+                ))}
+              </Box>
+            ) : (
+              <Table size="sm" variant="simple">
+                <Thead>
+                  <Tr>
+                    <Th fontSize="xs">Pedido</Th>
+                    <Th fontSize="xs">Data</Th>
+                    <Th fontSize="xs">Variação</Th>
+                    <Th fontSize="xs">Cliente</Th>
+                    <Th fontSize="xs">Loja</Th>
+                    <Th fontSize="xs">UF</Th>
+                    <Th fontSize="xs">Canal</Th>
+                    <Th fontSize="xs" textAlign="right">Qtd</Th>
+                    <Th fontSize="xs" textAlign="right">Unit.</Th>
+                    <Th fontSize="xs" textAlign="right">Total</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {ordersModal.orders.map((o, i) => (
+                    <Tr key={i} _hover={{ bg: hoverBg }}>
+                      <Td fontSize="xs" fontWeight="medium" color="blue.600">{o.orderId}</Td>
+                      <Td fontSize="xs" whiteSpace="nowrap">
+                        {new Date(o.date).toLocaleDateString("pt-BR")} {new Date(o.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </Td>
+                      <Td fontSize="xs" maxW="200px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={o.variation}>{o.variation || "-"}</Td>
+                      <Td fontSize="xs" maxW="150px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={o.clientName}>{o.clientName || "-"}</Td>
+                      <Td fontSize="xs">{o.loja || "-"}</Td>
+                      <Td fontSize="xs">{o.state || "-"}</Td>
+                      <Td fontSize="xs"><Tag size="sm" fontSize="8px" variant="subtle" colorScheme={o.saleChannel === "online" ? "blue" : "green"}>{o.saleChannel}</Tag></Td>
+                      <Td fontSize="xs" textAlign="right">{o.quantity}</Td>
+                      <Td fontSize="xs" textAlign="right" whiteSpace="nowrap">{fmtCur(o.unitPrice)}</Td>
+                      <Td fontSize="xs" textAlign="right" fontWeight="bold" whiteSpace="nowrap">{fmtCur(o.total)}</Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            )}
+            {!ordersModal.loading && ordersModal.orders.length > 0 && (
+              <Flex justify="flex-end" mt={3} gap={4} fontSize="sm" fontWeight="bold">
+                <Text>Total: {fmtCur(ordersModal.orders.reduce((s, o) => s + o.total, 0))}</Text>
+                <Text color="gray.500">Qtd: {ordersModal.orders.reduce((s, o) => s + o.quantity, 0)}</Text>
+              </Flex>
+            )}
+          </ModalBody>
+        </ModalContent>
+      </Modal>
     </Box>
   );
 };

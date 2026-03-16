@@ -442,6 +442,45 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
   };
 }
 
+/**
+ * Retorna pedidos de um produto (svk) em um período, excluindo cancelados.
+ */
+async function getProductOrders(svk, start, end) {
+  const result = await db.query(
+    `SELECT
+       s.order_id AS "orderId",
+       s.date,
+       s.store,
+       COALESCE(st.name, s.store) AS loja,
+       s.product,
+       s.variation,
+       s.sku,
+       s.quantity,
+       s.total,
+       s.unit_price AS "unitPrice",
+       s.state,
+       s.platform,
+       s.status,
+       s.client_name AS "clientName",
+       s.sale_channel AS "saleChannel"
+     FROM sales s
+     LEFT JOIN stores st ON st.id = s.cod_store
+     WHERE (COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name)) = $1
+       AND s.date::date >= $2::date AND s.date::date <= $3::date
+       AND (s.status IS NULL OR s.status = ''
+         OR LOWER(TRANSLATE(s.status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
+           NOT SIMILAR TO '%(cancelado|cancel)%')
+     ORDER BY s.date DESC`,
+    [svk, start, end]
+  );
+  return result.rows.map((r) => ({
+    ...r,
+    quantity: parseFloat(r.quantity) || 0,
+    total: parseFloat(r.total) || 0,
+    unitPrice: parseFloat(r.unitPrice) || 0,
+  }));
+}
+
 module.exports = {
   listProducts,
   updateKitQty,
@@ -458,4 +497,5 @@ module.exports = {
   removeItemsFromGroupBatch,
   getAllAdsWithGroup,
   getProductDashboard,
+  getProductOrders,
 };
