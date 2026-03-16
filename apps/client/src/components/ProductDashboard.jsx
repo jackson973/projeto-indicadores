@@ -318,18 +318,32 @@ const ProductDashboard = () => {
             <Box bg={panelBg} p={4} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
               <Text fontSize="sm" fontWeight="bold" mb={3}>Unidades por Grupo</Text>
               {data.byGroup.length > 0 ? (
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie data={data.byGroup} dataKey="units" nameKey="group_name" cx="50%" cy="50%"
-                      outerRadius={100} label={({ group_name, percent }) => `${group_name} (${(percent * 100).toFixed(0)}%)`}
-                      labelLine={false} fontSize={10}>
-                      {data.byGroup.map((_, i) => (
-                        <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomTooltipPie />} />
-                  </PieChart>
-                </ResponsiveContainer>
+                <>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie data={data.byGroup} dataKey="units" nameKey="group_name" cx="50%" cy="50%"
+                        outerRadius={90} label={({ percent }) => percent >= 0.05 ? `${(percent * 100).toFixed(0)}%` : ""}
+                        labelLine={false} fontSize={10}>
+                        {data.byGroup.map((_, i) => (
+                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CustomTooltipPie />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <Flex wrap="wrap" gap={2} justify="center" mt={1}>
+                    {data.byGroup.map((g, i) => {
+                      const total = data.byGroup.reduce((s, x) => s + x.units, 0);
+                      const pct = total > 0 ? ((g.units / total) * 100).toFixed(0) : 0;
+                      return (
+                        <Flex key={g.group_id} align="center" gap={1}>
+                          <Box w="10px" h="10px" borderRadius="2px" bg={PIE_COLORS[i % PIE_COLORS.length]} flexShrink={0} />
+                          <Text fontSize="10px" color="gray.600">{g.group_name} ({pct}%)</Text>
+                        </Flex>
+                      );
+                    })}
+                  </Flex>
+                </>
               ) : (
                 <Center h="280px"><Text color="gray.400" fontSize="sm">Nenhum produto com grupo atribuído</Text></Center>
               )}
