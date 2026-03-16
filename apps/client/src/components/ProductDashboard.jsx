@@ -287,62 +287,102 @@ const ProductDashboard = () => {
           </SimpleGrid>
 
           {/* Product Grid */}
-          <Box bg={panelBg} borderRadius="md" borderWidth="1px" borderColor={borderColor} overflowX="auto">
+          <Box bg={panelBg} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
             <Text fontSize="sm" fontWeight="bold" p={4} pb={2}>
               Produtos ({sortedProducts.length})
             </Text>
-            <Table size="sm" variant="simple">
-              <Thead>
-                <Tr>
-                  <Th w="40px" p={1}></Th>
-                  <Th cursor="pointer" onClick={() => handleSort("ad_name")}>
-                    Produto <SortIcon field="ad_name" />
-                  </Th>
-                  {!isMobile && <Th w="140px">Loja</Th>}
-                  {!isMobile && <Th w="120px">Grupo</Th>}
-                  <Th textAlign="right" cursor="pointer" onClick={() => handleSort("raw_quantity")} w="90px">
-                    Qtd Venda <SortIcon field="raw_quantity" />
-                  </Th>
-                  <Th textAlign="center" w="60px">Kit</Th>
-                  <Th textAlign="right" cursor="pointer" onClick={() => handleSort("adjusted_quantity")} w="100px">
-                    Qtd Ajust. <SortIcon field="adjusted_quantity" />
-                  </Th>
-                  <Th textAlign="right" cursor="pointer" onClick={() => handleSort("revenue")} w="110px">
-                    Receita <SortIcon field="revenue" />
-                  </Th>
-                  <Th textAlign="right" cursor="pointer" onClick={() => handleSort("orders")} w="80px">
-                    Pedidos <SortIcon field="orders" />
-                  </Th>
-                </Tr>
-              </Thead>
-              <Tbody>
+
+            {isMobile ? (
+              /* Mobile: cards */
+              <Box px={3} pb={3}>
                 {sortedProducts.map((p) => (
-                  <Tr key={p.store_variation_key} _hover={{ bg: hoverBg }}>
-                    <Td p={1}>
+                  <Box key={p.store_variation_key} py={2} borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }}>
+                    <Flex gap={2} align="center">
                       {p.thumbnail ? (
-                        <Image src={p.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" />
+                        <Image src={p.thumbnail} alt="" boxSize="36px" borderRadius="4px" objectFit="contain" flexShrink={0} />
                       ) : (
-                        <Box boxSize="28px" borderRadius="4px" bg="gray.100" />
+                        <Box boxSize="36px" borderRadius="4px" bg="gray.100" flexShrink={0} />
                       )}
-                    </Td>
-                    <Td fontSize="xs" isTruncated title={p.ad_name}>{p.ad_name}</Td>
-                    {!isMobile && (
-                      <Td>{p.loja && <Tag size="sm" fontSize="9px" variant="subtle" colorScheme="blue">{p.loja}</Tag>}</Td>
-                    )}
-                    {!isMobile && (
-                      <Td>{p.group_name && <Tag size="sm" fontSize="9px" variant="subtle" colorScheme="purple">{p.group_name}</Tag>}</Td>
-                    )}
-                    <Td textAlign="right" fontSize="xs">{fmt(p.raw_quantity)}</Td>
-                    <Td textAlign="center" fontSize="xs" fontWeight="bold" color={p.kit_qty > 1 ? "purple.500" : "gray.500"}>
-                      x{p.kit_qty}
-                    </Td>
-                    <Td textAlign="right" fontSize="sm" fontWeight="bold" color="blue.500">{fmt(p.adjusted_quantity)}</Td>
-                    <Td textAlign="right" fontSize="xs">{fmtCur(p.revenue)}</Td>
-                    <Td textAlign="right" fontSize="xs">{p.orders}</Td>
-                  </Tr>
+                      <Box flex={1} minW={0}>
+                        <Text fontSize="xs" fontWeight="medium" noOfLines={2}>{p.ad_name}</Text>
+                        <Flex gap={1} mt={0.5} wrap="wrap">
+                          {p.loja && <Tag size="sm" fontSize="8px" variant="subtle" colorScheme="blue">{p.loja}</Tag>}
+                          {p.group_name && <Tag size="sm" fontSize="8px" variant="subtle" colorScheme="purple">{p.group_name}</Tag>}
+                        </Flex>
+                      </Box>
+                    </Flex>
+                    <SimpleGrid columns={4} spacing={1} mt={1.5} ml="44px">
+                      <Box>
+                        <Text fontSize="9px" color="gray.500">Qtd Venda</Text>
+                        <Text fontSize="xs">{fmt(p.raw_quantity)}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="9px" color="gray.500">Kit</Text>
+                        <Text fontSize="xs" fontWeight="bold" color={p.kit_qty > 1 ? "purple.500" : "gray.500"}>x{p.kit_qty}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="9px" color="gray.500">Qtd Ajust.</Text>
+                        <Text fontSize="xs" fontWeight="bold" color="blue.500">{fmt(p.adjusted_quantity)}</Text>
+                      </Box>
+                      <Box>
+                        <Text fontSize="9px" color="gray.500">Receita</Text>
+                        <Text fontSize="xs">{fmtCur(p.revenue)}</Text>
+                      </Box>
+                    </SimpleGrid>
+                  </Box>
                 ))}
-              </Tbody>
-            </Table>
+              </Box>
+            ) : (
+              /* Desktop: table */
+              <Table size="sm" variant="simple">
+                <Thead>
+                  <Tr>
+                    <Th w="36px" p={1}></Th>
+                    <Th cursor="pointer" onClick={() => handleSort("ad_name")} maxW="300px">
+                      Produto <SortIcon field="ad_name" />
+                    </Th>
+                    <Th cursor="pointer" onClick={() => handleSort("loja")}>Loja</Th>
+                    <Th>Grupo</Th>
+                    <Th textAlign="right" cursor="pointer" onClick={() => handleSort("raw_quantity")} whiteSpace="nowrap">
+                      Qtd Venda <SortIcon field="raw_quantity" />
+                    </Th>
+                    <Th textAlign="center" whiteSpace="nowrap">Kit</Th>
+                    <Th textAlign="right" cursor="pointer" onClick={() => handleSort("adjusted_quantity")} whiteSpace="nowrap">
+                      Qtd Ajust. <SortIcon field="adjusted_quantity" />
+                    </Th>
+                    <Th textAlign="right" cursor="pointer" onClick={() => handleSort("revenue")} whiteSpace="nowrap">
+                      Receita <SortIcon field="revenue" />
+                    </Th>
+                    <Th textAlign="right" cursor="pointer" onClick={() => handleSort("orders")} whiteSpace="nowrap">
+                      Pedidos <SortIcon field="orders" />
+                    </Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {sortedProducts.map((p) => (
+                    <Tr key={p.store_variation_key} _hover={{ bg: hoverBg }}>
+                      <Td p={1}>
+                        {p.thumbnail ? (
+                          <Image src={p.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" />
+                        ) : (
+                          <Box boxSize="28px" borderRadius="4px" bg="gray.100" />
+                        )}
+                      </Td>
+                      <Td fontSize="xs" maxW="300px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={p.ad_name}>{p.ad_name}</Td>
+                      <Td>{p.loja && <Tag size="sm" fontSize="9px" variant="subtle" colorScheme="blue" whiteSpace="nowrap">{p.loja}</Tag>}</Td>
+                      <Td>{p.group_name && <Tag size="sm" fontSize="9px" variant="subtle" colorScheme="purple" whiteSpace="nowrap">{p.group_name}</Tag>}</Td>
+                      <Td textAlign="right" fontSize="xs">{fmt(p.raw_quantity)}</Td>
+                      <Td textAlign="center" fontSize="xs" fontWeight="bold" color={p.kit_qty > 1 ? "purple.500" : "gray.500"}>
+                        x{p.kit_qty}
+                      </Td>
+                      <Td textAlign="right" fontSize="sm" fontWeight="bold" color="blue.500">{fmt(p.adjusted_quantity)}</Td>
+                      <Td textAlign="right" fontSize="xs" whiteSpace="nowrap">{fmtCur(p.revenue)}</Td>
+                      <Td textAlign="right" fontSize="xs">{p.orders}</Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            )}
           </Box>
         </>
       )}
