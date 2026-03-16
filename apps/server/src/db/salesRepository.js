@@ -312,7 +312,7 @@ async function getDailyRevenue(date, filters = {}) {
        AND (
          status IS NULL OR status = ''
          OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
-           NOT SIMILAR TO '%(cancelado)%'
+           NOT SIMILAR TO '%(cancelado|cancel)%'
        )`,
     params
   );
@@ -373,7 +373,7 @@ async function getDailySalesDetails(date, filters = {}) {
     AND (
       status IS NULL OR status = ''
       OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
-        NOT SIMILAR TO '%(cancelado)%'
+        NOT SIMILAR TO '%(cancelado|cancel)%'
     )`;
 
   const query = `
@@ -437,7 +437,7 @@ async function getHourlySales(date, filters = {}) {
        AND (
          status IS NULL OR status = ''
          OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
-           NOT SIMILAR TO '%(cancelado)%'
+           NOT SIMILAR TO '%(cancelado|cancel)%'
        )
      GROUP BY EXTRACT(HOUR FROM date AT TIME ZONE 'America/Sao_Paulo')
      ORDER BY hour`,
@@ -485,7 +485,7 @@ async function getTopProducts(date, filters = {}, limit = 10) {
        AND (
          status IS NULL OR status = ''
          OR LOWER(TRANSLATE(status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
-           NOT SIMILAR TO '%(cancelado)%'
+           NOT SIMILAR TO '%(cancelado|cancel)%'
        )
      GROUP BY product, store
      ORDER BY sales DESC

@@ -294,7 +294,7 @@ async function getProductDashboard({ start, end, groupIds } = {}) {
   const notCanceled = `
     AND (s.status IS NULL OR s.status = ''
       OR LOWER(TRANSLATE(s.status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
-        NOT SIMILAR TO '%(cancelado)%')`;
+        NOT SIMILAR TO '%(cancelado|cancel)%')`;
 
   const cte = `
     WITH sale_kit AS (
