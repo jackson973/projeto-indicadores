@@ -10,6 +10,7 @@ import {
   FormControl,
   FormLabel,
   Input,
+  Select,
   Button,
   Menu,
   MenuButton,
@@ -75,6 +76,7 @@ const ProductDashboard = () => {
 
   const [sortField, setSortField] = useState("adjusted_quantity");
   const [sortDir, setSortDir] = useState("desc");
+  const [chartGrouping, setChartGrouping] = useState("auto");
 
   const toast = useToast();
   const panelBg = useColorModeValue("white", "gray.800");
@@ -133,13 +135,53 @@ const ProductDashboard = () => {
     return sortDir === "asc" ? <TriangleUpIcon boxSize={2} ml={1} /> : <TriangleDownIcon boxSize={2} ml={1} />;
   };
 
+  const daysDiff = useMemo(() => {
+    if (!startDate || !endDate) return 0;
+    return Math.ceil((new Date(endDate) - new Date(startDate)) / (1000 * 60 * 60 * 24)) + 1;
+  }, [startDate, endDate]);
+
+  const effectiveGrouping = useMemo(() => {
+    if (chartGrouping !== "auto") return chartGrouping;
+    if (daysDiff <= 15) return "day";
+    if (daysDiff <= 30) return "week";
+    return "month";
+  }, [chartGrouping, daysDiff]);
+
+  const groupingLabel = { day: "Diário", week: "Semanal", month: "Mensal" };
+
   const chartDateData = useMemo(() => {
-    if (!data?.byDate) return [];
-    return data.byDate.map((d) => ({
-      ...d,
-      dateLabel: new Date(d.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
-    }));
-  }, [data]);
+    if (!data?.byDate || data.byDate.length === 0) return [];
+
+    if (effectiveGrouping === "day") {
+      return data.byDate.map((d) => ({
+        ...d,
+        dateLabel: new Date(d.date).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }),
+      }));
+    }
+
+    const buckets = new Map();
+    data.byDate.forEach((d) => {
+      const dt = new Date(d.date);
+      let key, label;
+      if (effectiveGrouping === "week") {
+        const day = dt.getDay();
+        const monday = new Date(dt);
+        monday.setDate(dt.getDate() - (day === 0 ? 6 : day - 1));
+        key = monday.toISOString().slice(0, 10);
+        label = monday.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      } else {
+        key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+        label = dt.toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+      }
+      if (!buckets.has(key)) buckets.set(key, { dateLabel: label, units: 0, revenue: 0, orders: 0 });
+      const b = buckets.get(key);
+      b.units += d.units;
+      b.revenue += d.revenue;
+      b.orders += d.orders;
+    });
+
+    return Array.from(buckets.values());
+  }, [data, effectiveGrouping]);
 
   const CustomTooltipLine = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
@@ -245,7 +287,15 @@ const ProductDashboard = () => {
           <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} mb={6}>
             {/* Units over time */}
             <Box bg={panelBg} p={4} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
-              <Text fontSize="sm" fontWeight="bold" mb={3}>Unidades por Dia</Text>
+              <Flex justify="space-between" align="center" mb={3}>
+                <Text fontSize="sm" fontWeight="bold">Unidades ({groupingLabel[effectiveGrouping]})</Text>
+                <Select size="xs" w="110px" value={chartGrouping} onChange={(e) => setChartGrouping(e.target.value)}>
+                  <option value="auto">Auto</option>
+                  <option value="day">Diário</option>
+                  <option value="week">Semanal</option>
+                  <option value="month">Mensal</option>
+                </Select>
+              </Flex>
               {chartDateData.length > 0 ? (
                 <ResponsiveContainer width="100%" height={280}>
                   <ComposedChart data={chartDateData}>
