@@ -5,6 +5,20 @@ const productsRepo = require('../db/productsRepository');
 const router = express.Router();
 router.use(authenticate, requireAdmin);
 
+// ── GET /api/products/dashboard — product dashboard with kit_qty ─────────────
+router.get('/dashboard', async (req, res) => {
+  try {
+    const { start, end, group_ids } = req.query;
+    if (!start || !end) return res.status(400).json({ message: 'start e end são obrigatórios.' });
+    const groupIds = group_ids ? group_ids.split(',').map((s) => parseInt(s.trim(), 10)).filter(Boolean) : undefined;
+    const data = await productsRepo.getProductDashboard({ start, end, groupIds });
+    res.json(data);
+  } catch (err) {
+    console.error('[Products] dashboard error:', err);
+    res.status(500).json({ message: 'Erro ao gerar dashboard de produtos.' });
+  }
+});
+
 // ── GET /api/products — list distinct products from sales ────────────────────
 router.get('/', async (req, res) => {
   try {

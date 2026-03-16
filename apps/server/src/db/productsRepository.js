@@ -279,6 +279,162 @@ async function getAllAdsWithGroup() {
   return result.rows;
 }
 
+/**
+ * Dashboard de Produtos — dados agrupados por produto com kit_qty.
+ */
+async function getProductDashboard({ start, end, groupIds } = {}) {
+  const params = [start, end];
+  let groupFilter = '';
+  if (groupIds && groupIds.length > 0) {
+    const placeholders = groupIds.map((_, i) => `$${params.length + i + 1}`);
+    params.push(...groupIds);
+    groupFilter = `INNER JOIN product_group_items gf ON gf.ad_name = sk.svk AND gf.group_id IN (${placeholders.join(',')})`;
+  }
+
+  const notCanceled = `
+    AND (s.status IS NULL OR s.status = ''
+      OR LOWER(TRANSLATE(s.status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
+        NOT SIMILAR TO '%(cancelado)%')`;
+
+  const cte = `
+    WITH sale_kit AS (
+      SELECT
+        s.id,
+        s.order_id,
+        s.date,
+        s.quantity,
+        s.total,
+        TRIM(s.ad_name) AS ad_name,
+        COALESCE(s.cod_store::text, s.store) AS store_key,
+        COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name) AS svk,
+        s.variation,
+        s.image,
+        s.store,
+        s.cod_store,
+        CASE
+          WHEN s.variation IS NOT NULL AND TRIM(s.variation) != ''
+          THEN COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name) || '|||' || TRIM(SPLIT_PART(s.variation, ',', 1))
+          ELSE NULL
+        END AS var_key
+      FROM sales s
+      WHERE s.date::date >= $1::date AND s.date::date <= $2::date
+        AND s.ad_name IS NOT NULL AND TRIM(s.ad_name) != '' AND s.ad_name != 'Geral'
+        ${notCanceled}
+    ),
+    resolved AS (
+      SELECT
+        sk.*,
+        COALESCE(pv.kit_qty, pp.kit_qty, 1) AS kit_qty
+      FROM sale_kit sk
+      ${groupFilter}
+      LEFT JOIN products pv ON pv.store_variation_key = sk.var_key
+      LEFT JOIN products pp ON pp.store_variation_key = sk.svk
+    )`;
+
+  // Summary
+  const summaryQ = db.query(
+    `${cte}
+     SELECT
+       COALESCE(SUM(r.quantity * r.kit_qty), 0) AS total_units,
+       COALESCE(SUM(r.total), 0) AS total_revenue,
+       COUNT(DISTINCT r.order_id) AS total_orders
+     FROM resolved r`,
+    params
+  );
+
+  // By date
+  const byDateQ = db.query(
+    `${cte}
+     SELECT
+       r.date::date AS date,
+       SUM(r.quantity * r.kit_qty) AS units,
+       SUM(r.total) AS revenue,
+       COUNT(DISTINCT r.order_id) AS orders
+     FROM resolved r
+     GROUP BY r.date::date
+     ORDER BY date`,
+    params
+  );
+
+  // By group
+  const byGroupQ = db.query(
+    `${cte}
+     SELECT
+       g.id AS group_id,
+       g.name AS group_name,
+       COALESCE(SUM(r.quantity * r.kit_qty), 0) AS units,
+       COALESCE(SUM(r.total), 0) AS revenue
+     FROM resolved r
+     INNER JOIN product_group_items gi ON gi.ad_name = r.svk
+     INNER JOIN product_groups g ON g.id = gi.group_id
+     GROUP BY g.id, g.name
+     ORDER BY units DESC`,
+    params
+  );
+
+  // By product
+  const byProductQ = db.query(
+    `${cte}
+     SELECT
+       r.svk AS store_variation_key,
+       r.ad_name,
+       COALESCE(MAX(st.name), MAX(r.store)) AS loja,
+       MAX(CASE WHEN r.image IS NOT NULL AND TRIM(r.image) != '' THEN r.image END) AS thumbnail,
+       MAX(r.kit_qty) AS kit_qty,
+       SUM(r.quantity)::numeric AS raw_quantity,
+       SUM(r.quantity * r.kit_qty)::numeric AS adjusted_quantity,
+       SUM(r.total)::numeric AS revenue,
+       COUNT(DISTINCT r.order_id) AS orders,
+       MAX(g.name) AS group_name
+     FROM resolved r
+     LEFT JOIN stores st ON st.id = r.cod_store
+     LEFT JOIN product_group_items gi ON gi.ad_name = r.svk
+     LEFT JOIN product_groups g ON g.id = gi.group_id
+     GROUP BY r.svk, r.ad_name
+     ORDER BY adjusted_quantity DESC`,
+    params
+  );
+
+  const [summaryRes, byDateRes, byGroupRes, byProductRes] = await Promise.all([summaryQ, byDateQ, byGroupQ, byProductQ]);
+
+  const s = summaryRes.rows[0];
+  const totalRevenue = parseFloat(s.total_revenue) || 0;
+  const totalOrders = parseInt(s.total_orders) || 0;
+
+  return {
+    summary: {
+      totalUnits: parseFloat(s.total_units) || 0,
+      totalRevenue,
+      totalOrders,
+      avgTicket: totalOrders > 0 ? Number((totalRevenue / totalOrders).toFixed(2)) : 0,
+    },
+    byDate: byDateRes.rows.map((r) => ({
+      date: r.date,
+      units: parseFloat(r.units) || 0,
+      revenue: parseFloat(r.revenue) || 0,
+      orders: parseInt(r.orders) || 0,
+    })),
+    byGroup: byGroupRes.rows.map((r) => ({
+      group_id: r.group_id,
+      group_name: r.group_name,
+      units: parseFloat(r.units) || 0,
+      revenue: parseFloat(r.revenue) || 0,
+    })),
+    byProduct: byProductRes.rows.map((r) => ({
+      store_variation_key: r.store_variation_key,
+      ad_name: r.ad_name,
+      loja: r.loja,
+      thumbnail: r.thumbnail,
+      kit_qty: parseInt(r.kit_qty) || 1,
+      raw_quantity: parseFloat(r.raw_quantity) || 0,
+      adjusted_quantity: parseFloat(r.adjusted_quantity) || 0,
+      revenue: parseFloat(r.revenue) || 0,
+      orders: parseInt(r.orders) || 0,
+      group_name: r.group_name,
+    })),
+  };
+}
+
 module.exports = {
   listProducts,
   updateKitQty,
@@ -294,4 +450,5 @@ module.exports = {
   addItemsToGroupBatch,
   removeItemsFromGroupBatch,
   getAllAdsWithGroup,
+  getProductDashboard,
 };

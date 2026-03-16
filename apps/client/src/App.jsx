@@ -69,6 +69,7 @@ import SystemSettings from "./components/SystemSettings";
 import StoresManagement from "./components/StoresManagement";
 import AnunciosDashboard from "./components/AnunciosDashboard";
 import ProductsManagement from "./components/ProductsManagement";
+import ProductDashboard from "./components/ProductDashboard";
 import ProductGroups from "./components/ProductGroups";
 import { getSaoPauloDate, getSaoPauloYear, getSaoPauloMonth } from "./utils/timezone";
 import {
@@ -417,6 +418,10 @@ const App = () => {
       icon: <ProductIcon />,
       show: user?.role === "admin",
       submenu: [
+        {
+          label: "Dashboard de Produtos",
+          view: "products-dashboard"
+        },
         {
           label: "Gerenciar Produtos",
           view: "products-management"
@@ -863,6 +868,10 @@ const App = () => {
 
         {activeView === "system-settings" && user?.role === "admin" && (
           <SystemSettings onLogoChange={() => loadSystemLogo()} />
+        )}
+
+        {activeView === "products-dashboard" && user?.role === "admin" && (
+          <ProductDashboard />
         )}
 
         {activeView === "products-management" && user?.role === "admin" && (
