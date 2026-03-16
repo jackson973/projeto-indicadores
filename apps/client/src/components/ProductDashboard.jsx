@@ -62,6 +62,8 @@ const PIE_COLORS = ["#0ea5e9", "#6366f1", "#22c55e", "#f97316", "#e11d48", "#8b5
 
 const fmt = (n) => n.toLocaleString("pt-BR");
 const fmtCur = (n) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const fmtKit = (p) => p.min_kit_qty === p.max_kit_qty ? `x${p.max_kit_qty}` : `x${p.min_kit_qty}~${p.max_kit_qty}`;
+const hasKit = (p) => p.max_kit_qty > 1;
 
 const getDefaultDates = () => {
   const now = new Date();
@@ -448,7 +450,7 @@ const ProductDashboard = () => {
                       </Box>
                       <Box>
                         <Text fontSize="9px" color="gray.500">Kit</Text>
-                        <Text fontSize="xs" fontWeight="bold" color={p.kit_qty > 1 ? "purple.500" : "gray.500"}>x{p.kit_qty}</Text>
+                        <Text fontSize="xs" fontWeight="bold" color={hasKit(p) ? "purple.500" : "gray.500"}>{fmtKit(p)}</Text>
                       </Box>
                       <Box>
                         <Text fontSize="9px" color="gray.500">Qtd Ajust.</Text>
@@ -506,8 +508,8 @@ const ProductDashboard = () => {
                       <Td px={1}>{p.loja && <Tag size="sm" fontSize="8px" variant="subtle" colorScheme="blue" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis" maxW="100%">{p.loja}</Tag>}</Td>
                       <Td px={1}>{p.group_name && <Tag size="sm" fontSize="8px" variant="subtle" colorScheme="purple" whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis" maxW="100%">{p.group_name}</Tag>}</Td>
                       <Td textAlign="right" fontSize="xs" px={1}>{fmt(p.raw_quantity)}</Td>
-                      <Td textAlign="center" fontSize="xs" fontWeight="bold" color={p.kit_qty > 1 ? "purple.500" : "gray.500"} px={1}>
-                        x{p.kit_qty}
+                      <Td textAlign="center" fontSize="xs" fontWeight="bold" color={hasKit(p) ? "purple.500" : "gray.500"} px={1}>
+                        {fmtKit(p)}
                       </Td>
                       <Td textAlign="right" fontSize="sm" fontWeight="bold" color="blue.500" px={1}>{fmt(p.adjusted_quantity)}</Td>
                       <Td textAlign="right" fontSize="xs" whiteSpace="nowrap" px={1}>{fmtCur(p.revenue)}</Td>
