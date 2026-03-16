@@ -948,9 +948,10 @@ export const fetchProductVariations = async (storeKey, adName) => {
   return handleResponse(response);
 };
 
-export const fetchProductDashboard = async (start, end, groupIds) => {
+export const fetchProductDashboard = async (start, end, groupIds, lojas) => {
   const params = new URLSearchParams({ start, end });
   if (groupIds && groupIds.length > 0) params.set('group_ids', groupIds.join(','));
+  if (lojas && lojas.length > 0) params.set('lojas', lojas.join(','));
   const response = await authFetch(`/api/products/dashboard?${params.toString()}`);
   return handleResponse(response);
 };

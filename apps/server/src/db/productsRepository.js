@@ -282,13 +282,19 @@ async function getAllAdsWithGroup() {
 /**
  * Dashboard de Produtos — dados agrupados por produto com kit_qty.
  */
-async function getProductDashboard({ start, end, groupIds } = {}) {
+async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
   const params = [start, end];
   let groupFilter = '';
   if (groupIds && groupIds.length > 0) {
     const placeholders = groupIds.map((_, i) => `$${params.length + i + 1}`);
     params.push(...groupIds);
     groupFilter = `INNER JOIN product_group_items gf ON gf.ad_name = sk.svk AND gf.group_id IN (${placeholders.join(',')})`;
+  }
+  let storeFilter = '';
+  if (lojas && lojas.length > 0) {
+    const placeholders = lojas.map((_, i) => `$${params.length + i + 1}`);
+    params.push(...lojas);
+    storeFilter = `AND COALESCE(s.cod_store::text, s.store) IN (${placeholders.join(',')})`;
   }
 
   const notCanceled = `
@@ -319,6 +325,7 @@ async function getProductDashboard({ start, end, groupIds } = {}) {
       FROM sales s
       WHERE s.date::date >= $1::date AND s.date::date <= $2::date
         AND s.ad_name IS NOT NULL AND TRIM(s.ad_name) != '' AND s.ad_name != 'Geral'
+        ${storeFilter}
         ${notCanceled}
     ),
     resolved AS (

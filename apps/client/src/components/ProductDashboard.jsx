@@ -48,7 +48,7 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import { fetchProductDashboard, fetchProductGroups } from "../api";
+import { fetchProductDashboard, fetchProductGroups, fetchProductStores } from "../api";
 
 const PIE_COLORS = ["#0ea5e9", "#6366f1", "#22c55e", "#f97316", "#e11d48", "#8b5cf6", "#14b8a6", "#f59e0b", "#ec4899", "#06b6d4"];
 
@@ -70,7 +70,9 @@ const ProductDashboard = () => {
   const [startDate, setStartDate] = useState(defaults.start);
   const [endDate, setEndDate] = useState(defaults.end);
   const [selectedGroups, setSelectedGroups] = useState([]);
+  const [selectedStores, setSelectedStores] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [stores, setStores] = useState([]);
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -87,20 +89,25 @@ const ProductDashboard = () => {
 
   useEffect(() => {
     fetchProductGroups().then(setGroups).catch(() => {});
+    fetchProductStores().then(setStores).catch(() => {});
   }, []);
 
   const loadDashboard = useCallback(async () => {
     if (!startDate || !endDate) return;
     setLoading(true);
     try {
-      const result = await fetchProductDashboard(startDate, endDate, selectedGroups.length > 0 ? selectedGroups : undefined);
+      const result = await fetchProductDashboard(
+        startDate, endDate,
+        selectedGroups.length > 0 ? selectedGroups : undefined,
+        selectedStores.length > 0 ? selectedStores : undefined
+      );
       setData(result);
     } catch (err) {
       toast({ title: "Erro ao carregar dashboard", description: err.message, status: "error", duration: 3000 });
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, selectedGroups, toast]);
+  }, [startDate, endDate, selectedGroups, selectedStores, toast]);
 
   useEffect(() => { loadDashboard(); }, [loadDashboard]);
 
@@ -113,6 +120,17 @@ const ProductDashboard = () => {
   const getGroupName = (id) => {
     const g = groups.find((gr) => gr.id === id);
     return g ? g.name : id;
+  };
+
+  const toggleStore = (id) => {
+    setSelectedStores((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]
+    );
+  };
+
+  const getStoreName = (id) => {
+    const s = stores.find((st) => st.id === id);
+    return s ? s.name : id;
   };
 
   const handleSort = (field) => {
@@ -237,10 +255,28 @@ const ProductDashboard = () => {
               </MenuList>
             </Menu>
           </FormControl>
+          <FormControl maxW="280px">
+            <FormLabel fontSize="xs" mb={1}>Lojas</FormLabel>
+            <Menu closeOnSelect={false}>
+              <MenuButton as={Button} size="sm" variant="outline" rightIcon={<ChevronDownIcon />} fontWeight="normal" w="full" textAlign="left">
+                {selectedStores.length === 0
+                  ? "Todas as lojas"
+                  : `${selectedStores.length} loja${selectedStores.length > 1 ? "s" : ""}`}
+              </MenuButton>
+              <MenuList bg={menuBg} maxH="250px" overflowY="auto">
+                {stores.map((s) => (
+                  <MenuItem key={s.id} onClick={() => toggleStore(s.id)} closeOnSelect={false}>
+                    <Checkbox isChecked={selectedStores.includes(s.id)} pointerEvents="none" mr={2} size="sm" />
+                    <Text fontSize="sm">{s.name}</Text>
+                  </MenuItem>
+                ))}
+              </MenuList>
+            </Menu>
+          </FormControl>
           <Button size="sm" colorScheme="blue" onClick={loadDashboard}>Filtrar</Button>
         </Flex>
 
-        {selectedGroups.length > 0 && (
+        {(selectedGroups.length > 0 || selectedStores.length > 0) && (
           <Wrap mt={2} spacing={1}>
             {selectedGroups.map((id) => (
               <WrapItem key={id}>
@@ -250,8 +286,16 @@ const ProductDashboard = () => {
                 </Tag>
               </WrapItem>
             ))}
+            {selectedStores.map((id) => (
+              <WrapItem key={id}>
+                <Tag size="sm" colorScheme="purple" variant="subtle" cursor="pointer" onClick={() => toggleStore(id)}>
+                  {getStoreName(id)}
+                  <SmallCloseIcon ml={1} />
+                </Tag>
+              </WrapItem>
+            ))}
             <WrapItem>
-              <Tag size="sm" variant="outline" cursor="pointer" onClick={() => setSelectedGroups([])}>Limpar</Tag>
+              <Tag size="sm" variant="outline" cursor="pointer" onClick={() => { setSelectedGroups([]); setSelectedStores([]); }}>Limpar</Tag>
             </WrapItem>
           </Wrap>
         )}
