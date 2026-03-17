@@ -71,6 +71,7 @@ import AnunciosDashboard from "./components/AnunciosDashboard";
 import ProductsManagement from "./components/ProductsManagement";
 import ProductDashboard from "./components/ProductDashboard";
 import ProductGroups from "./components/ProductGroups";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import { getSaoPauloDate, getSaoPauloYear, getSaoPauloMonth } from "./utils/timezone";
 import {
   fetchSummary,
@@ -797,6 +798,8 @@ const App = () => {
             </Box>
           </Alert>
         )}
+
+        <PWAInstallPrompt />
 
         {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && activeView !== "terceiros-settlement" && activeView !== "terceiros-groups" && activeView !== "terceiros-prices" && activeView !== "terceiros-rastreio" && activeView !== "system-settings" && activeView !== "products-management" && activeView !== "product-groups" && (
           <Center py={10}>

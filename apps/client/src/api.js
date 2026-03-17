@@ -849,6 +849,21 @@ export const deleteSystemLogo = async () => {
   return handleResponse(response);
 };
 
+export const uploadPwaIcon = async (file) => {
+  const formData = new FormData();
+  formData.append("pwaIcon", file);
+  const response = await authFetch("/api/settings/pwa-icon", {
+    method: "POST",
+    body: formData,
+  });
+  return handleResponse(response);
+};
+
+export const deletePwaIcon = async () => {
+  const response = await authFetch("/api/settings/pwa-icon", { method: "DELETE" });
+  return handleResponse(response);
+};
+
 // ── Stores (Gerenciamento de Lojas) ──────────────────────────────────────────
 
 export const fetchStoresManagement = async () => {

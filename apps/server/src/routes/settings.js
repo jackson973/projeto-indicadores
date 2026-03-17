@@ -9,6 +9,16 @@ const router = express.Router();
 
 const uploadsDir = path.join(__dirname, '../../uploads');
 
+const imageFilter = (_req, file, cb) => {
+  const allowed = ['.png', '.jpg', '.jpeg', '.svg', '.webp'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowed.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Formato de imagem nao suportado. Use PNG, JPG, SVG ou WEBP.'));
+  }
+};
+
 const logoStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -23,32 +33,43 @@ const logoStorage = multer.diskStorage({
 const logoUpload = multer({
   storage: logoStorage,
   limits: { fileSize: 2 * 1024 * 1024 },
-  fileFilter: (_req, file, cb) => {
-    const allowed = ['.png', '.jpg', '.jpeg', '.svg', '.webp'];
-    const ext = path.extname(file.originalname).toLowerCase();
-    if (allowed.includes(ext)) {
-      cb(null, true);
-    } else {
-      cb(new Error('Formato de imagem nao suportado. Use PNG, JPG, SVG ou WEBP.'));
-    }
+  fileFilter: imageFilter
+});
+
+const pwaIconStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+    cb(null, uploadsDir);
+  },
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `pwa-icon${ext}`);
   }
+});
+
+const pwaIconUpload = multer({
+  storage: pwaIconStorage,
+  limits: { fileSize: 2 * 1024 * 1024 },
+  fileFilter: imageFilter
 });
 
 // GET /api/settings - Get system settings (any authenticated user)
 router.get('/', authenticate, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT logo_path AS "logoPath", company_name AS "companyName"
+      `SELECT logo_path AS "logoPath", company_name AS "companyName", pwa_icon_path AS "pwaIconPath"
        FROM system_settings WHERE id = 1`
     );
-    const settings = result.rows[0] || { logoPath: null, companyName: null };
+    const settings = result.rows[0] || { logoPath: null, companyName: null, pwaIconPath: null };
 
-    // Check if logo file exists
     if (settings.logoPath) {
       const fullPath = path.join(uploadsDir, settings.logoPath);
-      if (!fs.existsSync(fullPath)) {
-        settings.logoPath = null;
-      }
+      if (!fs.existsSync(fullPath)) settings.logoPath = null;
+    }
+
+    if (settings.pwaIconPath) {
+      const fullPath = path.join(uploadsDir, settings.pwaIconPath);
+      if (!fs.existsSync(fullPath)) settings.pwaIconPath = null;
     }
 
     return res.json(settings);
@@ -120,6 +141,54 @@ router.delete('/logo', authenticate, requireAdmin, async (req, res) => {
   } catch (error) {
     console.error('Delete logo error:', error);
     return res.status(500).json({ message: 'Erro ao remover logo.' });
+  }
+});
+
+// POST /api/settings/pwa-icon - Upload PWA icon (admin only)
+router.post('/pwa-icon', authenticate, requireAdmin, pwaIconUpload.single('pwaIcon'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Arquivo de icone nao enviado.' });
+    }
+
+    // Remove old pwa-icon files (different extension)
+    const extensions = ['.png', '.jpg', '.jpeg', '.svg', '.webp'];
+    extensions.forEach(ext => {
+      const oldFile = path.join(uploadsDir, `pwa-icon${ext}`);
+      if (oldFile !== req.file.path && fs.existsSync(oldFile)) {
+        fs.unlinkSync(oldFile);
+      }
+    });
+
+    const iconFilename = req.file.filename;
+    await db.query(
+      'UPDATE system_settings SET pwa_icon_path = $1 WHERE id = 1',
+      [iconFilename]
+    );
+
+    return res.json({ pwaIconPath: iconFilename });
+  } catch (error) {
+    console.error('Upload pwa-icon error:', error);
+    return res.status(500).json({ message: 'Erro ao enviar icone PWA.' });
+  }
+});
+
+// DELETE /api/settings/pwa-icon - Remove PWA icon (admin only)
+router.delete('/pwa-icon', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const result = await db.query('SELECT pwa_icon_path FROM system_settings WHERE id = 1');
+    const iconPath = result.rows[0]?.pwa_icon_path;
+
+    if (iconPath) {
+      const fullPath = path.join(uploadsDir, iconPath);
+      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+    }
+
+    await db.query('UPDATE system_settings SET pwa_icon_path = NULL WHERE id = 1');
+    return res.json({ success: true });
+  } catch (error) {
+    console.error('Delete pwa-icon error:', error);
+    return res.status(500).json({ message: 'Erro ao remover icone PWA.' });
   }
 });
 

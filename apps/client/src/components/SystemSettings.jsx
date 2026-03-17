@@ -18,15 +18,19 @@ import {
   fetchSystemSettings,
   updateSystemSettings,
   uploadSystemLogo,
-  deleteSystemLogo
+  deleteSystemLogo,
+  uploadPwaIcon,
+  deletePwaIcon
 } from "../api";
 
 const SystemSettings = ({ onLogoChange }) => {
   const [form, setForm] = useState({ companyName: "" });
   const [logoUrl, setLogoUrl] = useState(null);
+  const [pwaIconUrl, setPwaIconUrl] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingPwa, setUploadingPwa] = useState(false);
   const toast = useToast();
 
   const panelBg = useColorModeValue("white", "gray.800");
@@ -40,6 +44,7 @@ const SystemSettings = ({ onLogoChange }) => {
       const data = await fetchSystemSettings();
       setForm({ companyName: data.companyName || "" });
       setLogoUrl(data.logoPath ? `/uploads/${data.logoPath}?t=${Date.now()}` : null);
+      setPwaIconUrl(data.pwaIconPath ? `/uploads/${data.pwaIconPath}?t=${Date.now()}` : null);
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
     } finally {
@@ -83,6 +88,33 @@ const SystemSettings = ({ onLogoChange }) => {
       setLogoUrl(null);
       toast({ title: "Logo removida.", status: "success", duration: 3000 });
       onLogoChange?.();
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    }
+  };
+
+  const handlePwaIconUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingPwa(true);
+    try {
+      const result = await uploadPwaIcon(file);
+      setPwaIconUrl(`/uploads/${result.pwaIconPath}?t=${Date.now()}`);
+      toast({ title: "Icone PWA atualizado!", status: "success", duration: 3000 });
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setUploadingPwa(false);
+      e.target.value = "";
+    }
+  };
+
+  const handlePwaIconDelete = async () => {
+    try {
+      await deletePwaIcon();
+      setPwaIconUrl(null);
+      toast({ title: "Icone PWA removido.", status: "success", duration: 3000 });
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
     }
@@ -133,6 +165,36 @@ const SystemSettings = ({ onLogoChange }) => {
             >
               {logoUrl ? "Alterar Logo" : "Enviar Logo"}
               <input type="file" accept="image/*" hidden onChange={handleLogoUpload} />
+            </Button>
+            <Text fontSize="xs" color="gray.500">PNG, JPG, SVG ou WEBP (max 2MB)</Text>
+          </HStack>
+        </FormControl>
+
+        <FormControl>
+          <FormLabel fontSize="sm">Icone do App (PWA)</FormLabel>
+          <Text fontSize="xs" color="gray.500" mb={2}>
+            Icone exibido na tela inicial do celular ao instalar o app. Use uma imagem quadrada, preferencialmente 512x512px.
+          </Text>
+          {pwaIconUrl && (
+            <Flex align="center" gap={4} mb={3} p={3} borderWidth="1px" borderRadius="md">
+              <Image src={pwaIconUrl} alt="Icone PWA" boxSize="60px" objectFit="contain" borderRadius="md" />
+              <Button size="xs" colorScheme="red" variant="ghost" leftIcon={<DeleteIcon />} onClick={handlePwaIconDelete}>
+                Remover
+              </Button>
+            </Flex>
+          )}
+          <HStack>
+            <Button
+              as="label"
+              size="sm"
+              colorScheme="blue"
+              variant="outline"
+              cursor="pointer"
+              isLoading={uploadingPwa}
+              loadingText="Enviando..."
+            >
+              {pwaIconUrl ? "Alterar Icone" : "Enviar Icone"}
+              <input type="file" accept="image/*" hidden onChange={handlePwaIconUpload} />
             </Button>
             <Text fontSize="xs" color="gray.500">PNG, JPG, SVG ou WEBP (max 2MB)</Text>
           </HStack>
