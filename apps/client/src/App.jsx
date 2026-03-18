@@ -419,7 +419,7 @@ const App = () => {
     {
       label: "Produtos",
       icon: <ProductIcon />,
-      show: user?.role === "admin",
+      show: true,
       submenu: [
         {
           label: "Dashboard de Produtos",
@@ -875,15 +875,15 @@ const App = () => {
           <SystemSettings onLogoChange={() => loadSystemLogo()} />
         )}
 
-        {activeView === "products-dashboard" && user?.role === "admin" && (
+        {activeView === "products-dashboard" && (
           <ProductDashboard />
         )}
 
-        {activeView === "products-management" && user?.role === "admin" && (
+        {activeView === "products-management" && (
           <ProductsManagement />
         )}
 
-        {activeView === "product-groups" && user?.role === "admin" && (
+        {activeView === "product-groups" && (
           <ProductGroups />
         )}
 
