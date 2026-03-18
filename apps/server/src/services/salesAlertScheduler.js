@@ -69,8 +69,8 @@ async function buildAlertMessage(userName, brHour, today) {
   for (const p of onlineProductTops) {
     allProducts.push({
       name: p.productName || p.product_name || p.name || '-',
-      units: parseInt(p.validOrders || p.valid_orders || 0),
-      revenue: parseFloat(p.validSales || p.valid_sales || 0)
+      units: parseInt(p.unitsSold || p.validOrders || p.valid_orders || 0),
+      revenue: parseFloat(p.sales || p.validSales || p.valid_sales || 0)
     });
   }
   for (const p of fabricaTopProducts) {

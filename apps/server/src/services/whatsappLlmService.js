@@ -601,8 +601,8 @@ async function executeTool(toolName, args, settings, user) {
           posicao: i + 1,
           produto: p.productName || p.product_name || p.name,
           loja: p.shopName || p.shop_name || '',
-          unidades: p.validOrders || p.valid_orders || 0,
-          receita: parseFloat(p.validSales || p.valid_sales || 0)
+          unidades: parseInt(p.unitsSold || p.validOrders || p.valid_orders || 0),
+          receita: parseFloat(p.sales || p.validSales || p.valid_sales || 0)
         }));
       }
 
