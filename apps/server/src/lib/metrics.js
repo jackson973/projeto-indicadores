@@ -132,7 +132,18 @@ const getSalesByPeriod = (sales, { start, end, store, period = "month" }) => {
     map.set(key, current);
   });
 
-  return Array.from(map.values()).sort((a, b) => a.period.localeCompare(b.period));
+  const result = Array.from(map.values()).sort((a, b) => a.period.localeCompare(b.period));
+
+  // Mark current (incomplete) period as partial
+  if (result.length > 0) {
+    const currentPeriodKey = formatPeriodKey(new Date(), period);
+    const last = result[result.length - 1];
+    if (last.period === currentPeriodKey) {
+      last.partial = true;
+    }
+  }
+
+  return result;
 };
 
 const getSalesByStore = (sales, { start, end }) => {

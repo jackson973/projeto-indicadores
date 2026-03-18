@@ -6,7 +6,8 @@ import {
   YAxis,
   Tooltip,
   ResponsiveContainer,
-  CartesianGrid
+  CartesianGrid,
+  ReferenceDot
 } from "recharts";
 import { Box, Button, Flex, Select, Text, HStack, useColorModeValue, Checkbox, VStack } from "@chakra-ui/react";
 import { useAnimationCycle } from "../hooks/useAnimationCycle";
@@ -33,23 +34,29 @@ const MIN_POINTS_FOR_TREND = 4;
 const buildTrendAndProjection = (data, showTrend, showProjection, period) => {
   if (!data || data.length < 2) return data || [];
 
-  const hasTrend = (showTrend || showProjection) && data.length >= MIN_POINTS_FOR_TREND;
+  // Separate complete periods from partial (current incomplete) period
+  const hasPartial = data.length > 0 && data[data.length - 1].partial;
+  const completeData = hasPartial ? data.slice(0, -1) : data;
+
+  const hasTrend = (showTrend || showProjection) && completeData.length >= MIN_POINTS_FOR_TREND;
 
   if (!hasTrend) {
-    return data.map((d) => ({ ...d }));
+    const result = data.map((d, i) => ({
+      ...d,
+      ...(d.partial ? { total: null, _partialTotal: d.total, _partialLink: d.total } : {})
+    }));
+    // Bridge: last complete point also gets _partialLink so the dashed line connects
+    if (hasPartial && result.length >= 2) {
+      result[result.length - 2]._partialLink = result[result.length - 2].total;
+    }
+    return result;
   }
 
-  // Use median of neighboring points to reduce outlier impact from partial periods
-  const values = data.map((d) => d.total);
-  // Detect and dampen partial first/last periods for week/month
-  // If the first value is less than 50% of the second, it's likely partial
+  // Use only complete periods for regression (exclude partial)
+  const values = completeData.map((d) => d.total);
   if ((period === "week" || period === "month") && values.length >= 3) {
     if (values[0] < values[1] * 0.5) {
-      values[0] = values[1]; // Replace with next full period
-    }
-    const last = values.length - 1;
-    if (values[last] < values[last - 1] * 0.5) {
-      values[last] = values[last - 1]; // Replace with previous full period
+      values[0] = values[1];
     }
   }
 
@@ -59,20 +66,26 @@ const buildTrendAndProjection = (data, showTrend, showProjection, period) => {
 
   const result = data.map((d, i) => ({
     ...d,
+    ...(d.partial ? { total: null, _partialTotal: d.total, _partialLink: d.total } : {}),
     trend: showTrend ? Math.round(intercept + slope * i) : undefined
   }));
 
+  // Bridge: last complete point also gets _partialLink so the dashed line connects
+  if (hasPartial && completeData.length > 0) {
+    result[completeData.length - 1]._partialLink = completeData[completeData.length - 1].total;
+  }
+
   if (showProjection) {
-    const lastEntry = data[data.length - 1];
-    result[result.length - 1].projection = lastEntry.total;
+    const lastCompleteIdx = completeData.length - 1;
+    const lastComplete = completeData[lastCompleteIdx];
+    result[lastCompleteIdx].projection = lastComplete.total;
 
     for (let j = 1; j <= projectionCount; j++) {
-      const idx = data.length - 1 + j;
-      const projectedValue = Math.max(0, Math.round(intercept + slope * idx));
+      const projectedValue = Math.max(0, Math.round(intercept + slope * (lastCompleteIdx + j)));
       const trendValue = showTrend ? projectedValue : undefined;
       result.push({
         period: `proj_${j}`,
-        total: undefined,
+        total: null,
         trend: trendValue,
         projection: projectedValue
       });
@@ -182,6 +195,11 @@ const SalesByPeriodChart = ({ data, period, onPeriodChange, autoplay = true }) =
     [data, showTrend, showProjection, period]
   );
 
+  const partialPoint = useMemo(
+    () => chartData.find((d) => d.partial),
+    [chartData]
+  );
+
   const formatXAxisLabelWithProjection = (label) => {
     if (typeof label === "string" && label.startsWith("proj_")) {
       const idx = Number(label.replace("proj_", ""));
@@ -251,17 +269,41 @@ const SalesByPeriodChart = ({ data, period, onPeriodChange, autoplay = true }) =
                         {secondary}
                       </Text>
                     )}
-                    {payload.map((entry) => (
-                      <Text key={entry.dataKey} fontSize="sm" color={tooltipSubText}>
-                        {entry.dataKey === "total" ? "Total" : entry.dataKey === "trend" ? "Tendência" : "Projeção"}:{" "}
-                        {formatCurrency(entry.value)}
-                      </Text>
-                    ))}
+                    {(() => {
+                      const isPartial = payload[0]?.payload?.partial;
+                      const labels = { total: "Total", trend: "Tendência", projection: "Projeção" };
+                      const items = payload.filter((e) => e.value != null && e.dataKey !== "_partialLink");
+                      if (isPartial && payload[0]?.payload?._partialTotal != null) {
+                        items.unshift({ dataKey: "_partial", value: payload[0].payload._partialTotal });
+                      }
+                      return items.map((entry) => {
+                        const entryLabel = entry.dataKey === "_partial"
+                          ? "Parcial (período em andamento)"
+                          : (labels[entry.dataKey] || entry.dataKey);
+                        return (
+                          <Text key={entry.dataKey} fontSize="sm" color={tooltipSubText}>
+                            {entryLabel}: {formatCurrency(entry.value)}
+                          </Text>
+                        );
+                      });
+                    })()}
                   </Box>
                 );
               }}
             />
             <Line type="monotone" dataKey="total" stroke="#3182ce" strokeWidth={2} dot connectNulls={false} isAnimationActive animationDuration={1200} animationEasing="ease-in-out" />
+            <Line type="monotone" dataKey="_partialLink" stroke="#3182ce" strokeWidth={2} strokeDasharray="4 3" dot={false} connectNulls isAnimationActive={false} />
+            {partialPoint && (
+              <ReferenceDot
+                x={partialPoint.period}
+                y={partialPoint._partialTotal}
+                r={5}
+                fill="white"
+                stroke="#3182ce"
+                strokeWidth={2}
+                strokeDasharray="3 2"
+              />
+            )}
             {showTrend && (
               <Line type="linear" dataKey="trend" stroke="#dd6b20" strokeWidth={2} strokeDasharray="6 3" dot={false} connectNulls isAnimationActive animationDuration={800} />
             )}
