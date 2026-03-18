@@ -2,6 +2,7 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const whatsappRepo = require('../db/whatsappRepository');
+const alertsRepo = require('../db/whatsappSalesAlertsRepository');
 const {
   startWhatsappBot, stopWhatsappBot, restartWhatsappBot,
   getStatus, addSseClient, removeSseClient
@@ -47,6 +48,30 @@ router.get('/events', (req, res) => {
   req.on('close', () => {
     removeSseClient(res);
   });
+});
+
+// --- User-facing sales alert config (any authenticated user) ---
+router.get('/sales-alerts/me', authenticate, async (req, res) => {
+  try {
+    const alert = await alertsRepo.getAlertByUserId(req.user.id);
+    res.json(alert || { active: false, intervalHours: 1, hourStart: 8, hourEnd: 22, peakAlert: false });
+  } catch (error) {
+    console.error('Get my sales alert error:', error);
+    res.status(500).json({ message: 'Erro ao buscar configuração de alerta.' });
+  }
+});
+
+router.put('/sales-alerts/me', authenticate, async (req, res) => {
+  try {
+    const { active, intervalHours, hourStart, hourEnd, peakAlert } = req.body;
+    const result = await alertsRepo.upsertAlert(req.user.id, {
+      active, intervalHours, hourStart, hourEnd, peakAlert
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Update my sales alert error:', error);
+    res.status(500).json({ message: 'Erro ao salvar configuração de alerta.' });
+  }
 });
 
 // All routes below require JWT auth + admin role
@@ -280,6 +305,30 @@ router.get('/conversations/users', async (req, res) => {
   } catch (error) {
     console.error('Get conversation users error:', error);
     res.status(500).json({ message: 'Erro ao buscar usuários.' });
+  }
+});
+
+// --- Sales Alerts Admin ---
+router.get('/sales-alerts', async (req, res) => {
+  try {
+    const alerts = await alertsRepo.getAllAlerts();
+    res.json(alerts);
+  } catch (error) {
+    console.error('Get sales alerts error:', error);
+    res.status(500).json({ message: 'Erro ao buscar alertas.' });
+  }
+});
+
+router.put('/sales-alerts/:userId', async (req, res) => {
+  try {
+    const { active, intervalHours, hourStart, hourEnd, peakAlert } = req.body;
+    const result = await alertsRepo.upsertAlert(req.params.userId, {
+      active, intervalHours, hourStart, hourEnd, peakAlert
+    });
+    res.json(result);
+  } catch (error) {
+    console.error('Update sales alert error:', error);
+    res.status(500).json({ message: 'Erro ao salvar alerta.' });
   }
 });
 

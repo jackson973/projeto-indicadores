@@ -354,11 +354,23 @@ const TOOL_DEFINITIONS = {
     parameters: {},
     required: [],
     requiredFeature: 'featureSales'
+  },
+  configure_sales_alert: {
+    description: 'Configurar alertas periodicos de vendas via WhatsApp para o usuario atual. O usuario pode ativar/desativar, definir intervalo (a cada quantas horas) e horario ativo. Use quando o usuario pedir para receber alertas de vendas, ser avisado sobre vendas, ou configurar notificacoes.',
+    parameters: {
+      active: { type: 'boolean', description: 'Ativar (true) ou desativar (false) os alertas' },
+      interval_hours: { type: 'number', description: 'Intervalo em horas entre alertas (1, 2, 3, 4, 6, 8 ou 12). Padrao: 1' },
+      hour_start: { type: 'number', description: 'Hora inicial do periodo ativo (0-23, padrao 8)' },
+      hour_end: { type: 'number', description: 'Hora final do periodo ativo (0-23, padrao 22)' },
+      peak_alert: { type: 'boolean', description: 'Receber alerta extra quando houver pico de vendas (padrao false)' }
+    },
+    required: ['active'],
+    requiredFeature: 'featureSales'
   }
 };
 
 // --- Tool Execution ---
-async function executeTool(toolName, args, settings) {
+async function executeTool(toolName, args, settings, user) {
   console.log(`${LOG_PREFIX} Executing tool: ${toolName}`, JSON.stringify(args));
 
   switch (toolName) {
@@ -597,6 +609,25 @@ async function executeTool(toolName, args, settings) {
       return result;
     }
 
+    case 'configure_sales_alert': {
+      const salesAlertsRepo = require('../db/whatsappSalesAlertsRepository');
+      const config = {
+        active: args.active,
+        intervalHours: args.interval_hours || 1,
+        hourStart: args.hour_start ?? 8,
+        hourEnd: args.hour_end ?? 22,
+        peakAlert: args.peak_alert || false
+      };
+      await salesAlertsRepo.upsertAlert(user.id, config);
+      if (args.active) {
+        return {
+          sucesso: true,
+          mensagem: `Alertas ativados! Voce recebera resumos de vendas a cada ${config.intervalHours}h, das ${config.hourStart}h as ${config.hourEnd}h.${config.peakAlert ? ' Alertas de pico tambem ativados.' : ''}`
+        };
+      }
+      return { sucesso: true, mensagem: 'Alertas de vendas desativados.' };
+    }
+
     default:
       return { erro: `Ferramenta desconhecida: ${toolName}` };
   }
@@ -747,7 +778,7 @@ function parseFailedToolCall(failedGeneration) {
     },
     // Strategy 4: tool name mentioned + JSON with sql key (most common case)
     (text) => {
-      const nameMatch = text.match(/query_database|get_cashflow_summary|find_boleto|find_nota_fiscal/);
+      const nameMatch = text.match(/query_database|get_cashflow_summary|find_boleto|find_nota_fiscal|get_today_analytics|configure_sales_alert/);
       if (!nameMatch) return null;
       const jsonMatch = text.match(/\{[\s\S]*"(?:sql|numero_nf|search_term)"[\s\S]*\}/);
       if (!jsonMatch) return null;
@@ -1094,6 +1125,7 @@ Regras OBRIGATORIAS:
     *Receita:* R$ 7.372,24
     *Ticket Medio:* R$ 67,02
   - Mantenha as respostas curtas e verticais (uma info por linha). Evite linhas longas.
+- ALERTAS DE VENDAS: O usuario pode pedir para configurar alertas automaticos de vendas (ex: "me avise a cada 2 horas sobre as vendas", "ativa alertas de vendas", "quero receber resumo de vendas", "desativa alertas"). Use a ferramenta configure_sales_alert. Pergunte o intervalo desejado se o usuario nao especificar.
 - PERSONALIZACAO: O nome do usuario e ${user.name}. Use o primeiro nome dele de forma natural e amigavel quando fizer sentido (saudacoes, confirmacoes, despedidas). Nao force o uso em toda frase — seja natural.
 - REFERENCIAS CONTEXTUAIS: Quando o usuario usar "esses", "estes", "aqueles", "eles", "deles", "os mesmos" referindo-se a dados de uma consulta anterior, use o CONTEXTO DA CONSULTA ANTERIOR (fornecido abaixo) para filtrar com precisao. Exemplo: se a consulta anterior listou 10 clientes com cnpj_cpf, e o usuario perguntar "quanto esses compraram", use WHERE cnpj_cpf IN ('valor1', 'valor2', ...) para filtrar apenas esses registros.`
   };
@@ -1161,7 +1193,7 @@ Regras OBRIGATORIAS:
 
       const results = [];
       for (const tc of toolCalls) {
-        const result = await executeTool(tc.name, tc.arguments, settings);
+        const result = await executeTool(tc.name, tc.arguments, settings, user);
         results.push(result);
 
         // Save last query context for follow-up references ("esses clientes", etc.)

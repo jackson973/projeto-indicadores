@@ -21,6 +21,11 @@ import {
   SimpleGrid,
   Spinner,
   Switch,
+  Tab,
+  TabList,
+  TabPanel,
+  TabPanels,
+  Tabs,
   Table,
   TableContainer,
   Tbody,
@@ -43,6 +48,8 @@ import {
   disconnectWhatsapp,
   fetchWhatsappPhones,
   deleteWhatsappPhone,
+  fetchWhatsappSalesAlerts,
+  updateWhatsappSalesAlert,
   getToken
 } from "../api";
 
@@ -69,6 +76,18 @@ const LLM_MODELS = {
     { value: "qwen2.5", label: "Qwen 2.5" }
   ]
 };
+
+const INTERVAL_OPTIONS = [
+  { value: 1, label: "1 hora" },
+  { value: 2, label: "2 horas" },
+  { value: 3, label: "3 horas" },
+  { value: 4, label: "4 horas" },
+  { value: 6, label: "6 horas" },
+  { value: 8, label: "8 horas" },
+  { value: 12, label: "12 horas" }
+];
+
+const HOURS = Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${String(i).padStart(2, "0")}:00` }));
 
 const DEFAULT_PROMPT = `Você é um assistente interno da fábrica. Ajude os usuários com informações sobre vendas, financeiro, boletos e notas fiscais. Seja objetivo e amigável.`;
 
@@ -103,6 +122,8 @@ const WhatsappSettings = () => {
   const [savedPhones, setSavedPhones] = useState([]);
   const [showApiKey, setShowApiKey] = useState(false);
   const [lastUsedLlmConfig, setLastUsedLlmConfig] = useState(null);
+  const [alerts, setAlerts] = useState([]);
+  const [alertsLoading, setAlertsLoading] = useState(false);
   const eventSourceRef = useRef(null);
   const toast = useToast();
 
@@ -225,6 +246,47 @@ const WhatsappSettings = () => {
       const phones = await fetchWhatsappPhones();
       setSavedPhones(phones);
     } catch { /* ignore */ }
+  };
+
+  const loadAlerts = async () => {
+    setAlertsLoading(true);
+    try {
+      const data = await fetchWhatsappSalesAlerts();
+      setAlerts(data);
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
+
+  const handleAlertChange = async (userId, field, value) => {
+    // Optimistic update
+    setAlerts(prev => prev.map(a =>
+      a.userId === userId ? { ...a, [field]: value } : a
+    ));
+
+    const alert = alerts.find(a => a.userId === userId);
+    const updated = {
+      active: alert?.alertActive || false,
+      intervalHours: alert?.intervalHours || 1,
+      hourStart: alert?.hourStart ?? 8,
+      hourEnd: alert?.hourEnd ?? 22,
+      peakAlert: alert?.peakAlert || false,
+      [field]: value
+    };
+    // Map frontend field names to backend field names
+    if (field === "alertActive") {
+      updated.active = value;
+      delete updated.alertActive;
+    }
+
+    try {
+      await updateWhatsappSalesAlert(userId, updated);
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+      loadAlerts(); // revert on error
+    }
   };
 
   const handleDeletePhone = async (id) => {
@@ -365,433 +427,579 @@ const WhatsappSettings = () => {
 
   return (
     <Box className="panel" bg={panelBg} p={6} borderRadius="lg" boxShadow="sm" maxW="960px" mx="auto" mt={8}>
-      <HStack justify="space-between" mb={6}>
-        <Text fontSize="lg" fontWeight="bold">Configuração WhatsApp</Text>
-        <HStack>
-          <Text fontSize="sm">Ativo</Text>
-          <Switch
-            isChecked={form.active}
-            onChange={(e) => setForm(prev => ({ ...prev, active: e.target.checked }))}
-            colorScheme="green"
-          />
-        </HStack>
-      </HStack>
+      <Text fontSize="lg" fontWeight="bold" mb={4}>WhatsApp</Text>
 
-      <VStack spacing={6} align="stretch">
-        {/* Conexão WhatsApp */}
-        <Box>
-          <Text fontWeight="semibold" mb={3}>Conexão WhatsApp</Text>
-          <Box bg={refBg} p={4} borderRadius="md" border="1px solid" borderColor={borderColor}>
-            <HStack spacing={3} mb={3}>
-              {getStatusBadge()}
-              {liveStatus === "connected" && status.connectedPhone && (
-                <Text fontSize="sm" color="gray.500">{formatPhone(status.connectedPhone)}</Text>
-              )}
+      <Tabs variant="enclosed" colorScheme="blue" onChange={(idx) => { if (idx === 1) loadAlerts(); }}>
+        <TabList>
+          <Tab>Configuração</Tab>
+          <Tab>Alertas de Vendas</Tab>
+        </TabList>
+
+        <TabPanels>
+          {/* === Tab 1: Configuração (existing content) === */}
+          <TabPanel px={0} pt={6}>
+            <HStack justify="space-between" mb={6}>
+              <Text fontWeight="semibold">Configuração Geral</Text>
+              <HStack>
+                <Text fontSize="sm">Ativo</Text>
+                <Switch
+                  isChecked={form.active}
+                  onChange={(e) => setForm(prev => ({ ...prev, active: e.target.checked }))}
+                  colorScheme="green"
+                />
+              </HStack>
             </HStack>
 
-            {/* QR Code display */}
-            {qrCode && (
-              <Center mb={4}>
-                <Box bg="white" p={3} borderRadius="md">
-                  <Image src={qrCode} alt="QR Code WhatsApp" boxSize="250px" />
-                  <Text fontSize="xs" color="gray.500" textAlign="center" mt={2}>
-                    Escaneie com seu WhatsApp
+            <VStack spacing={6} align="stretch">
+              {/* Conexão WhatsApp */}
+              <Box>
+                <Text fontWeight="semibold" mb={3}>Conexão WhatsApp</Text>
+                <Box bg={refBg} p={4} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                  <HStack spacing={3} mb={3}>
+                    {getStatusBadge()}
+                    {liveStatus === "connected" && status.connectedPhone && (
+                      <Text fontSize="sm" color="gray.500">{formatPhone(status.connectedPhone)}</Text>
+                    )}
+                  </HStack>
+
+                  {/* QR Code display */}
+                  {qrCode && (
+                    <Center mb={4}>
+                      <Box bg="white" p={3} borderRadius="md">
+                        <Image src={qrCode} alt="QR Code WhatsApp" boxSize="250px" />
+                        <Text fontSize="xs" color="gray.500" textAlign="center" mt={2}>
+                          Escaneie com seu WhatsApp
+                        </Text>
+                      </Box>
+                    </Center>
+                  )}
+
+                  {/* Connecting spinner */}
+                  {connecting && !qrCode && (
+                    <Center py={4}>
+                      <VStack spacing={2}>
+                        <Spinner size="md" color="blue.500" />
+                        <Text fontSize="sm" color="gray.500">Iniciando conexão...</Text>
+                      </VStack>
+                    </Center>
+                  )}
+
+                  {/* Connect/Disconnect buttons */}
+                  <HStack spacing={3}>
+                    {liveStatus !== "connected" && (
+                      <Button
+                        size="sm"
+                        colorScheme="green"
+                        isLoading={connecting}
+                        loadingText="Conectando..."
+                        onClick={handleConnect}
+                        isDisabled={!form.active}
+                      >
+                        Conectar
+                      </Button>
+                    )}
+                    {(liveStatus === "connected" || liveStatus === "connecting" || liveStatus === "waiting_qr") && (
+                      <Button
+                        size="sm"
+                        colorScheme="red"
+                        variant="outline"
+                        isLoading={disconnecting}
+                        loadingText="Desconectando..."
+                        onClick={handleDisconnect}
+                      >
+                        Desconectar
+                      </Button>
+                    )}
+                  </HStack>
+
+                  {!form.active && liveStatus !== "connected" && (
+                    <Text fontSize="xs" color="orange.500" mt={2}>
+                      Ative o bot acima para poder conectar.
+                    </Text>
+                  )}
+                </Box>
+
+                {/* Saved phones history - always visible */}
+                <Box mt={4}>
+                  <Text fontSize="sm" fontWeight="semibold" mb={2}>Aparelhos conectados anteriormente</Text>
+                  {savedPhones.length > 0 ? (
+                    <TableContainer bg={refBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                      <Table size="sm" variant="simple">
+                        <Thead>
+                          <Tr>
+                            <Th>Telefone</Th>
+                            <Th>Última conexão</Th>
+                            <Th w="50px"></Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          {savedPhones.map((p) => (
+                            <Tr key={p.id}>
+                              <Td>
+                                <Text fontSize="sm">{formatPhone(p.phone)}</Text>
+                              </Td>
+                              <Td>
+                                <Text fontSize="xs" color="gray.500">
+                                  {formatDate(p.lastConnectedAt)}
+                                </Text>
+                              </Td>
+                              <Td>
+                                <IconButton
+                                  icon={<DeleteIcon />}
+                                  size="xs"
+                                  variant="ghost"
+                                  colorScheme="red"
+                                  aria-label="Remover"
+                                  onClick={() => handleDeletePhone(p.id)}
+                                />
+                              </Td>
+                            </Tr>
+                          ))}
+                        </Tbody>
+                      </Table>
+                    </TableContainer>
+                  ) : (
+                    <Text fontSize="xs" color="gray.500">
+                      Nenhum aparelho conectado anteriormente.
+                    </Text>
+                  )}
+                </Box>
+              </Box>
+
+              <Divider />
+
+              {/* Provedor LLM */}
+              <Box>
+                <Text fontWeight="semibold" mb={3}>Provedor de LLM</Text>
+                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
+                  <FormControl isRequired>
+                    <FormLabel fontSize="sm">Provedor</FormLabel>
+                    <Select
+                      size="sm"
+                      value={form.llmProvider}
+                      onChange={(e) => handleProviderChange(e.target.value)}
+                    >
+                      {LLM_PROVIDERS.map(p => (
+                        <option key={p.value} value={p.value}>{p.label}</option>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  <FormControl isRequired>
+                    <FormLabel fontSize="sm">Modelo</FormLabel>
+                    <Select
+                      size="sm"
+                      value={form.llmModel}
+                      onChange={(e) => setForm(prev => ({ ...prev, llmModel: e.target.value }))}
+                    >
+                      {currentModels.map(m => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </Select>
+                  </FormControl>
+                  {currentProvider?.needsKey && (
+                    <FormControl isRequired>
+                      <FormLabel fontSize="sm">API Key</FormLabel>
+                      <InputGroup size="sm">
+                        <Input
+                          type={showApiKey ? "text" : "password"}
+                          value={form.llmApiKey}
+                          onChange={(e) => setForm(prev => ({ ...prev, llmApiKey: e.target.value }))}
+                          placeholder="Sua chave de API"
+                          pr="4.5rem"
+                        />
+                        <InputRightElement width="4.5rem">
+                          <IconButton
+                            h="1.5rem"
+                            size="xs"
+                            variant="ghost"
+                            icon={showApiKey ? <ViewOffIcon /> : <ViewIcon />}
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            aria-label={showApiKey ? "Ocultar" : "Mostrar"}
+                          />
+                        </InputRightElement>
+                      </InputGroup>
+                    </FormControl>
+                  )}
+                  {form.llmProvider === "ollama" && (
+                    <FormControl>
+                      <FormLabel fontSize="sm">URL do Ollama</FormLabel>
+                      <Input
+                        size="sm"
+                        value={form.llmBaseUrl}
+                        onChange={(e) => setForm(prev => ({ ...prev, llmBaseUrl: e.target.value }))}
+                        placeholder="http://localhost:11434"
+                      />
+                    </FormControl>
+                  )}
+                </SimpleGrid>
+                <Button
+                  mt={3}
+                  size="sm"
+                  colorScheme="blue"
+                  variant="outline"
+                  isLoading={testingLlm}
+                  loadingText="Testando..."
+                  onClick={handleTestLlm}
+                >
+                  Testar LLM
+                </Button>
+                {testResponse && (
+                  <Box mt={3} bg={refBg} p={3} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                    <Text fontSize="xs" fontWeight="semibold" mb={1}>Resposta da LLM:</Text>
+                    <Text fontSize="sm">{testResponse}</Text>
+                  </Box>
+                )}
+
+                {/* Configuração LLM anterior */}
+                <Box mt={4}>
+                  <Text fontSize="sm" fontWeight="semibold" mb={2}>Configuração LLM anterior</Text>
+                  {lastUsedLlmConfig ? (
+                    <TableContainer bg={refBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                      <Table size="sm" variant="simple">
+                        <Thead>
+                          <Tr>
+                            <Th>Provedor</Th>
+                            <Th>Modelo</Th>
+                            <Th>Chave API</Th>
+                            <Th w="80px"></Th>
+                          </Tr>
+                        </Thead>
+                        <Tbody>
+                          <Tr>
+                            <Td>
+                              <Text fontSize="sm">
+                                {LLM_PROVIDERS.find(p => p.value === lastUsedLlmConfig.provider)?.label || lastUsedLlmConfig.provider}
+                              </Text>
+                            </Td>
+                            <Td>
+                              <Text fontSize="sm">
+                                {Object.values(LLM_MODELS).flat().find(m => m.value === lastUsedLlmConfig.model)?.label || lastUsedLlmConfig.model}
+                              </Text>
+                            </Td>
+                            <Td>
+                              <Text fontSize="xs" fontFamily="mono">
+                                {lastUsedLlmConfig.apiKey.slice(0, 8)}...{lastUsedLlmConfig.apiKey.slice(-4)}
+                              </Text>
+                            </Td>
+                            <Td>
+                              <HStack spacing={1}>
+                                <IconButton
+                                  icon={<CopyIcon />}
+                                  size="xs"
+                                  variant="ghost"
+                                  aria-label="Copiar chave"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(lastUsedLlmConfig.apiKey);
+                                    toast({ title: "Chave copiada!", status: "success", duration: 2000 });
+                                  }}
+                                />
+                                <Button
+                                  size="xs"
+                                  variant="ghost"
+                                  colorScheme="blue"
+                                  onClick={() => setForm(prev => ({
+                                    ...prev,
+                                    llmProvider: lastUsedLlmConfig.provider,
+                                    llmModel: lastUsedLlmConfig.model,
+                                    llmApiKey: lastUsedLlmConfig.apiKey
+                                  }))}
+                                >
+                                  Usar
+                                </Button>
+                              </HStack>
+                            </Td>
+                          </Tr>
+                        </Tbody>
+                      </Table>
+                    </TableContainer>
+                  ) : (
+                    <Text fontSize="xs" color="gray.500">
+                      Nenhuma configuração salva anteriormente.
+                    </Text>
+                  )}
+                </Box>
+              </Box>
+
+              <Divider />
+
+              {/* System Prompt */}
+              <Box>
+                <Text fontWeight="semibold" mb={3}>System Prompt</Text>
+                <FormControl>
+                  <FormLabel fontSize="sm">Instruções do assistente</FormLabel>
+                  <Textarea
+                    size="sm"
+                    rows={5}
+                    value={form.systemPrompt}
+                    onChange={(e) => setForm(prev => ({ ...prev, systemPrompt: e.target.value }))}
+                    placeholder="Descreva como o assistente deve se comportar..."
+                  />
+                  <FormHelperText fontSize="xs">
+                    Define a personalidade e regras do bot. Quanto mais claro, melhor as respostas.
+                  </FormHelperText>
+                </FormControl>
+                <Button
+                  mt={2}
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => setForm(prev => ({ ...prev, systemPrompt: DEFAULT_PROMPT }))}
+                >
+                  Restaurar padrão
+                </Button>
+              </Box>
+
+              <Divider />
+
+              {/* Funcionalidades */}
+              <Box>
+                <Text fontWeight="semibold" mb={3}>Funcionalidades</Text>
+                <VStack spacing={3} align="stretch">
+                  <FormControl display="flex" alignItems="center" justifyContent="space-between">
+                    <Box>
+                      <FormLabel mb={0} fontSize="sm">Consultar vendas</FormLabel>
+                      <Text fontSize="xs" color="gray.500">Permite consultar resumo e dados de vendas</Text>
+                    </Box>
+                    <Switch
+                      isChecked={form.featureSales}
+                      onChange={(e) => setForm(prev => ({ ...prev, featureSales: e.target.checked }))}
+                      colorScheme="green"
+                    />
+                  </FormControl>
+                  <FormControl display="flex" alignItems="center" justifyContent="space-between">
+                    <Box>
+                      <FormLabel mb={0} fontSize="sm">Consultar financeiro</FormLabel>
+                      <Text fontSize="xs" color="gray.500">Permite consultar dados do fluxo de caixa</Text>
+                    </Box>
+                    <Switch
+                      isChecked={form.featureCashflow}
+                      onChange={(e) => setForm(prev => ({ ...prev, featureCashflow: e.target.checked }))}
+                      colorScheme="green"
+                    />
+                  </FormControl>
+                  <FormControl display="flex" alignItems="center" justifyContent="space-between">
+                    <Box>
+                      <FormLabel mb={0} fontSize="sm">Enviar boleto (PDF)</FormLabel>
+                      <Text fontSize="xs" color="gray.500">Permite buscar e enviar 2a via de boleto</Text>
+                    </Box>
+                    <Switch
+                      isChecked={form.featureBoleto}
+                      onChange={(e) => setForm(prev => ({ ...prev, featureBoleto: e.target.checked }))}
+                      colorScheme="green"
+                    />
+                  </FormControl>
+                  <FormControl display="flex" alignItems="center" justifyContent="space-between">
+                    <Box>
+                      <FormLabel mb={0} fontSize="sm">Enviar nota fiscal (PDF)</FormLabel>
+                      <Text fontSize="xs" color="gray.500">Permite buscar e enviar 2a via de NF</Text>
+                    </Box>
+                    <Switch
+                      isChecked={form.featureNf}
+                      onChange={(e) => setForm(prev => ({ ...prev, featureNf: e.target.checked }))}
+                      colorScheme="green"
+                    />
+                  </FormControl>
+                </VStack>
+              </Box>
+
+              {/* Caminhos dos PDFs */}
+              {form.featureBoleto && (
+                <>
+                  <Divider />
+                  <Box>
+                    <Text fontWeight="semibold" mb={3}>Caminhos dos Arquivos (Servidor Sisplan)</Text>
+                    <SimpleGrid columns={{ base: 1, md: 1 }} spacing={4}>
+                      <FormControl>
+                        <FormLabel fontSize="sm">Pasta dos Boletos</FormLabel>
+                        <Input
+                          size="sm"
+                          value={form.boletoPath}
+                          onChange={(e) => setForm(prev => ({ ...prev, boletoPath: e.target.value }))}
+                          placeholder="\\\\servidor\\sisplan\\boletos"
+                        />
+                      </FormControl>
+                    </SimpleGrid>
+                  </Box>
+                </>
+              )}
+
+              <Divider />
+
+              {/* Status */}
+              <Box>
+                <Text fontWeight="semibold" mb={3}>Status</Text>
+                <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
+                  <Box>
+                    <Text fontSize="xs" color="gray.500">Última mensagem</Text>
+                    <Text fontSize="sm">{formatDate(status.lastMessageAt)}</Text>
+                  </Box>
+                  <Box>
+                    <Text fontSize="xs" color="gray.500">Total de interações</Text>
+                    <Text fontSize="sm">{status.totalInteractions || 0}</Text>
+                  </Box>
+                  <Box>
+                    <Text fontSize="xs" color="gray.500">Conexão</Text>
+                    {getStatusBadge()}
+                  </Box>
+                </SimpleGrid>
+              </Box>
+
+              <Divider />
+
+              {/* Salvar */}
+              <Flex justify="flex-end" gap={3}>
+                <Button
+                  colorScheme="blue"
+                  isLoading={saving}
+                  loadingText="Salvando..."
+                  onClick={handleSave}
+                >
+                  Salvar Configurações
+                </Button>
+              </Flex>
+
+              <Alert status="info" borderRadius="md">
+                <AlertIcon />
+                <Text fontSize="sm">
+                  Apenas usuários com número de WhatsApp cadastrado na tela de
+                  <strong> Gerenciar usuários</strong> poderão interagir com o bot.
+                </Text>
+              </Alert>
+            </VStack>
+          </TabPanel>
+
+          {/* === Tab 2: Alertas de Vendas === */}
+          <TabPanel px={0} pt={6}>
+            <VStack spacing={6} align="stretch">
+              <Box>
+                <Text fontWeight="semibold" mb={1}>Alertas de Vendas</Text>
+                <Text fontSize="sm" color="gray.500" mb={4}>
+                  Configure o envio automático de resumos de vendas via WhatsApp para cada usuário.
+                  Os alertas são enviados dentro do horário ativo, no intervalo definido.
+                  Usuários também podem configurar via conversa com o bot.
+                </Text>
+
+                {alertsLoading ? (
+                  <Center py={8}>
+                    <Spinner size="md" />
+                  </Center>
+                ) : alerts.length === 0 ? (
+                  <Alert status="warning" borderRadius="md">
+                    <AlertIcon />
+                    <Text fontSize="sm">Nenhum usuário ativo encontrado.</Text>
+                  </Alert>
+                ) : (
+                  <TableContainer bg={refBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                    <Table size="sm" variant="simple">
+                      <Thead>
+                        <Tr>
+                          <Th>Usuário</Th>
+                          <Th>WhatsApp</Th>
+                          <Th>Ativo</Th>
+                          <Th>Intervalo</Th>
+                          <Th>Horário</Th>
+                          <Th>Pico</Th>
+                          <Th>Último envio</Th>
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {alerts.map((a) => (
+                          <Tr key={a.userId} opacity={!a.whatsapp ? 0.5 : 1}>
+                            <Td>
+                              <Text fontSize="sm" fontWeight="medium">{a.name}</Text>
+                            </Td>
+                            <Td>
+                              <Text fontSize="xs" color={a.whatsapp ? "inherit" : "red.400"}>
+                                {a.whatsapp ? formatPhone(a.whatsapp) : "Não cadastrado"}
+                              </Text>
+                            </Td>
+                            <Td>
+                              <Switch
+                                size="sm"
+                                isChecked={a.alertActive}
+                                isDisabled={!a.whatsapp}
+                                colorScheme="green"
+                                onChange={(e) => handleAlertChange(a.userId, "alertActive", e.target.checked)}
+                              />
+                            </Td>
+                            <Td>
+                              <Select
+                                size="xs"
+                                w="100px"
+                                value={a.intervalHours || 1}
+                                isDisabled={!a.whatsapp}
+                                onChange={(e) => handleAlertChange(a.userId, "intervalHours", parseInt(e.target.value))}
+                              >
+                                {INTERVAL_OPTIONS.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </Select>
+                            </Td>
+                            <Td>
+                              <HStack spacing={1}>
+                                <Select
+                                  size="xs"
+                                  w="80px"
+                                  value={a.hourStart ?? 8}
+                                  isDisabled={!a.whatsapp}
+                                  onChange={(e) => handleAlertChange(a.userId, "hourStart", parseInt(e.target.value))}
+                                >
+                                  {HOURS.map(h => (
+                                    <option key={h.value} value={h.value}>{h.label}</option>
+                                  ))}
+                                </Select>
+                                <Text fontSize="xs">às</Text>
+                                <Select
+                                  size="xs"
+                                  w="80px"
+                                  value={a.hourEnd ?? 22}
+                                  isDisabled={!a.whatsapp}
+                                  onChange={(e) => handleAlertChange(a.userId, "hourEnd", parseInt(e.target.value))}
+                                >
+                                  {HOURS.map(h => (
+                                    <option key={h.value} value={h.value}>{h.label}</option>
+                                  ))}
+                                </Select>
+                              </HStack>
+                            </Td>
+                            <Td>
+                              <Switch
+                                size="sm"
+                                isChecked={a.peakAlert}
+                                isDisabled={!a.whatsapp}
+                                colorScheme="orange"
+                                onChange={(e) => handleAlertChange(a.userId, "peakAlert", e.target.checked)}
+                              />
+                            </Td>
+                            <Td>
+                              <Text fontSize="xs" color="gray.500">
+                                {a.lastSentAt ? formatDate(a.lastSentAt) : "-"}
+                              </Text>
+                            </Td>
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </TableContainer>
+                )}
+              </Box>
+
+              <Alert status="info" borderRadius="md">
+                <AlertIcon />
+                <Box>
+                  <Text fontSize="sm" fontWeight="medium" mb={1}>Como funciona</Text>
+                  <Text fontSize="xs">
+                    A cada hora, o sistema verifica quais usuários devem receber um resumo de vendas
+                    com base no intervalo e horário configurados. A mensagem inclui receita do dia,
+                    pedidos, ticket médio e top produtos. Com o <strong>alerta de pico</strong> ativado,
+                    o usuário recebe um aviso extra quando as vendas da última hora superarem
+                    o dobro da média.
                   </Text>
                 </Box>
-              </Center>
-            )}
-
-            {/* Connecting spinner */}
-            {connecting && !qrCode && (
-              <Center py={4}>
-                <VStack spacing={2}>
-                  <Spinner size="md" color="blue.500" />
-                  <Text fontSize="sm" color="gray.500">Iniciando conexão...</Text>
-                </VStack>
-              </Center>
-            )}
-
-            {/* Connect/Disconnect buttons */}
-            <HStack spacing={3}>
-              {liveStatus !== "connected" && (
-                <Button
-                  size="sm"
-                  colorScheme="green"
-                  isLoading={connecting}
-                  loadingText="Conectando..."
-                  onClick={handleConnect}
-                  isDisabled={!form.active}
-                >
-                  Conectar
-                </Button>
-              )}
-              {(liveStatus === "connected" || liveStatus === "connecting" || liveStatus === "waiting_qr") && (
-                <Button
-                  size="sm"
-                  colorScheme="red"
-                  variant="outline"
-                  isLoading={disconnecting}
-                  loadingText="Desconectando..."
-                  onClick={handleDisconnect}
-                >
-                  Desconectar
-                </Button>
-              )}
-            </HStack>
-
-            {!form.active && liveStatus !== "connected" && (
-              <Text fontSize="xs" color="orange.500" mt={2}>
-                Ative o bot acima para poder conectar.
-              </Text>
-            )}
-          </Box>
-
-          {/* Saved phones history - always visible */}
-          <Box mt={4}>
-            <Text fontSize="sm" fontWeight="semibold" mb={2}>Aparelhos conectados anteriormente</Text>
-            {savedPhones.length > 0 ? (
-              <TableContainer bg={refBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
-                <Table size="sm" variant="simple">
-                  <Thead>
-                    <Tr>
-                      <Th>Telefone</Th>
-                      <Th>Última conexão</Th>
-                      <Th w="50px"></Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    {savedPhones.map((p) => (
-                      <Tr key={p.id}>
-                        <Td>
-                          <Text fontSize="sm">{formatPhone(p.phone)}</Text>
-                        </Td>
-                        <Td>
-                          <Text fontSize="xs" color="gray.500">
-                            {formatDate(p.lastConnectedAt)}
-                          </Text>
-                        </Td>
-                        <Td>
-                          <IconButton
-                            icon={<DeleteIcon />}
-                            size="xs"
-                            variant="ghost"
-                            colorScheme="red"
-                            aria-label="Remover"
-                            onClick={() => handleDeletePhone(p.id)}
-                          />
-                        </Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </TableContainer>
-            ) : (
-              <Text fontSize="xs" color="gray.500">
-                Nenhum aparelho conectado anteriormente.
-              </Text>
-            )}
-          </Box>
-        </Box>
-
-        <Divider />
-
-        {/* Provedor LLM */}
-        <Box>
-          <Text fontWeight="semibold" mb={3}>Provedor de LLM</Text>
-          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4}>
-            <FormControl isRequired>
-              <FormLabel fontSize="sm">Provedor</FormLabel>
-              <Select
-                size="sm"
-                value={form.llmProvider}
-                onChange={(e) => handleProviderChange(e.target.value)}
-              >
-                {LLM_PROVIDERS.map(p => (
-                  <option key={p.value} value={p.value}>{p.label}</option>
-                ))}
-              </Select>
-            </FormControl>
-            <FormControl isRequired>
-              <FormLabel fontSize="sm">Modelo</FormLabel>
-              <Select
-                size="sm"
-                value={form.llmModel}
-                onChange={(e) => setForm(prev => ({ ...prev, llmModel: e.target.value }))}
-              >
-                {currentModels.map(m => (
-                  <option key={m.value} value={m.value}>{m.label}</option>
-                ))}
-              </Select>
-            </FormControl>
-            {currentProvider?.needsKey && (
-              <FormControl isRequired>
-                <FormLabel fontSize="sm">API Key</FormLabel>
-                <InputGroup size="sm">
-                  <Input
-                    type={showApiKey ? "text" : "password"}
-                    value={form.llmApiKey}
-                    onChange={(e) => setForm(prev => ({ ...prev, llmApiKey: e.target.value }))}
-                    placeholder="Sua chave de API"
-                    pr="4.5rem"
-                  />
-                  <InputRightElement width="4.5rem">
-                    <IconButton
-                      h="1.5rem"
-                      size="xs"
-                      variant="ghost"
-                      icon={showApiKey ? <ViewOffIcon /> : <ViewIcon />}
-                      onClick={() => setShowApiKey(!showApiKey)}
-                      aria-label={showApiKey ? "Ocultar" : "Mostrar"}
-                    />
-                  </InputRightElement>
-                </InputGroup>
-              </FormControl>
-            )}
-            {form.llmProvider === "ollama" && (
-              <FormControl>
-                <FormLabel fontSize="sm">URL do Ollama</FormLabel>
-                <Input
-                  size="sm"
-                  value={form.llmBaseUrl}
-                  onChange={(e) => setForm(prev => ({ ...prev, llmBaseUrl: e.target.value }))}
-                  placeholder="http://localhost:11434"
-                />
-              </FormControl>
-            )}
-          </SimpleGrid>
-          <Button
-            mt={3}
-            size="sm"
-            colorScheme="blue"
-            variant="outline"
-            isLoading={testingLlm}
-            loadingText="Testando..."
-            onClick={handleTestLlm}
-          >
-            Testar LLM
-          </Button>
-          {testResponse && (
-            <Box mt={3} bg={refBg} p={3} borderRadius="md" border="1px solid" borderColor={borderColor}>
-              <Text fontSize="xs" fontWeight="semibold" mb={1}>Resposta da LLM:</Text>
-              <Text fontSize="sm">{testResponse}</Text>
-            </Box>
-          )}
-
-          {/* Configuração LLM anterior */}
-          <Box mt={4}>
-            <Text fontSize="sm" fontWeight="semibold" mb={2}>Configuração LLM anterior</Text>
-            {lastUsedLlmConfig ? (
-              <TableContainer bg={refBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
-                <Table size="sm" variant="simple">
-                  <Thead>
-                    <Tr>
-                      <Th>Provedor</Th>
-                      <Th>Modelo</Th>
-                      <Th>Chave API</Th>
-                      <Th w="80px"></Th>
-                    </Tr>
-                  </Thead>
-                  <Tbody>
-                    <Tr>
-                      <Td>
-                        <Text fontSize="sm">
-                          {LLM_PROVIDERS.find(p => p.value === lastUsedLlmConfig.provider)?.label || lastUsedLlmConfig.provider}
-                        </Text>
-                      </Td>
-                      <Td>
-                        <Text fontSize="sm">
-                          {Object.values(LLM_MODELS).flat().find(m => m.value === lastUsedLlmConfig.model)?.label || lastUsedLlmConfig.model}
-                        </Text>
-                      </Td>
-                      <Td>
-                        <Text fontSize="xs" fontFamily="mono">
-                          {lastUsedLlmConfig.apiKey.slice(0, 8)}...{lastUsedLlmConfig.apiKey.slice(-4)}
-                        </Text>
-                      </Td>
-                      <Td>
-                        <HStack spacing={1}>
-                          <IconButton
-                            icon={<CopyIcon />}
-                            size="xs"
-                            variant="ghost"
-                            aria-label="Copiar chave"
-                            onClick={() => {
-                              navigator.clipboard.writeText(lastUsedLlmConfig.apiKey);
-                              toast({ title: "Chave copiada!", status: "success", duration: 2000 });
-                            }}
-                          />
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            colorScheme="blue"
-                            onClick={() => setForm(prev => ({
-                              ...prev,
-                              llmProvider: lastUsedLlmConfig.provider,
-                              llmModel: lastUsedLlmConfig.model,
-                              llmApiKey: lastUsedLlmConfig.apiKey
-                            }))}
-                          >
-                            Usar
-                          </Button>
-                        </HStack>
-                      </Td>
-                    </Tr>
-                  </Tbody>
-                </Table>
-              </TableContainer>
-            ) : (
-              <Text fontSize="xs" color="gray.500">
-                Nenhuma configuração salva anteriormente.
-              </Text>
-            )}
-          </Box>
-        </Box>
-
-        <Divider />
-
-        {/* System Prompt */}
-        <Box>
-          <Text fontWeight="semibold" mb={3}>System Prompt</Text>
-          <FormControl>
-            <FormLabel fontSize="sm">Instruções do assistente</FormLabel>
-            <Textarea
-              size="sm"
-              rows={5}
-              value={form.systemPrompt}
-              onChange={(e) => setForm(prev => ({ ...prev, systemPrompt: e.target.value }))}
-              placeholder="Descreva como o assistente deve se comportar..."
-            />
-            <FormHelperText fontSize="xs">
-              Define a personalidade e regras do bot. Quanto mais claro, melhor as respostas.
-            </FormHelperText>
-          </FormControl>
-          <Button
-            mt={2}
-            size="xs"
-            variant="ghost"
-            onClick={() => setForm(prev => ({ ...prev, systemPrompt: DEFAULT_PROMPT }))}
-          >
-            Restaurar padrão
-          </Button>
-        </Box>
-
-        <Divider />
-
-        {/* Funcionalidades */}
-        <Box>
-          <Text fontWeight="semibold" mb={3}>Funcionalidades</Text>
-          <VStack spacing={3} align="stretch">
-            <FormControl display="flex" alignItems="center" justifyContent="space-between">
-              <Box>
-                <FormLabel mb={0} fontSize="sm">Consultar vendas</FormLabel>
-                <Text fontSize="xs" color="gray.500">Permite consultar resumo e dados de vendas</Text>
-              </Box>
-              <Switch
-                isChecked={form.featureSales}
-                onChange={(e) => setForm(prev => ({ ...prev, featureSales: e.target.checked }))}
-                colorScheme="green"
-              />
-            </FormControl>
-            <FormControl display="flex" alignItems="center" justifyContent="space-between">
-              <Box>
-                <FormLabel mb={0} fontSize="sm">Consultar financeiro</FormLabel>
-                <Text fontSize="xs" color="gray.500">Permite consultar dados do fluxo de caixa</Text>
-              </Box>
-              <Switch
-                isChecked={form.featureCashflow}
-                onChange={(e) => setForm(prev => ({ ...prev, featureCashflow: e.target.checked }))}
-                colorScheme="green"
-              />
-            </FormControl>
-            <FormControl display="flex" alignItems="center" justifyContent="space-between">
-              <Box>
-                <FormLabel mb={0} fontSize="sm">Enviar boleto (PDF)</FormLabel>
-                <Text fontSize="xs" color="gray.500">Permite buscar e enviar 2a via de boleto</Text>
-              </Box>
-              <Switch
-                isChecked={form.featureBoleto}
-                onChange={(e) => setForm(prev => ({ ...prev, featureBoleto: e.target.checked }))}
-                colorScheme="green"
-              />
-            </FormControl>
-            <FormControl display="flex" alignItems="center" justifyContent="space-between">
-              <Box>
-                <FormLabel mb={0} fontSize="sm">Enviar nota fiscal (PDF)</FormLabel>
-                <Text fontSize="xs" color="gray.500">Permite buscar e enviar 2a via de NF</Text>
-              </Box>
-              <Switch
-                isChecked={form.featureNf}
-                onChange={(e) => setForm(prev => ({ ...prev, featureNf: e.target.checked }))}
-                colorScheme="green"
-              />
-            </FormControl>
-          </VStack>
-        </Box>
-
-        {/* Caminhos dos PDFs */}
-        {form.featureBoleto && (
-          <>
-            <Divider />
-            <Box>
-              <Text fontWeight="semibold" mb={3}>Caminhos dos Arquivos (Servidor Sisplan)</Text>
-              <SimpleGrid columns={{ base: 1, md: 1 }} spacing={4}>
-                <FormControl>
-                  <FormLabel fontSize="sm">Pasta dos Boletos</FormLabel>
-                  <Input
-                    size="sm"
-                    value={form.boletoPath}
-                    onChange={(e) => setForm(prev => ({ ...prev, boletoPath: e.target.value }))}
-                    placeholder="\\\\servidor\\sisplan\\boletos"
-                  />
-                </FormControl>
-              </SimpleGrid>
-            </Box>
-          </>
-        )}
-
-        <Divider />
-
-        {/* Status */}
-        <Box>
-          <Text fontWeight="semibold" mb={3}>Status</Text>
-          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={4}>
-            <Box>
-              <Text fontSize="xs" color="gray.500">Última mensagem</Text>
-              <Text fontSize="sm">{formatDate(status.lastMessageAt)}</Text>
-            </Box>
-            <Box>
-              <Text fontSize="xs" color="gray.500">Total de interações</Text>
-              <Text fontSize="sm">{status.totalInteractions || 0}</Text>
-            </Box>
-            <Box>
-              <Text fontSize="xs" color="gray.500">Conexão</Text>
-              {getStatusBadge()}
-            </Box>
-          </SimpleGrid>
-        </Box>
-
-        <Divider />
-
-        {/* Salvar */}
-        <Flex justify="flex-end" gap={3}>
-          <Button
-            colorScheme="blue"
-            isLoading={saving}
-            loadingText="Salvando..."
-            onClick={handleSave}
-          >
-            Salvar Configurações
-          </Button>
-        </Flex>
-
-        <Alert status="info" borderRadius="md">
-          <AlertIcon />
-          <Text fontSize="sm">
-            Apenas usuários com número de WhatsApp cadastrado na tela de
-            <strong> Gerenciar usuários</strong> poderão interagir com o bot.
-          </Text>
-        </Alert>
-      </VStack>
+              </Alert>
+            </VStack>
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
     </Box>
   );
 };

@@ -52,6 +52,10 @@ async function start() {
   const { startMlSnapshotScheduler } = require('./services/mlSnapshotScheduler');
   startMlSnapshotScheduler();
 
+  // Start WhatsApp sales alert scheduler (hourly alerts to users)
+  const { startSalesAlertScheduler } = require('./services/salesAlertScheduler');
+  startSalesAlertScheduler();
+
   // Start WhatsApp bot if active
   try {
     const { startWhatsappBot } = require('./services/whatsappBotService');

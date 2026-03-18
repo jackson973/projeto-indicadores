@@ -506,6 +506,21 @@ export const fetchWhatsappConversationUsers = async () => {
   return handleResponse(response);
 };
 
+// WhatsApp Sales Alerts API
+export const fetchWhatsappSalesAlerts = async () => {
+  const response = await authFetch("/api/whatsapp/sales-alerts");
+  return handleResponse(response);
+};
+
+export const updateWhatsappSalesAlert = async (userId, data) => {
+  const response = await authFetch(`/api/whatsapp/sales-alerts/${userId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
 // Database Manager API (Admin Only)
 export const fetchDatabaseSchema = async () => {
   const response = await authFetch("/api/database/schema");

@@ -462,6 +462,41 @@ async function handleIncomingMessage(msg) {
   }
 }
 
+// --- Outbound Messaging ---
+/**
+ * Send a text message to a phone number (for proactive alerts).
+ * Returns true if sent successfully, false otherwise.
+ */
+async function sendTextToPhone(phone, text) {
+  if (!sock || connectionStatus !== 'connected') {
+    console.log(`${LOG_PREFIX} sendTextToPhone: not connected, skipping.`);
+    return false;
+  }
+
+  const digits = phone.replace(/\D/g, '');
+  const fullNumber = digits.startsWith('55') ? digits : `55${digits}`;
+
+  try {
+    // Try phone JID first (@s.whatsapp.net)
+    let jid = `${fullNumber}@s.whatsapp.net`;
+
+    // Check if we have a LID mapping for this number (reverse lookup)
+    for (const [lid, mappedPhone] of lidToPhoneMap.entries()) {
+      if (mappedPhone === fullNumber && lid.endsWith('@lid')) {
+        jid = lid;
+        break;
+      }
+    }
+
+    await sock.sendMessage(jid, { text });
+    console.log(`${LOG_PREFIX} sendTextToPhone: sent to ${fullNumber}`);
+    return true;
+  } catch (err) {
+    console.error(`${LOG_PREFIX} sendTextToPhone error for ${fullNumber}:`, err.message);
+    return false;
+  }
+}
+
 // --- Exported API ---
 function getStatus() {
   return {
@@ -476,5 +511,6 @@ module.exports = {
   restartWhatsappBot,
   getStatus,
   addSseClient,
-  removeSseClient
+  removeSseClient,
+  sendTextToPhone
 };
