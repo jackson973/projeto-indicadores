@@ -72,6 +72,7 @@ import ProductsManagement from "./components/ProductsManagement";
 import ProductDashboard from "./components/ProductDashboard";
 import ProductGroups from "./components/ProductGroups";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
+import RevenueDetailDrawer from "./components/RevenueDetailDrawer";
 import { getSaoPauloDate, getSaoPauloYear, getSaoPauloMonth } from "./utils/timezone";
 import {
   fetchSummary,
@@ -218,6 +219,7 @@ const App = () => {
   const canceledDrawer = useDisclosure();
   const dailySalesDrawer = useDisclosure();
   const upsellerTodayDrawer = useDisclosure();
+  const revenueDrawer = useDisclosure();
   const [dailySalesDate, setDailySalesDate] = useState("");
   const [dailySalesTitle, setDailySalesTitle] = useState("");
   const forgotModal = useDisclosure();
@@ -986,6 +988,7 @@ const App = () => {
               onTodayClick={() => {
                 upsellerTodayDrawer.onOpen();
               }}
+              onRevenueClick={revenueDrawer.onOpen}
               onYesterdayClick={() => {
                 setDailySalesDate(getSaoPauloDate(-1));
                 setDailySalesTitle("Vendas Ontem");
@@ -1017,6 +1020,12 @@ const App = () => {
               isOpen={upsellerTodayDrawer.isOpen}
               onClose={upsellerTodayDrawer.onClose}
               sisplanActive={sisplanActive}
+            />
+            <RevenueDetailDrawer
+              isOpen={revenueDrawer.isOpen}
+              onClose={revenueDrawer.onClose}
+              filters={{ ...filters, start: monthToStartDate(filters.startMonth), end: monthToEndDate(filters.endMonth) }}
+              summary={summary}
             />
             <SalesByPeriodChart data={salesByPeriod} period={filters.period} onPeriodChange={(value) => setFilters(f => ({ ...f, period: value }))} autoplay={autoplay} />
             <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={6}>

@@ -47,7 +47,7 @@ const AnimatedValue = ({ value, formatter }) => {
   return <>{display}</>;
 };
 
-const SummaryCards = ({ summary, sisplanActive, onCanceledClick, onTodayClick, onYesterdayClick, onRefresh, onRefreshFabrica, onRefreshOnline }) => {
+const SummaryCards = ({ summary, sisplanActive, onCanceledClick, onTodayClick, onYesterdayClick, onRevenueClick, onRefresh, onRefreshFabrica, onRefreshOnline }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingFabrica, setRefreshingFabrica] = useState(false);
   const [refreshingOnline, setRefreshingOnline] = useState(false);
@@ -78,7 +78,7 @@ const SummaryCards = ({ summary, sisplanActive, onCanceledClick, onTodayClick, o
   const items = [
     { title: "Vendas Hoje", rawValue: summary.todayRevenue, formatter: formatCurrency, icon: SunIcon, action: onTodayClick, actionLabel: "Detalhes", refreshable: true, highlight: true },
     { title: "Vendas Ontem", rawValue: summary.yesterdayRevenue, formatter: formatCurrency, icon: CalendarIcon, onClick: onYesterdayClick },
-    { title: "Faturamento", rawValue: summary.totalRevenue, formatter: formatCurrency, icon: StarIcon, highlight: true },
+    { title: "Faturamento", rawValue: summary.totalRevenue, formatter: formatCurrency, icon: StarIcon, highlight: true, action: onRevenueClick, actionLabel: "Detalhes" },
     { title: "Ticket médio", rawValue: summary.ticketAverage, formatter: formatCurrency, icon: TimeIcon },
     { title: "Itens vendidos", rawValue: summary.totalQuantity, formatter: formatNumber, icon: CheckCircleIcon },
     { title: "Vendas", rawValue: summary.totalSales, formatter: formatNumber, icon: CalendarIcon },
