@@ -1,4 +1,5 @@
 const cron = require('node-cron');
+const analyticsRepo = require('../db/upsellerAnalyticsRepository');
 const salesRepo = require('../db/salesRepository');
 const alertsRepo = require('../db/whatsappSalesAlertsRepository');
 const { sendTextToPhone } = require('./whatsappBotService');
@@ -16,27 +17,92 @@ function formatCurrency(value) {
 }
 
 /**
- * Build the sales summary message for a user
+ * Build the sales summary message for a user.
+ * Combines:
+ *  - Online (UpSeller): from upseller_daily_analytics (real-time, every 5min)
+ *  - Fábrica (Sisplan): from sales table with store='Fabrica' (synced every 5min)
+ * Same logic as the main dashboard.
  */
 async function buildAlertMessage(userName, brHour, today) {
   const greeting = getGreeting(brHour);
   const firstName = userName.split(' ')[0];
 
-  const dailyRevenue = await salesRepo.getDailyRevenue(today);
-  const hourlySales = await salesRepo.getHourlySales(today);
-  const topProducts = await salesRepo.getTopProducts(today, {}, 5);
+  // 1. Online data (UpSeller real-time analytics)
+  const analytics = await analyticsRepo.getDailyAnalytics(today);
 
-  const totalOrders = hourlySales.reduce((sum, h) => sum + h.validOrders, 0);
-  const ticketMedio = totalOrders > 0 ? dailyRevenue / totalOrders : 0;
+  const onlineRevenue = parseFloat(analytics?.todaySaleAmount || 0);
+  const onlineOrders = parseInt(analytics?.todayOrderNum || 0);
+  const onlinePerHour = Array.isArray(analytics?.perHour) ? analytics.perHour : [];
+  const onlineProductTops = Array.isArray(analytics?.productTops) ? analytics.productTops : [];
+  const yesterdayPeriodRevenue = parseFloat(analytics?.yesterdayPeriodSaleAmount || 0);
 
-  // Current hour sales
-  const currentHour = hourlySales[brHour] || { amount: 0, validOrders: 0 };
+  // 2. Fábrica data (Sisplan via sales table — synced every 5min)
+  const fabricaRevenue = await salesRepo.getDailyRevenue(today, { store: 'Fabrica' });
+  const fabricaHourly = await salesRepo.getHourlySales(today, { store: 'Fabrica' });
+  const fabricaTopProducts = await salesRepo.getTopProducts(today, { store: 'Fabrica' }, 5);
 
+  // 3. Combined totals
+  const totalRevenue = onlineRevenue + fabricaRevenue;
+  const fabricaOrders = fabricaHourly.reduce((sum, h) => sum + h.validOrders, 0);
+  const totalOrders = onlineOrders + fabricaOrders;
+  const ticketMedio = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+  if (totalRevenue === 0 && totalOrders === 0) {
+    return { msg: null, combinedPerHour: [] };
+  }
+
+  // 4. Combined per-hour data (for peak detection)
+  const combinedPerHour = Array.from({ length: 24 }, (_, i) => {
+    const online = onlinePerHour[i] || {};
+    const fabrica = fabricaHourly[i] || {};
+    return {
+      amount: (parseFloat(online.amount || 0)) + (fabrica.amount || 0),
+      validOrders: (parseInt(online.validOrders || 0)) + (fabrica.validOrders || 0)
+    };
+  });
+
+  // Current hour
+  const currentHour = combinedPerHour[brHour] || { amount: 0, validOrders: 0 };
+
+  // 5. Combined top products (merge online + fabrica, sort by revenue)
+  const allProducts = [];
+  for (const p of onlineProductTops) {
+    allProducts.push({
+      name: p.productName || p.product_name || p.name || '-',
+      units: parseInt(p.validOrders || p.valid_orders || 0),
+      revenue: parseFloat(p.validSales || p.valid_sales || 0)
+    });
+  }
+  for (const p of fabricaTopProducts) {
+    allProducts.push({
+      name: p.productName || '-',
+      units: parseInt(p.unitsSold || 0),
+      revenue: p.sales || 0
+    });
+  }
+  allProducts.sort((a, b) => b.revenue - a.revenue);
+  const topProducts = allProducts.slice(0, 5);
+
+  // 6. Build message
   let msg = `${greeting}, ${firstName}! 📊\n\n`;
   msg += `*Resumo de vendas — ${today.split('-').reverse().join('/')}*\n\n`;
-  msg += `💰 *Receita:* ${formatCurrency(dailyRevenue)}\n`;
+  msg += `💰 *Receita:* ${formatCurrency(totalRevenue)}\n`;
+
+  // Show breakdown if both channels have data
+  if (onlineRevenue > 0 && fabricaRevenue > 0) {
+    msg += `   _Online: ${formatCurrency(onlineRevenue)} | Fábrica: ${formatCurrency(fabricaRevenue)}_\n`;
+  }
+
   msg += `📦 *Pedidos:* ${totalOrders}\n`;
   msg += `🎯 *Ticket médio:* ${formatCurrency(ticketMedio)}\n`;
+
+  // Yesterday comparison (online only — fábrica doesn't have period comparison)
+  if (yesterdayPeriodRevenue > 0) {
+    const diff = totalRevenue - yesterdayPeriodRevenue;
+    const pct = Math.round((diff / yesterdayPeriodRevenue) * 100);
+    const arrow = diff >= 0 ? '↑' : '↓';
+    msg += `📊 *vs ontem (mesmo horário):* ${arrow} ${Math.abs(pct)}%\n`;
+  }
 
   if (currentHour.validOrders > 0) {
     msg += `\n⏰ *Última hora (${brHour}h):* ${currentHour.validOrders} pedidos | ${formatCurrency(currentHour.amount)}`;
@@ -45,25 +111,38 @@ async function buildAlertMessage(userName, brHour, today) {
   if (topProducts.length > 0) {
     msg += '\n\n🏆 *Top produtos:*\n';
     topProducts.forEach((p, i) => {
-      msg += `${i + 1}. ${p.productName} — ${parseInt(p.unitsSold)} un. | ${formatCurrency(p.sales)}\n`;
+      msg += `${i + 1}. ${p.name} — ${p.units} un. | ${formatCurrency(p.revenue)}\n`;
     });
   }
 
-  return { msg, dailyRevenue, totalOrders, hourlySales };
+  // Data freshness info
+  if (analytics?.fetchedAt) {
+    const fetchedTime = new Date(analytics.fetchedAt).toLocaleTimeString('pt-BR', {
+      hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo'
+    });
+    msg += `\n_Dados atualizados às ${fetchedTime}_`;
+  }
+
+  return { msg, combinedPerHour, totalRevenue };
 }
 
 /**
- * Check for sales spike and send peak alerts
+ * Check for sales spike and send peak alerts.
+ * Uses combined per-hour data (online + fábrica).
  */
-async function checkPeakAlert(brHour, today, hourlySales) {
-  if (brHour < 2) return; // not enough data early in the day
+async function checkPeakAlert(brHour, today, combinedPerHour) {
+  if (brHour < 2 || !combinedPerHour || combinedPerHour.length === 0) return;
 
-  // Calculate average of previous hours (only hours with sales)
-  const prevHours = hourlySales.slice(0, brHour).filter(h => h.amount > 0);
-  if (prevHours.length < 2) return;
+  // Get previous hours with sales
+  const prevAmounts = combinedPerHour
+    .slice(0, brHour)
+    .map(h => h.amount)
+    .filter(a => a > 0);
 
-  const avgRevenue = prevHours.reduce((s, h) => s + h.amount, 0) / prevHours.length;
-  const currentRevenue = hourlySales[brHour]?.amount || 0;
+  if (prevAmounts.length < 2) return;
+
+  const avgRevenue = prevAmounts.reduce((s, a) => s + a, 0) / prevAmounts.length;
+  const currentRevenue = combinedPerHour[brHour]?.amount || 0;
 
   // Spike threshold: current hour > 2x average
   if (currentRevenue <= avgRevenue * 2 || currentRevenue < 100) return;
@@ -92,13 +171,14 @@ async function checkPeakAlert(brHour, today, hourlySales) {
 
 /**
  * Start the sales alert scheduler
- * Runs every hour at minute 1 (e.g., 08:01, 09:01, ...)
+ * Runs every hour at minute 2 (e.g., 08:02, 09:02, ...)
+ * Minute 2 to ensure analytics has been refreshed (runs at :00 and :05)
  */
 function startSalesAlertScheduler() {
-  const schedule = '1 * * * *'; // minute 1 of every hour
+  const schedule = '2 * * * *'; // minute 2 of every hour
 
   console.log(`${LOG_PREFIX} Initializing...`);
-  console.log(`${LOG_PREFIX} Schedule: Every hour at :01`);
+  console.log(`${LOG_PREFIX} Schedule: Every hour at :02`);
 
   cron.schedule(schedule, async () => {
     console.log(`${LOG_PREFIX} Running hourly check...`);
@@ -119,13 +199,19 @@ function startSalesAlertScheduler() {
         return;
       }
 
-      // 2. Build message once (same data for all users, personalized greeting)
-      let hourlySalesData = null;
+      // 2. Build and send messages
+      let combinedPerHourData = null;
 
       for (const user of usersToAlert) {
         try {
-          const { msg, hourlySales } = await buildAlertMessage(user.name, brHour, today);
-          hourlySalesData = hourlySales;
+          const { msg, combinedPerHour } = await buildAlertMessage(user.name, brHour, today);
+          combinedPerHourData = combinedPerHour;
+
+          if (!msg) {
+            console.log(`${LOG_PREFIX} No sales data available for ${today}, skipping ${user.name}`);
+            continue;
+          }
+
           const sent = await sendTextToPhone(user.whatsapp, msg);
           if (sent) {
             await alertsRepo.updateLastSentAt(user.id);
@@ -140,10 +226,21 @@ function startSalesAlertScheduler() {
 
       // 3. Check for peak alerts
       try {
-        if (!hourlySalesData) {
-          hourlySalesData = await salesRepo.getHourlySales(today);
+        if (!combinedPerHourData) {
+          // Build combined hourly data for peak detection only
+          const analytics = await analyticsRepo.getDailyAnalytics(today);
+          const onlinePerHour = Array.isArray(analytics?.perHour) ? analytics.perHour : [];
+          const fabricaHourly = await salesRepo.getHourlySales(today, { store: 'Fabrica' });
+          combinedPerHourData = Array.from({ length: 24 }, (_, i) => {
+            const online = onlinePerHour[i] || {};
+            const fabrica = fabricaHourly[i] || {};
+            return {
+              amount: (parseFloat(online.amount || 0)) + (fabrica.amount || 0),
+              validOrders: (parseInt(online.validOrders || 0)) + (fabrica.validOrders || 0)
+            };
+          });
         }
-        await checkPeakAlert(brHour, today, hourlySalesData);
+        await checkPeakAlert(brHour, today, combinedPerHourData);
       } catch (err) {
         console.error(`${LOG_PREFIX} Peak alert check error:`, err.message);
       }
