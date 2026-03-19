@@ -287,7 +287,7 @@ const ProductsManagement = () => {
                           <Badge colorScheme="orange" fontSize="9px" ml={1} flexShrink={0} title={`${p.unconfigured_variations} variação(ões) sem kit configurado`}>
                             {p.unconfigured_variations} nova{p.unconfigured_variations > 1 ? "s" : ""}
                           </Badge>
-                        ) : isVariableKit(p.nome) && p.kit_qty <= 1 ? (
+                        ) : isVariableKit(p.nome) && p.kit_qty <= 1 && p.variation_configured === 0 ? (
                           <Badge colorScheme="yellow" fontSize="9px" ml={1} flexShrink={0} title="Nome sugere kit com quantidades variáveis — verifique o Qtd Kit">
                             Kit variável
                           </Badge>
@@ -299,7 +299,11 @@ const ProductsManagement = () => {
                       {(!isExpanded || !hasVariations) && (
                         <Flex mt={2} align="center" gap={2} onClick={(e) => e.stopPropagation()}>
                           <Text fontSize="xs" fontWeight="medium">Qtd Kit:</Text>
-                          {editingKey === p.store_variation_key ? (
+                          {p.variation_configured > 0 ? (
+                            <Badge colorScheme="green" fontSize="xs" title={`${p.variation_configured} de ${p.variation_total} variações configuradas`}>
+                              <CheckIcon boxSize={2} mr={1} />Var
+                            </Badge>
+                          ) : editingKey === p.store_variation_key ? (
                             <HStack spacing={1}>
                               <NumberInput size="xs" min={1} max={999} w="70px" value={editKitQty}
                                 onChange={(_, val) => setEditKitQty(val || 1)}>
@@ -328,7 +332,7 @@ const ProductsManagement = () => {
                             <Flex key={v.prefix} align="center" justify="space-between" py={1} px={2} bg={varRowBg} borderRadius="md">
                               <Text fontSize="xs" color="gray.600">
                                 {v.prefix} <Text as="span" color="gray.400">({v.count})</Text>
-                                {!v.configured && <Badge colorScheme="orange" fontSize="8px" ml={1}>Novo</Badge>}
+                                {!v.configured && !variations.some((x) => x.configured) && <Badge colorScheme="orange" fontSize="8px" ml={1}>Novo</Badge>}
                               </Text>
                               {editingVarPrefix === v.prefix ? (
                                 <HStack spacing={1}>
@@ -393,7 +397,7 @@ const ProductsManagement = () => {
                               <Badge colorScheme="orange" fontSize="9px" ml={1} flexShrink={0} title={`${p.unconfigured_variations} variação(ões) sem kit configurado`}>
                                 {p.unconfigured_variations} nova{p.unconfigured_variations > 1 ? "s" : ""}
                               </Badge>
-                            ) : isVariableKit(p.nome) && p.kit_qty <= 1 ? (
+                            ) : isVariableKit(p.nome) && p.kit_qty <= 1 && p.variation_configured === 0 ? (
                               <Badge colorScheme="yellow" fontSize="9px" ml={1} flexShrink={0} title="Nome sugere kit com quantidades variáveis — verifique o Qtd Kit">
                                 Kit variável
                               </Badge>
@@ -405,7 +409,12 @@ const ProductsManagement = () => {
                         </Td>
                         <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                           {(!isExpanded || !hasVariations) && (
-                            editingKey === p.store_variation_key ? (
+                            p.variation_configured > 0 ? (
+                              <Badge colorScheme="green" px={3} py={1} fontSize="sm"
+                                title={`${p.variation_configured} de ${p.variation_total} variações configuradas`}>
+                                <CheckIcon boxSize={2.5} mr={1} />Var
+                              </Badge>
+                            ) : editingKey === p.store_variation_key ? (
                               <HStack spacing={1} justify="center">
                                 <NumberInput size="xs" min={1} max={999} w="70px" value={editKitQty}
                                   onChange={(_, val) => setEditKitQty(val || 1)}>
@@ -433,7 +442,7 @@ const ProductsManagement = () => {
                               <Td p={1} />
                               <Td fontSize="xs" pl={12} color="gray.600">
                                 {v.prefix} <Text as="span" color="gray.400">({v.count} vendas)</Text>
-                                {!v.configured && <Badge colorScheme="orange" fontSize="8px" ml={1}>Novo</Badge>}
+                                {!v.configured && !variations.some((x) => x.configured) && <Badge colorScheme="orange" fontSize="8px" ml={1}>Novo</Badge>}
                               </Td>
                               <Td />
                               <Td textAlign="center">

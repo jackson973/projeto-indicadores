@@ -83,18 +83,31 @@ async function listProducts({ codigo, nome, lojas, page = 1, limit = 50 } = {}) 
     params
   );
 
-  // Detectar variações não configuradas para cada produto
+  // Detectar estado das variações de cada produto
   const rows = result.rows;
   if (rows.length > 0) {
     try {
       const svks = rows.map((r) => r.store_variation_key);
-      const unconfigured = await getUnconfiguredVariations(svks);
+      const varInfo = await getVariationsInfo(svks);
       for (const row of rows) {
-        row.unconfigured_variations = unconfigured.get(row.store_variation_key) || 0;
+        const info = varInfo.get(row.store_variation_key);
+        if (info) {
+          row.variation_total = info.total;
+          row.variation_configured = info.configured;
+          // Só alertar variações não configuradas se NENHUMA foi configurada ainda
+          // Se o usuário já configurou alguma, assume que as restantes são intencionais
+          row.unconfigured_variations = info.configured === 0 ? info.unconfigured : 0;
+        } else {
+          row.variation_total = 0;
+          row.variation_configured = 0;
+          row.unconfigured_variations = 0;
+        }
       }
     } catch (err) {
-      console.error('[Products] unconfigured variations check error:', err);
+      console.error('[Products] variations info error:', err);
       for (const row of rows) {
+        row.variation_total = 0;
+        row.variation_configured = 0;
         row.unconfigured_variations = 0;
       }
     }
@@ -104,11 +117,11 @@ async function listProducts({ codigo, nome, lojas, page = 1, limit = 50 } = {}) 
 }
 
 /**
- * Para cada svk, conta quantas variações distintas existem em sales
- * que NÃO têm um kit_qty configurado individualmente na tabela products.
- * Retorna um Map<svk, count>.
+ * Para cada svk, retorna info sobre variações:
+ * { total, configured, unconfigured }
+ * Retorna um Map<svk, { total, configured, unconfigured }>.
  */
-async function getUnconfiguredVariations(svks) {
+async function getVariationsInfo(svks) {
   const result = new Map();
   if (!svks || svks.length === 0) return result;
 
@@ -152,14 +165,19 @@ async function getUnconfiguredVariations(svks) {
   );
   const configuredSet = new Set(configuredResult.rows.map((r) => r.store_variation_key));
 
-  // Contar variações não configuradas por svk
+  // Montar info por svk
   for (const [svk, prefixes] of svkPrefixes) {
     if (prefixes.size <= 1) continue;
-    let count = 0;
+    let configured = 0;
+    let unconfigured = 0;
     for (const prefix of prefixes) {
-      if (!configuredSet.has(`${svk}${KEY_SEP}${prefix}`)) count++;
+      if (configuredSet.has(`${svk}${KEY_SEP}${prefix}`)) {
+        configured++;
+      } else {
+        unconfigured++;
+      }
     }
-    if (count > 0) result.set(svk, count);
+    result.set(svk, { total: prefixes.size, configured, unconfigured });
   }
 
   return result;
