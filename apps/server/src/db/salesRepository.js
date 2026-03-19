@@ -22,11 +22,11 @@ async function batchUpsertSales(salesData, saleChannel = 'online') {
     }
   });
 
-  // Deduplicate data by (order_id, product, variation) - keep last occurrence
+  // Deduplicate data by (order_id, variation) - keep last occurrence
   // This prevents "ON CONFLICT DO UPDATE command cannot affect row a second time" error
   const deduped = new Map();
   salesData.forEach((sale) => {
-    const key = `${sale.orderId}|${sale.product}|${sale.variation || ''}`;
+    const key = `${sale.orderId}|${sale.variation || ''}`;
     deduped.set(key, sale);
   });
 
@@ -111,10 +111,11 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         cancel_by, cancel_reason, image, sale_channel,
         client_name, codcli, nome_fantasia, cnpj_cpf, cod_store
       ) VALUES ${values.join(', ')}
-      ON CONFLICT (order_id, product, COALESCE(variation, ''))
+      ON CONFLICT (order_id, COALESCE(variation, ''))
       DO UPDATE SET
         date = EXCLUDED.date,
         store = EXCLUDED.store,
+        product = EXCLUDED.product,
         ad_name = EXCLUDED.ad_name,
         sku = EXCLUDED.sku,
         quantity = EXCLUDED.quantity,
