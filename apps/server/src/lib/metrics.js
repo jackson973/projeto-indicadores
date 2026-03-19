@@ -73,13 +73,42 @@ const filterSales = (sales, { start, end, store, state, platform, status }) => {
   });
 };
 
+// Detecta se uma string é um padrão de tamanho (ex: GG, M, 10 anos, 9 a 12 meses, RN, 42)
+const isSizePattern = (str) => {
+  const s = str.trim();
+  if (!s) return false;
+  // Tamanhos padrão de roupa: PP, P, M, G, GG, XG, XGG, EG, EGG, RN, UN, U
+  if (/^(PP|P|M|G|GG|XG|XGG|EG|EGG|RN|UN|U)$/i.test(s)) return true;
+  // Faixas etárias: "9 a 12 meses", "0 a 1 mês", "3 a 6 meses"
+  if (/^\d+\s*a\s*\d+\s*mes(es)?$/i.test(s)) return true;
+  // Idade: "10 anos", "2 anos"
+  if (/^\d+\s*anos?$/i.test(s)) return true;
+  // Tamanho com parênteses: "GG (9 a 12 meses)", "M (3 a 6 meses)", "RN (0 a 1 mês)"
+  if (/^(PP|P|M|G|GG|XG|XGG|EG|EGG|RN|UN|U)\s*\(.*\)$/i.test(s)) return true;
+  // Numérico puro (tamanhos como 2, 4, 6, 38, 42)
+  if (/^\d{1,3}$/.test(s)) return true;
+  return false;
+};
+
 const splitVariationAndSize = (sale) => {
   const rawVariation = String(sale.variation || "").trim();
   if (rawVariation.includes(",")) {
-    const [variation, size] = rawVariation.split(",");
+    const parts = rawVariation.split(",");
+    const part1 = (parts[0] || "").trim();
+    const part2 = parts.slice(1).join(",").trim();
+
+    // Se part1 parece tamanho e part2 não, faz swap
+    if (isSizePattern(part1) && !isSizePattern(part2)) {
+      return {
+        variation: part2 || "Não informado",
+        size: part1 || "Não informado"
+      };
+    }
+
+    // Ordem padrão: variação primeiro, tamanho depois
     return {
-      variation: (variation || "").trim() || "Não informado",
-      size: (size || "").trim() || "Não informado"
+      variation: part1 || "Não informado",
+      size: part2 || "Não informado"
     };
   }
 
@@ -460,5 +489,6 @@ module.exports = {
   getSummary,
   getStores,
   getStates,
-  filterSales
+  filterSales,
+  isSizePattern
 };

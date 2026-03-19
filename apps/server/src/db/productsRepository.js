@@ -1,4 +1,5 @@
 const db = require('./connection');
+const { isSizePattern } = require('../lib/metrics');
 
 /**
  * Chave composta: cod_store|||ad_name
@@ -7,6 +8,20 @@ const db = require('./connection');
 const KEY_SEP = '|||';
 // Usa cod_store quando disponível, senão usa store name
 const keyExpr = `COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name)`;
+
+// Expressão SQL que extrai o prefixo de variação com swap inteligente
+// Se a primeira parte é tamanho (GG, M, 10 anos, etc.), usa a segunda parte como variação
+const variationPrefixExpr = `
+  CASE
+    WHEN s.variation LIKE '%,%' AND (
+      TRIM(SPLIT_PART(s.variation, ',', 1)) ~* '^(PP|P|M|G|GG|XG|XGG|EG|EGG|RN|UN|U)(\\s*\\(.*\\))?$'
+      OR TRIM(SPLIT_PART(s.variation, ',', 1)) ~* '^\\d+\\s*a\\s*\\d+\\s*mes(es)?$'
+      OR TRIM(SPLIT_PART(s.variation, ',', 1)) ~* '^\\d+\\s*anos?$'
+      OR TRIM(SPLIT_PART(s.variation, ',', 1)) ~ '^\\d{1,3}$'
+    )
+    THEN TRIM(SUBSTRING(s.variation FROM POSITION(',' IN s.variation) + 1))
+    ELSE TRIM(SPLIT_PART(s.variation, ',', 1))
+  END`;
 
 /**
  * Lista produtos distintos da tabela sales, agrupados por cod_store + ad_name.
@@ -103,31 +118,51 @@ async function updateKitQty(storeVariationKey, kitQty, meta = {}) {
 }
 
 /**
- * Retorna os prefixos de variação distintos de um produto (parte antes da vírgula).
+ * Extrai o prefixo de variação (parte que NÃO é tamanho) de uma string de variação.
+ * Lida com ordens invertidas: "GG (9 a 12 meses),kit 15 peças" → "kit 15 peças"
+ */
+function extractVariationPrefix(variation) {
+  const raw = (variation || '').trim();
+  if (!raw.includes(',')) return raw || 'Não informado';
+  const parts = raw.split(',');
+  const part1 = (parts[0] || '').trim();
+  const part2 = parts.slice(1).join(',').trim();
+  // Se part1 é tamanho e part2 não, swap
+  if (isSizePattern(part1) && !isSizePattern(part2)) return part2 || 'Não informado';
+  return part1 || 'Não informado';
+}
+
+/**
+ * Retorna os prefixos de variação distintos de um produto.
+ * Usa lógica inteligente para detectar quando tamanho vem antes da variação.
  * Ex: "Kit com 5 Shorts,10 anos" → "Kit com 5 Shorts"
- * Se não tem vírgula, retorna a variação inteira.
+ * Ex: "GG (9 a 12 meses),kit 15 peças" → "kit 15 peças"
  * Retorna [] se todas as variações forem iguais (sem sub-variações).
  */
 async function getVariationPrefixes(storeKey, adName) {
   const result = await db.query(
-    `SELECT
-       TRIM(SPLIT_PART(s.variation, ',', 1)) AS prefix,
-       COUNT(*)::int AS qty
+    `SELECT s.variation, COUNT(*)::int AS qty
      FROM sales s
      WHERE COALESCE(s.cod_store::text, s.store) = $1
        AND TRIM(s.ad_name) = $2
        AND s.variation IS NOT NULL
        AND TRIM(s.variation) != ''
-     GROUP BY TRIM(SPLIT_PART(s.variation, ',', 1))
-     ORDER BY prefix`,
+     GROUP BY s.variation`,
     [storeKey, adName]
   );
 
-  // Se só tem 1 prefixo, não há sub-variações relevantes
-  if (result.rows.length <= 1) return [];
+  // Agrupar por prefixo normalizado (com swap inteligente)
+  const prefixMap = new Map();
+  for (const row of result.rows) {
+    const prefix = extractVariationPrefix(row.variation);
+    const existing = prefixMap.get(prefix) || 0;
+    prefixMap.set(prefix, existing + row.qty);
+  }
 
-  // Buscar kit_qty salvo para cada prefixo
-  const prefixes = result.rows.map((r) => r.prefix);
+  // Se só tem 1 prefixo, não há sub-variações relevantes
+  if (prefixMap.size <= 1) return [];
+
+  const prefixes = [...prefixMap.keys()].sort();
   const key = `${storeKey}${KEY_SEP}${adName}`;
 
   const pricesResult = await db.query(
@@ -143,10 +178,10 @@ async function getVariationPrefixes(storeKey, adName) {
     kitMap.set(pfx, r.kit_qty);
   });
 
-  return result.rows.map((r) => ({
-    prefix: r.prefix,
-    count: r.qty,
-    kit_qty: kitMap.get(r.prefix) || 1,
+  return prefixes.map((prefix) => ({
+    prefix,
+    count: prefixMap.get(prefix),
+    kit_qty: kitMap.get(prefix) || 1,
   }));
 }
 
@@ -319,7 +354,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
         s.cod_store,
         CASE
           WHEN s.variation IS NOT NULL AND TRIM(s.variation) != ''
-          THEN COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name) || '|||' || TRIM(SPLIT_PART(s.variation, ',', 1))
+          THEN COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name) || '|||' || ${variationPrefixExpr}
           ELSE NULL
         END AS var_key
       FROM sales s
