@@ -83,7 +83,79 @@ async function listProducts({ codigo, nome, lojas, page = 1, limit = 50 } = {}) 
     params
   );
 
-  return { rows: result.rows, total, page, limit };
+  // Detectar variações não configuradas para cada produto
+  const rows = result.rows;
+  if (rows.length > 0) {
+    const svks = rows.map((r) => r.store_variation_key);
+    const unconfigured = await getUnconfiguredVariations(svks);
+    for (const row of rows) {
+      row.unconfigured_variations = unconfigured.get(row.store_variation_key) || 0;
+    }
+  }
+
+  return { rows, total, page, limit };
+}
+
+/**
+ * Para cada svk, conta quantas variações distintas existem em sales
+ * que NÃO têm um kit_qty configurado individualmente na tabela products.
+ * Retorna um Map<svk, count>.
+ */
+async function getUnconfiguredVariations(svks) {
+  const result = new Map();
+  if (!svks || svks.length === 0) return result;
+
+  // Buscar variações brutas de todos os produtos de uma vez
+  const variationsResult = await db.query(
+    `SELECT
+       COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name) AS svk,
+       s.variation
+     FROM sales s
+     WHERE (COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name)) = ANY($1::text[])
+       AND s.variation IS NOT NULL
+       AND TRIM(s.variation) != ''
+     GROUP BY COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name), s.variation`,
+    [svks]
+  );
+
+  // Agrupar prefixos por svk
+  const svkPrefixes = new Map();
+  for (const row of variationsResult.rows) {
+    const prefix = extractVariationPrefix(row.variation);
+    if (!svkPrefixes.has(row.svk)) svkPrefixes.set(row.svk, new Set());
+    svkPrefixes.get(row.svk).add(prefix);
+  }
+
+  // Filtrar: só considerar produtos com mais de 1 prefixo (tem sub-variações)
+  const toCheck = [];
+  for (const [svk, prefixes] of svkPrefixes) {
+    if (prefixes.size > 1) {
+      for (const prefix of prefixes) {
+        toCheck.push(`${svk}${KEY_SEP}${prefix}`);
+      }
+    }
+  }
+
+  if (toCheck.length === 0) return result;
+
+  // Buscar quais variações já têm kit_qty configurado
+  const configuredResult = await db.query(
+    `SELECT store_variation_key FROM products WHERE store_variation_key = ANY($1::text[])`,
+    [toCheck]
+  );
+  const configuredSet = new Set(configuredResult.rows.map((r) => r.store_variation_key));
+
+  // Contar variações não configuradas por svk
+  for (const [svk, prefixes] of svkPrefixes) {
+    if (prefixes.size <= 1) continue;
+    let count = 0;
+    for (const prefix of prefixes) {
+      if (!configuredSet.has(`${svk}${KEY_SEP}${prefix}`)) count++;
+    }
+    if (count > 0) result.set(svk, count);
+  }
+
+  return result;
 }
 
 /**
@@ -182,6 +254,7 @@ async function getVariationPrefixes(storeKey, adName) {
     prefix,
     count: prefixMap.get(prefix),
     kit_qty: kitMap.get(prefix) || 1,
+    configured: kitMap.has(prefix),
   }));
 }
 

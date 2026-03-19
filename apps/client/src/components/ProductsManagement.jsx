@@ -46,6 +46,22 @@ import {
   fetchProductVariations,
 } from "../api";
 
+/**
+ * Detecta se o nome do anúncio sugere kit com quantidades variáveis.
+ * Ex: "Kit 3 a 15 peças", "Kit 2 ou 3 Blusa", "Kit com 3, 4 ou 5 Bermuda"
+ */
+const isVariableKit = (nome) => {
+  if (!nome) return false;
+  const n = nome.toLowerCase();
+  // "kit X a Y" (Kit 3 a 15 peças)
+  if (/kit\s+\d+\s+a\s+\d+/i.test(n)) return true;
+  // "kit X ou Y" (Kit 2 ou 3)
+  if (/kit\s+\d+\s+ou\s+\d+/i.test(n)) return true;
+  // "kit com X, Y" ou "kit com X, Y ou Z" (Kit com 3, 4 ou 5)
+  if (/kit\s+(com\s+)?\d+\s*,\s*\d+/i.test(n)) return true;
+  return false;
+};
+
 const ProductsManagement = () => {
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
@@ -267,6 +283,15 @@ const ProductsManagement = () => {
                           {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
                         </Box>
                         <Text fontSize="sm" fontWeight="bold" noOfLines={2}>{p.nome}</Text>
+                        {p.unconfigured_variations > 0 ? (
+                          <Badge colorScheme="orange" fontSize="9px" ml={1} flexShrink={0} title={`${p.unconfigured_variations} variação(ões) sem kit configurado`}>
+                            {p.unconfigured_variations} nova{p.unconfigured_variations > 1 ? "s" : ""}
+                          </Badge>
+                        ) : isVariableKit(p.nome) && p.kit_qty <= 1 ? (
+                          <Badge colorScheme="yellow" fontSize="9px" ml={1} flexShrink={0} title="Nome sugere kit com quantidades variáveis — verifique o Qtd Kit">
+                            Kit variável
+                          </Badge>
+                        ) : null}
                       </Flex>
                       {p.loja && (
                         <Tag size="sm" fontSize="10px" variant="subtle" mt={1}>{p.loja}</Tag>
@@ -303,6 +328,7 @@ const ProductsManagement = () => {
                             <Flex key={v.prefix} align="center" justify="space-between" py={1} px={2} bg={varRowBg} borderRadius="md">
                               <Text fontSize="xs" color="gray.600">
                                 {v.prefix} <Text as="span" color="gray.400">({v.count})</Text>
+                                {!v.configured && <Badge colorScheme="orange" fontSize="8px" ml={1}>Novo</Badge>}
                               </Text>
                               {editingVarPrefix === v.prefix ? (
                                 <HStack spacing={1}>
@@ -363,6 +389,15 @@ const ProductsManagement = () => {
                               {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
                             </Box>
                             {p.nome}
+                            {p.unconfigured_variations > 0 ? (
+                              <Badge colorScheme="orange" fontSize="9px" ml={1} flexShrink={0} title={`${p.unconfigured_variations} variação(ões) sem kit configurado`}>
+                                {p.unconfigured_variations} nova{p.unconfigured_variations > 1 ? "s" : ""}
+                              </Badge>
+                            ) : isVariableKit(p.nome) && p.kit_qty <= 1 ? (
+                              <Badge colorScheme="yellow" fontSize="9px" ml={1} flexShrink={0} title="Nome sugere kit com quantidades variáveis — verifique o Qtd Kit">
+                                Kit variável
+                              </Badge>
+                            ) : null}
                           </Flex>
                         </Td>
                         <Td>
@@ -398,6 +433,7 @@ const ProductsManagement = () => {
                               <Td p={1} />
                               <Td fontSize="xs" pl={12} color="gray.600">
                                 {v.prefix} <Text as="span" color="gray.400">({v.count} vendas)</Text>
+                                {!v.configured && <Badge colorScheme="orange" fontSize="8px" ml={1}>Novo</Badge>}
                               </Td>
                               <Td />
                               <Td textAlign="center">
