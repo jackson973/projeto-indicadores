@@ -299,9 +299,13 @@ const ProductsManagement = () => {
                       {(!isExpanded || !hasVariations) && (
                         <Flex mt={2} align="center" gap={2} onClick={(e) => e.stopPropagation()}>
                           <Text fontSize="xs" fontWeight="medium">Qtd Kit:</Text>
-                          {p.variation_configured > 0 ? (
+                          {p.variation_total > 0 && p.variation_configured > 0 ? (
                             <Badge colorScheme="green" fontSize="xs" title={`${p.variation_configured} de ${p.variation_total} variações configuradas`}>
                               <CheckIcon boxSize={2} mr={1} />Var
+                            </Badge>
+                          ) : p.variation_total > 0 && p.variation_configured === 0 ? (
+                            <Badge colorScheme="yellow" fontSize="xs" title={`${p.variation_total} variações sem kit configurado`}>
+                              Var
                             </Badge>
                           ) : editingKey === p.store_variation_key ? (
                             <HStack spacing={1}>
@@ -409,10 +413,15 @@ const ProductsManagement = () => {
                         </Td>
                         <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                           {(!isExpanded || !hasVariations) && (
-                            p.variation_configured > 0 ? (
+                            p.variation_total > 0 && p.variation_configured > 0 ? (
                               <Badge colorScheme="green" px={3} py={1} fontSize="sm"
                                 title={`${p.variation_configured} de ${p.variation_total} variações configuradas`}>
                                 <CheckIcon boxSize={2.5} mr={1} />Var
+                              </Badge>
+                            ) : p.variation_total > 0 && p.variation_configured === 0 ? (
+                              <Badge colorScheme="yellow" px={3} py={1} fontSize="sm"
+                                title={`${p.variation_total} variações sem kit configurado`}>
+                                Var
                               </Badge>
                             ) : editingKey === p.store_variation_key ? (
                               <HStack spacing={1} justify="center">
