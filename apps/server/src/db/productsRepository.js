@@ -86,10 +86,17 @@ async function listProducts({ codigo, nome, lojas, page = 1, limit = 50 } = {}) 
   // Detectar variações não configuradas para cada produto
   const rows = result.rows;
   if (rows.length > 0) {
-    const svks = rows.map((r) => r.store_variation_key);
-    const unconfigured = await getUnconfiguredVariations(svks);
-    for (const row of rows) {
-      row.unconfigured_variations = unconfigured.get(row.store_variation_key) || 0;
+    try {
+      const svks = rows.map((r) => r.store_variation_key);
+      const unconfigured = await getUnconfiguredVariations(svks);
+      for (const row of rows) {
+        row.unconfigured_variations = unconfigured.get(row.store_variation_key) || 0;
+      }
+    } catch (err) {
+      console.error('[Products] unconfigured variations check error:', err);
+      for (const row of rows) {
+        row.unconfigured_variations = 0;
+      }
     }
   }
 
