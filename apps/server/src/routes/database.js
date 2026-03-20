@@ -122,7 +122,8 @@ router.get('/backup', (req, res) => {
   const user = process.env.DB_USER || 'indicadores_user';
   const password = process.env.DB_PASSWORD || 'indicadores_pass';
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const now = new Date(Date.now() - 3 * 60 * 60 * 1000); // UTC-3 Brasília
+  const timestamp = now.toISOString().replace(/[:.]/g, '-').slice(0, 19);
   const filename = `backup-${database}-${timestamp}.sql.gz`;
 
   res.setHeader('Content-Type', 'application/gzip');
@@ -182,26 +183,21 @@ router.post('/restore', upload.single('backup'), (req, res) => {
   const database = process.env.DB_NAME || 'indicadores';
   const user = process.env.DB_USER || 'indicadores_user';
   const password = process.env.DB_PASSWORD || 'indicadores_pass';
+  const env = { ...process.env, PGPASSWORD: password };
 
   const cleanup = () => fs.unlink(filePath, () => {});
 
-  const cmd = isGzip
-    ? `gunzip -c "${filePath}" | psql -h ${host} -p ${port} -U ${user} -d ${database}`
-    : `psql -h ${host} -p ${port} -U ${user} -d ${database} < "${filePath}"`;
-
-  const proc = spawn('sh', ['-c', cmd], {
-    env: { ...process.env, PGPASSWORD: password },
-  });
+  const psql = spawn('psql', ['-h', host, '-p', port, '-U', user, '-d', database], { env });
 
   const stderr = [];
-  proc.stderr.on('data', (data) => stderr.push(data.toString()));
+  psql.stderr.on('data', (data) => stderr.push(data.toString()));
 
-  proc.on('error', (err) => {
+  psql.on('error', (err) => {
     cleanup();
-    return res.status(500).json({ message: `Erro ao executar restore: ${err.message}` });
+    return res.status(500).json({ message: `psql não encontrado: ${err.message}` });
   });
 
-  proc.on('close', (code) => {
+  psql.on('close', (code) => {
     cleanup();
     if (code !== 0) {
       return res.status(500).json({
@@ -211,6 +207,17 @@ router.post('/restore', upload.single('backup'), (req, res) => {
     }
     return res.json({ message: 'Restore concluído com sucesso.' });
   });
+
+  if (isGzip) {
+    const gunzip = spawn('gunzip', ['-c', filePath]);
+    gunzip.on('error', (err) => {
+      cleanup();
+      return res.status(500).json({ message: `gunzip não encontrado: ${err.message}` });
+    });
+    gunzip.stdout.pipe(psql.stdin);
+  } else {
+    fs.createReadStream(filePath).pipe(psql.stdin);
+  }
 });
 
 module.exports = router;
