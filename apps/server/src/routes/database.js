@@ -7,6 +7,22 @@ const os = require('os');
 const fs = require('fs');
 const path = require('path');
 
+function findBinary(name) {
+  const candidates = [
+    `/opt/homebrew/bin/${name}`,
+    `/usr/local/bin/${name}`,
+    `/usr/bin/${name}`,
+    `/opt/homebrew/Cellar/postgresql@17/17.4/bin/${name}`,
+    `/opt/homebrew/Cellar/postgresql@16/16.8/bin/${name}`,
+    `/opt/homebrew/Cellar/postgresql@15/15.13/bin/${name}`,
+    `/opt/homebrew/Cellar/libpq/16.3/bin/${name}`,
+  ];
+  for (const p of candidates) {
+    try { if (fs.existsSync(p)) return p; } catch {}
+  }
+  return name; // fallback — depends on PATH
+}
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: os.tmpdir(),
@@ -129,7 +145,7 @@ router.get('/backup', (req, res) => {
   res.setHeader('Content-Type', 'application/gzip');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
-  const pgdump = spawn('pg_dump', [
+  const pgdump = spawn(findBinary('pg_dump'), [
     '-h', host,
     '-p', port,
     '-U', user,
@@ -140,7 +156,7 @@ router.get('/backup', (req, res) => {
     env: { ...process.env, PGPASSWORD: password },
   });
 
-  const gzip = spawn('gzip', ['-c']);
+  const gzip = spawn(findBinary('gzip'), ['-c']);
 
   pgdump.stdout.pipe(gzip.stdin);
   gzip.stdout.pipe(res);
@@ -187,7 +203,7 @@ router.post('/restore', upload.single('backup'), (req, res) => {
 
   const cleanup = () => fs.unlink(filePath, () => {});
 
-  const psql = spawn('psql', ['-h', host, '-p', port, '-U', user, '-d', database], { env });
+  const psql = spawn(findBinary('psql'), ['-h', host, '-p', port, '-U', user, '-d', database], { env });
 
   const stderr = [];
   psql.stderr.on('data', (data) => stderr.push(data.toString()));
@@ -209,7 +225,7 @@ router.post('/restore', upload.single('backup'), (req, res) => {
   });
 
   if (isGzip) {
-    const gunzip = spawn('gunzip', ['-c', filePath]);
+    const gunzip = spawn(findBinary('gunzip'), ['-c', filePath]);
     gunzip.on('error', (err) => {
       cleanup();
       return res.status(500).json({ message: `gunzip não encontrado: ${err.message}` });
