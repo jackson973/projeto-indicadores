@@ -1,0 +1,1 @@
+ALTER TABLE sales ADD COLUMN IF NOT EXISTS product_url TEXT;

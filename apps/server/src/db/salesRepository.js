@@ -90,7 +90,8 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         sale.codcli || '',
         sale.nomeFantasia || '',
         sale.cnpjCpf || '',
-        codStore
+        codStore,
+        sale.productUrl || null,
       ];
 
       values.push(
@@ -99,10 +100,10 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         `$${paramIndex+8}, $${paramIndex+9}, $${paramIndex+10}, $${paramIndex+11}, ` +
         `$${paramIndex+12}, $${paramIndex+13}, $${paramIndex+14}, $${paramIndex+15}, ` +
         `$${paramIndex+16}, $${paramIndex+17}, $${paramIndex+18}, $${paramIndex+19}, ` +
-        `$${paramIndex+20}, $${paramIndex+21})`
+        `$${paramIndex+20}, $${paramIndex+21}, $${paramIndex+22})`
       );
       params.push(...rowParams);
-      paramIndex += 22;
+      paramIndex += 23;
     });
 
     const query = `
@@ -110,7 +111,7 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         order_id, date, store, product, ad_name, variation, sku,
         quantity, total, unit_price, state, platform, status,
         cancel_by, cancel_reason, image, sale_channel,
-        client_name, codcli, nome_fantasia, cnpj_cpf, cod_store
+        client_name, codcli, nome_fantasia, cnpj_cpf, cod_store, product_url
       ) VALUES ${values.join(', ')}
       ON CONFLICT (order_id, COALESCE(NULLIF(sku, ''), product), COALESCE(variation, ''))
       DO UPDATE SET
@@ -134,6 +135,7 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         nome_fantasia = EXCLUDED.nome_fantasia,
         cnpj_cpf = EXCLUDED.cnpj_cpf,
         cod_store = EXCLUDED.cod_store,
+        product_url = EXCLUDED.product_url,
         updated_at = CURRENT_TIMESTAMP
       RETURNING (xmax = 0) AS inserted
     `;
