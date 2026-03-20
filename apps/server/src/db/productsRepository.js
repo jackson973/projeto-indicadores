@@ -435,11 +435,13 @@ async function getAllAdsWithGroup() {
 async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
   const params = [start, end];
   let groupFilter = '';
+  let byGroupIdsClause = '';
   if (groupIds && groupIds.length > 0) {
     const placeholders = groupIds.map((_, i) => `$${params.length + i + 1}`);
     params.push(...groupIds);
     groupFilter = `INNER JOIN product_group_items gf ON gf.ad_name = sk.svk AND gf.group_id IN (${placeholders.join(',')})
       AND (gf.variation_filter IS NULL OR sk.variation_prefix = gf.variation_filter)`;
+    byGroupIdsClause = `AND g.id IN (${placeholders.join(',')})`;
   }
   let storeFilter = '';
   if (lojas && lojas.length > 0) {
@@ -516,18 +518,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
   );
 
   // By group
-  const byGroupQ = db.query(
-    `${cte}
-     SELECT
-       g.id AS group_id,
-       g.name AS group_name,
-       COALESCE(SUM(r.quantity * r.kit_qty), 0) AS units,
-       COALESCE(SUM(r.total), 0) AS revenue
-     FROM resolved r
-     INNER JOIN product_group_items gi ON gi.ad_name = r.svk
-       AND (gi.variation_filter IS NULL OR r.variation_prefix = gi.variation_filter)
-     INNER JOIN product_groups g ON g.id = gi.group_id
-     GROUP BY g.id, g.name
+  const avulsosUnion = byGroupIdsClause ? '' : `
      UNION ALL
      SELECT
        NULL AS group_id,
@@ -540,7 +531,22 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
        WHERE gi2.ad_name = r.svk
          AND (gi2.variation_filter IS NULL OR r.variation_prefix = gi2.variation_filter)
      )
-     HAVING SUM(r.quantity * r.kit_qty) > 0
+     HAVING SUM(r.quantity * r.kit_qty) > 0`;
+
+  const byGroupQ = db.query(
+    `${cte}
+     SELECT
+       g.id AS group_id,
+       g.name AS group_name,
+       COALESCE(SUM(r.quantity * r.kit_qty), 0) AS units,
+       COALESCE(SUM(r.total), 0) AS revenue
+     FROM resolved r
+     INNER JOIN product_group_items gi ON gi.ad_name = r.svk
+       AND (gi.variation_filter IS NULL OR r.variation_prefix = gi.variation_filter)
+     INNER JOIN product_groups g ON g.id = gi.group_id
+     WHERE TRUE ${byGroupIdsClause}
+     GROUP BY g.id, g.name
+     ${avulsosUnion}
      ORDER BY units DESC`,
     params
   );
