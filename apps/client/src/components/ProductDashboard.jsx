@@ -166,7 +166,9 @@ const ProductDashboard = () => {
   const sortedProducts = useMemo(() => {
     if (!data?.byProduct) return [];
     const base = pieGroupFilter
-      ? data.byProduct.filter((p) => (p.group_name ?? "Avulsos") === pieGroupFilter)
+      ? (pieGroupFilter === "Avulsos"
+          ? data.byProduct.filter((p) => !p.group_name || p.has_ungrouped_rows)
+          : data.byProduct.filter((p) => p.group_name === pieGroupFilter))
       : data.byProduct;
     return [...base].sort((a, b) => {
       const va = a[sortField] ?? 0;

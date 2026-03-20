@@ -528,6 +528,19 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
        AND (gi.variation_filter IS NULL OR r.variation_prefix = gi.variation_filter)
      INNER JOIN product_groups g ON g.id = gi.group_id
      GROUP BY g.id, g.name
+     UNION ALL
+     SELECT
+       NULL AS group_id,
+       NULL AS group_name,
+       COALESCE(SUM(r.quantity * r.kit_qty), 0) AS units,
+       COALESCE(SUM(r.total), 0) AS revenue
+     FROM resolved r
+     WHERE NOT EXISTS (
+       SELECT 1 FROM product_group_items gi2
+       WHERE gi2.ad_name = r.svk
+         AND (gi2.variation_filter IS NULL OR r.variation_prefix = gi2.variation_filter)
+     )
+     HAVING SUM(r.quantity * r.kit_qty) > 0
      ORDER BY units DESC`,
     params
   );
@@ -546,7 +559,8 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
        SUM(r.quantity * r.kit_qty)::numeric AS adjusted_quantity,
        SUM(r.total)::numeric AS revenue,
        COUNT(DISTINCT r.order_id) AS orders,
-       MAX(g.name) AS group_name
+       MAX(g.name) AS group_name,
+       BOOL_OR(gi.id IS NULL) AS has_ungrouped_rows
      FROM resolved r
      LEFT JOIN stores st ON st.id = r.cod_store
      LEFT JOIN product_group_items gi ON gi.ad_name = r.svk
@@ -594,6 +608,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
       revenue: parseFloat(r.revenue) || 0,
       orders: parseInt(r.orders) || 0,
       group_name: r.group_name,
+      has_ungrouped_rows: r.has_ungrouped_rows === true,
     })),
   };
 }
