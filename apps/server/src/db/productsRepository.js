@@ -555,33 +555,35 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
   const byProductQ = db.query(
     `${cte}
      SELECT
-       r.svk AS store_variation_key,
-       r.ad_name,
-       COALESCE(MAX(st.name), MAX(r.store)) AS loja,
-       MAX(CASE WHEN r.image IS NOT NULL AND TRIM(r.image) != '' THEN r.image END) AS thumbnail,
-       MIN(r.kit_qty) AS min_kit_qty,
-       MAX(r.kit_qty) AS max_kit_qty,
-       SUM(r.quantity)::numeric AS raw_quantity,
-       SUM(r.quantity * r.kit_qty)::numeric AS adjusted_quantity,
-       SUM(r.total)::numeric AS revenue,
-       COUNT(DISTINCT r.order_id) AS orders,
-       (
-         SELECT pg.name
-         FROM product_group_items gi2
-         JOIN product_groups pg ON pg.id = gi2.group_id
-         WHERE gi2.ad_name = r.svk
-           AND (gi2.variation_filter IS NULL OR r.variation_prefix = gi2.variation_filter)
-         ORDER BY gi2.variation_filter NULLS LAST
-         LIMIT 1
-       ) AS group_name,
-       NOT EXISTS (
-         SELECT 1 FROM product_group_items gi3
-         WHERE gi3.ad_name = r.svk
-           AND (gi3.variation_filter IS NULL OR r.variation_prefix = gi3.variation_filter)
-       ) AS has_ungrouped_rows
-     FROM resolved r
-     LEFT JOIN stores st ON st.id = r.cod_store
-     GROUP BY r.svk, r.ad_name
+       sub.svk AS store_variation_key,
+       sub.ad_name,
+       COALESCE(MAX(sub.store_name), MAX(sub.store)) AS loja,
+       MAX(CASE WHEN sub.image IS NOT NULL AND TRIM(sub.image) != '' THEN sub.image END) AS thumbnail,
+       MIN(sub.kit_qty) AS min_kit_qty,
+       MAX(sub.kit_qty) AS max_kit_qty,
+       SUM(sub.quantity)::numeric AS raw_quantity,
+       SUM(sub.quantity * sub.kit_qty)::numeric AS adjusted_quantity,
+       SUM(sub.total)::numeric AS revenue,
+       COUNT(DISTINCT sub.order_id) AS orders,
+       MAX(sub.group_name) AS group_name,
+       BOOL_OR(sub.group_name IS NULL) AS has_ungrouped_rows
+     FROM (
+       SELECT
+         r.*,
+         st.name AS store_name,
+         (
+           SELECT pg.name
+           FROM product_group_items gi2
+           JOIN product_groups pg ON pg.id = gi2.group_id
+           WHERE gi2.ad_name = r.svk
+             AND (gi2.variation_filter IS NULL OR r.variation_prefix = gi2.variation_filter)
+           ORDER BY gi2.variation_filter NULLS LAST
+           LIMIT 1
+         ) AS group_name
+       FROM resolved r
+       LEFT JOIN stores st ON st.id = r.cod_store
+     ) sub
+     GROUP BY sub.svk, sub.ad_name
      ORDER BY adjusted_quantity DESC`,
     params
   );
