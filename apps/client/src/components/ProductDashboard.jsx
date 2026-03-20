@@ -151,7 +151,7 @@ const ProductDashboard = () => {
     setOrdersModal({ product, orders: [], loading: true });
     onOrdersOpen();
     try {
-      const orders = await fetchProductOrders(product.store_variation_key, startDate, endDate);
+      const orders = await fetchProductOrders(product.store_variation_key, startDate, endDate, product.variation_filter || null);
       setOrdersModal({ product, orders, loading: false });
     } catch {
       toast({ title: "Erro ao buscar pedidos", status: "error", duration: 3000 });

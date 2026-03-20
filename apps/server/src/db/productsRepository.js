@@ -566,6 +566,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
        SUM(sub.total)::numeric AS revenue,
        COUNT(DISTINCT sub.order_id) AS orders,
        MAX(sub.group_name) AS group_name,
+       MAX(sub.matched_variation_filter) AS matched_variation_filter,
        BOOL_OR(sub.group_name IS NULL) AS has_ungrouped_rows
      FROM (
        SELECT
@@ -579,7 +580,16 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
              AND (gi2.variation_filter IS NULL OR r.variation_prefix = gi2.variation_filter)
            ORDER BY gi2.variation_filter NULLS LAST
            LIMIT 1
-         ) AS group_name
+         ) AS group_name,
+         (
+           SELECT gi2.variation_filter
+           FROM product_group_items gi2
+           JOIN product_groups pg ON pg.id = gi2.group_id
+           WHERE gi2.ad_name = r.svk
+             AND (gi2.variation_filter IS NULL OR r.variation_prefix = gi2.variation_filter)
+           ORDER BY gi2.variation_filter NULLS LAST
+           LIMIT 1
+         ) AS matched_variation_filter
        FROM resolved r
        LEFT JOIN stores st ON st.id = r.cod_store
      ) sub
@@ -625,6 +635,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
       revenue: parseFloat(r.revenue) || 0,
       orders: parseInt(r.orders) || 0,
       group_name: r.group_name,
+      variation_filter: r.matched_variation_filter || null,
       has_ungrouped_rows: r.has_ungrouped_rows === true,
     })),
   };
@@ -633,7 +644,14 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
 /**
  * Retorna pedidos de um produto (svk) em um período, excluindo cancelados.
  */
-async function getProductOrders(svk, start, end) {
+async function getProductOrders(svk, start, end, variationFilter = null) {
+  const params = [svk, start, end];
+  const variationClause = variationFilter
+    ? (() => {
+        params.push(variationFilter);
+        return `AND (${variationPrefixExpr}) = $${params.length}`;
+      })()
+    : '';
   const result = await db.query(
     `SELECT
        s.order_id AS "orderId",
@@ -660,8 +678,9 @@ async function getProductOrders(svk, start, end) {
        AND (s.status IS NULL OR s.status = ''
          OR LOWER(TRANSLATE(s.status, 'áàãâéêíóôõúüç', 'aaaaeeiooouuc'))
            NOT SIMILAR TO '%(cancelado|cancel)%')
+       ${variationClause}
      ORDER BY s.date DESC`,
-    [svk, start, end]
+    params
   );
   return result.rows.map((r) => ({
     ...r,

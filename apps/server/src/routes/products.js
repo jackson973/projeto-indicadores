@@ -23,9 +23,9 @@ router.get('/dashboard', async (req, res) => {
 // ── GET /api/products/dashboard/orders — orders for a specific product ────────
 router.get('/dashboard/orders', async (req, res) => {
   try {
-    const { svk, start, end } = req.query;
+    const { svk, start, end, variationFilter } = req.query;
     if (!svk || !start || !end) return res.status(400).json({ message: 'svk, start e end são obrigatórios.' });
-    const orders = await productsRepo.getProductOrders(svk, start, end);
+    const orders = await productsRepo.getProductOrders(svk, start, end, variationFilter || null);
     res.json(orders);
   } catch (err) {
     console.error('[Products] dashboard orders error:', err);

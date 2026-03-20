@@ -1014,8 +1014,9 @@ export const fetchProductDashboard = async (start, end, groupIds, lojas) => {
   return handleResponse(response);
 };
 
-export const fetchProductOrders = async (svk, start, end) => {
+export const fetchProductOrders = async (svk, start, end, variationFilter = null) => {
   const params = new URLSearchParams({ svk, start, end });
+  if (variationFilter) params.set('variationFilter', variationFilter);
   const response = await authFetch(`/api/products/dashboard/orders?${params.toString()}`);
   return handleResponse(response);
 };

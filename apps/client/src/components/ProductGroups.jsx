@@ -79,6 +79,9 @@ const ProductGroups = () => {
   const [removingBatch, setRemovingBatch] = useState(false);
   const [selectedSearchResults, setSelectedSearchResults] = useState(new Set());
 
+  const [showAll, setShowAll] = useState(false);
+  const [allSearch, setAllSearch] = useState("");
+
   const [showUngrouped, setShowUngrouped] = useState(false);
   const [ungroupedSearch, setUngroupedSearch] = useState("");
   const [assignTargetGroupId, setAssignTargetGroupId] = useState("");
@@ -220,6 +223,15 @@ const ProductGroups = () => {
     const assignedCount = ad._associations.filter((a) => a.variation_filter).length;
     return assignedCount >= ad._variationCount;
   };
+
+  const allGroupedAds = useMemo(() => {
+    const term = allSearch.toLowerCase().trim();
+    return uniqueAds.filter((a) => {
+      if (!a._associations || a._associations.length === 0) return false;
+      if (!term) return true;
+      return (a.ad_name || "").toLowerCase().includes(term) || (a.loja || "").toLowerCase().includes(term);
+    });
+  }, [uniqueAds, allSearch]);
 
   const ungroupedAds = useMemo(() => {
     const term = ungroupedSearch.toLowerCase().trim();
@@ -488,10 +500,21 @@ const ProductGroups = () => {
           ) : (
             <VStack spacing={0} align="stretch">
               <Flex align="center" px={4} py={2.5} cursor="pointer"
+                bg={showAll ? selectedBg : undefined}
+                _hover={{ bg: showAll ? selectedBg : hoverBg }}
+                borderBottomWidth="1px" borderColor={borderColor}
+                onClick={() => { setShowAll(true); setShowUngrouped(false); setSelectedGroupId(null); setAllSearch(""); }}>
+                <Text fontSize="sm" fontWeight={showAll ? "semibold" : "normal"} flex={1} color="gray.600">Todos</Text>
+                <Badge colorScheme="gray" fontSize="xs" ml={2}>
+                  {loadingAllAds ? "..." : allGroupedAds.length}
+                </Badge>
+              </Flex>
+
+              <Flex align="center" px={4} py={2.5} cursor="pointer"
                 bg={showUngrouped ? selectedBg : undefined}
                 _hover={{ bg: showUngrouped ? selectedBg : hoverBg }}
                 borderBottomWidth="1px" borderColor={borderColor}
-                onClick={() => { setShowUngrouped(true); setSelectedGroupId(null); setUngroupedSearch(""); setAssignTargetGroupId(""); setSelectedUngrouped(new Set()); }}>
+                onClick={() => { setShowUngrouped(true); setShowAll(false); setSelectedGroupId(null); setUngroupedSearch(""); setAssignTargetGroupId(""); setSelectedUngrouped(new Set()); }}>
                 <Text fontSize="sm" fontWeight={showUngrouped ? "semibold" : "normal"} flex={1}
                   color={ungroupedAds.length > 0 ? "orange.500" : "gray.400"}>Sem grupo</Text>
                 <Badge colorScheme={ungroupedAds.length > 0 ? "orange" : "gray"} fontSize="xs" ml={2}>
@@ -504,7 +527,7 @@ const ProductGroups = () => {
                   bg={selectedGroupId === group.id ? selectedBg : undefined}
                   _hover={{ bg: selectedGroupId === group.id ? selectedBg : hoverBg }}
                   borderBottomWidth="1px" borderColor={borderColor}
-                  onClick={() => { if (editingId !== group.id) { setSelectedGroupId(group.id); setShowUngrouped(false); } }}>
+                  onClick={() => { if (editingId !== group.id) { setSelectedGroupId(group.id); setShowUngrouped(false); setShowAll(false); } }}>
                   <Box flex={1} minW={0}>
                     {editingId === group.id ? (
                       <Input size="sm" value={editingName} onChange={(e) => setEditingName(e.target.value)}
@@ -539,16 +562,63 @@ const ProductGroups = () => {
           flex={1} w={isMobile ? "100%" : undefined} minW={0}>
           <Flex justify="space-between" align="center" p={4} borderBottomWidth="1px" borderColor={borderColor}>
             <Heading size="sm" isTruncated>
-              {showUngrouped ? "Anúncios sem grupo" : selectedGroup ? `Anúncios — ${selectedGroup.name}` : "Anúncios"}
+              {showAll ? "Todos os anúncios em grupos" : showUngrouped ? "Anúncios sem grupo" : selectedGroup ? `Anúncios — ${selectedGroup.name}` : "Anúncios"}
             </Heading>
-            {showUngrouped ? (
+            {showAll ? (
+              <Badge colorScheme="gray" fontSize="xs" ml={2} flexShrink={0}>{allGroupedAds.length} anúncio{allGroupedAds.length !== 1 ? "s" : ""}</Badge>
+            ) : showUngrouped ? (
               <Badge colorScheme="orange" fontSize="xs" ml={2} flexShrink={0}>{ungroupedAds.length} anúncio{ungroupedAds.length !== 1 ? "s" : ""}</Badge>
             ) : selectedGroup ? (
               <Badge colorScheme="blue" fontSize="xs" ml={2} flexShrink={0}>{groupItems.length} anúncio{groupItems.length !== 1 ? "s" : ""}</Badge>
             ) : null}
           </Flex>
 
-          {showUngrouped ? (
+          {showAll ? (
+            <Box p={4}>
+              <InputGroup size="sm" mb={3}>
+                <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
+                <Input placeholder="Pesquisar por nome ou loja..." value={allSearch}
+                  onChange={(e) => setAllSearch(e.target.value)} />
+              </InputGroup>
+
+              {loadingAllAds ? (
+                <Center p={6}><Spinner /></Center>
+              ) : allGroupedAds.length === 0 ? (
+                <Center p={6}>
+                  <Text fontSize="sm" color="gray.500">
+                    {allSearch ? "Nenhum anúncio encontrado." : "Nenhum anúncio em grupo ainda."}
+                  </Text>
+                </Center>
+              ) : (
+                <VStack spacing={0} align="stretch" maxH="600px" overflowY="auto">
+                  {allGroupedAds.map((a) => {
+                    const url = getMarketplaceUrl(a);
+                    return (
+                      <Flex key={a.store_variation_key} align="center" px={3} py={2}
+                        borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }} _hover={{ bg: hoverBg }}>
+                        {a.thumbnail && (
+                          <Image src={a.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
+                        )}
+                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.ad_name}</Text>
+                        {a._associations?.map((x, idx) => (
+                          <Tag key={idx} size="sm" fontSize="9px" variant="solid"
+                            colorScheme={x.variation_filter ? "purple" : "blue"} ml={1} flexShrink={0}>
+                            {x.variation_filter ? `${x.variation_filter} → ` : ""}{x.group_name}
+                          </Tag>
+                        ))}
+                        {url && (
+                          <Link href={url} isExternal ml={1} flexShrink={0}>
+                            <ExternalLinkIcon boxSize={3} color="gray.400" />
+                          </Link>
+                        )}
+                        {a.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{a.loja}</Tag>}
+                      </Flex>
+                    );
+                  })}
+                </VStack>
+              )}
+            </Box>
+          ) : showUngrouped ? (
             <Box p={4}>
               <InputGroup size="sm" mb={3}>
                 <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
