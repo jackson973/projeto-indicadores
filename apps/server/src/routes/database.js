@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
+const { spawn } = require('child_process');
 
 // GET /api/database/schema - List all tables and their columns
 router.get('/schema', async (_req, res) => {
@@ -92,6 +93,61 @@ router.post('/query', async (req, res) => {
       duration,
     });
   }
+});
+
+// GET /api/database/backup - Download a pg_dump of the database
+router.get('/backup', (req, res) => {
+  const host = process.env.DB_HOST || 'localhost';
+  const port = process.env.DB_PORT || '5432';
+  const database = process.env.DB_NAME || 'indicadores';
+  const user = process.env.DB_USER || 'indicadores_user';
+  const password = process.env.DB_PASSWORD || 'indicadores_pass';
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const filename = `backup-${database}-${timestamp}.sql.gz`;
+
+  res.setHeader('Content-Type', 'application/gzip');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+  const pgdump = spawn('pg_dump', [
+    '-h', host,
+    '-p', port,
+    '-U', user,
+    '-d', database,
+    '--no-owner',
+    '--no-acl',
+  ], {
+    env: { ...process.env, PGPASSWORD: password },
+  });
+
+  const gzip = spawn('gzip', ['-c']);
+
+  pgdump.stdout.pipe(gzip.stdin);
+  gzip.stdout.pipe(res);
+
+  pgdump.stderr.on('data', (data) => {
+    console.error('pg_dump stderr:', data.toString());
+  });
+
+  pgdump.on('error', (err) => {
+    console.error('pg_dump error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'pg_dump não encontrado. Instale o postgresql-client.' });
+    }
+  });
+
+  gzip.on('error', (err) => {
+    console.error('gzip error:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: 'Erro ao compactar backup.' });
+    }
+  });
+
+  pgdump.on('close', (code) => {
+    if (code !== 0) {
+      console.error(`pg_dump exited with code ${code}`);
+    }
+  });
 });
 
 module.exports = router;

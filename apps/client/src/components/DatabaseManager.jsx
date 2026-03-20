@@ -39,7 +39,7 @@ import {
   DeleteIcon,
 } from "@chakra-ui/icons";
 import Editor from "@monaco-editor/react";
-import { fetchDatabaseSchema, executeDatabaseQuery } from "../api";
+import { fetchDatabaseSchema, executeDatabaseQuery, downloadDatabaseBackup } from "../api";
 
 // Memoized result table - only re-renders when result/error/executing change
 const ResultsPanel = memo(function ResultsPanel({ result, error, executing, hoverBg, borderColor, resultHeaderBg, panelBg }) {
@@ -175,6 +175,7 @@ export default function DatabaseManager() {
   const [executing, setExecuting] = useState(false);
   const [loadingSchema, setLoadingSchema] = useState(true);
   const [statusText, setStatusText] = useState(null);
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
   const editorRef = useRef(null);
   const sqlRef = useRef("");
   const schemaDrawer = useDisclosure();
@@ -536,6 +537,27 @@ export default function DatabaseManager() {
           >
             Limpar
           </Button>
+          <Tooltip label="Baixar backup completo da base (.sql.gz)">
+            <Button
+              size="sm"
+              variant="outline"
+              colorScheme="purple"
+              isLoading={downloadingBackup}
+              loadingText="Gerando..."
+              onClick={async () => {
+                setDownloadingBackup(true);
+                try {
+                  await downloadDatabaseBackup();
+                } catch (err) {
+                  alert(err.message);
+                } finally {
+                  setDownloadingBackup(false);
+                }
+              }}
+            >
+              Baixar Backup
+            </Button>
+          </Tooltip>
           {statusText && (
             <Text fontSize="xs" color="gray.500" ml="auto" whiteSpace="nowrap">
               {statusText}
