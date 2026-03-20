@@ -401,6 +401,7 @@ async function getAllAdsWithGroup() {
       s.platform,
       s.sku,
       s.variation_count,
+      COALESCE(s.product_url, uc.product_url) AS product_url,
       gi.group_id,
       g.name AS group_name,
       gi.variation_filter
@@ -420,6 +421,7 @@ async function getAllAdsWithGroup() {
       WHERE sa.ad_name IS NOT NULL AND TRIM(sa.ad_name) != '' AND sa.ad_name != 'Geral'
       GROUP BY ${saKeyExpr}, TRIM(sa.ad_name), sa.store
     ) s
+    LEFT JOIN product_url_cache uc ON uc.store_variation_key = s.store_variation_key
     LEFT JOIN product_group_items gi ON gi.ad_name = s.store_variation_key
     LEFT JOIN product_groups g ON g.id = gi.group_id
     ORDER BY s.ad_name

@@ -142,6 +142,27 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
 
     const result = await client.query(query, params);
 
+    // Atualiza cache de URLs para vendas que trouxeram product_url
+    const withUrl = batch.filter(s => s.productUrl);
+    if (withUrl.length > 0) {
+      const cacheValues = [];
+      const cacheParams = [];
+      let ci = 1;
+      withUrl.forEach((sale) => {
+        const storeName = (sale.store || 'Todas').trim();
+        const codStore = storeMap.get(storeName.toLowerCase()) || null;
+        const svk = (codStore != null ? String(codStore) : storeName) + '|||' + (sale.adName || 'Geral').trim();
+        cacheValues.push(`($${ci++}, $${ci++})`);
+        cacheParams.push(svk, sale.productUrl);
+      });
+      await client.query(`
+        INSERT INTO product_url_cache (store_variation_key, product_url)
+        VALUES ${cacheValues.join(', ')}
+        ON CONFLICT (store_variation_key) DO UPDATE
+          SET product_url = EXCLUDED.product_url, updated_at = NOW()
+      `, cacheParams);
+    }
+
     await client.query('COMMIT');
 
     // Count inserts vs updates
