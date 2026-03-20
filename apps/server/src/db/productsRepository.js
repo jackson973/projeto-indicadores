@@ -650,9 +650,11 @@ async function getProductOrders(svk, start, end) {
        s.platform,
        s.status,
        s.client_name AS "clientName",
-       s.sale_channel AS "saleChannel"
+       s.sale_channel AS "saleChannel",
+       COALESCE(s.product_url, uc.product_url) AS "productUrl"
      FROM sales s
      LEFT JOIN stores st ON st.id = s.cod_store
+     LEFT JOIN product_url_cache uc ON uc.store_variation_key = (COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name))
      WHERE (COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name)) = $1
        AND s.date::date >= $2::date AND s.date::date <= $3::date
        AND (s.status IS NULL OR s.status = ''

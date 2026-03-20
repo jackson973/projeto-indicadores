@@ -36,12 +36,13 @@ import {
   ModalCloseButton,
   ModalBody,
   Badge,
+  Link,
   useToast,
   useColorModeValue,
   useBreakpointValue,
   useDisclosure,
 } from "@chakra-ui/react";
-import { ChevronDownIcon, SmallCloseIcon, TriangleDownIcon, TriangleUpIcon } from "@chakra-ui/icons";
+import { ChevronDownIcon, ExternalLinkIcon, SmallCloseIcon, TriangleDownIcon, TriangleUpIcon } from "@chakra-ui/icons";
 import {
   ComposedChart,
   Bar,
@@ -602,6 +603,7 @@ const ProductDashboard = () => {
                   <Tr>
                     <Th fontSize="xs">Pedido</Th>
                     <Th fontSize="xs">Data</Th>
+                    <Th fontSize="xs">Produto</Th>
                     <Th fontSize="xs">Variação</Th>
                     <Th fontSize="xs">Cliente</Th>
                     <Th fontSize="xs">Loja</Th>
@@ -618,6 +620,16 @@ const ProductDashboard = () => {
                       <Td fontSize="xs" fontWeight="medium" color="blue.600">{o.orderId}</Td>
                       <Td fontSize="xs" whiteSpace="nowrap">
                         {new Date(o.date).toLocaleDateString("pt-BR")} {new Date(o.date).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                      </Td>
+                      <Td fontSize="xs" maxW="180px">
+                        <Flex align="center" gap={1}>
+                          <Text isTruncated title={o.product}>{o.product || "-"}</Text>
+                          {o.productUrl && (
+                            <Link href={o.productUrl} isExternal flexShrink={0}>
+                              <ExternalLinkIcon boxSize={3} color="gray.400" />
+                            </Link>
+                          )}
+                        </Flex>
                       </Td>
                       <Td fontSize="xs" maxW="200px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={o.variation}>{o.variation || "-"}</Td>
                       <Td fontSize="xs" maxW="150px" overflow="hidden" textOverflow="ellipsis" whiteSpace="nowrap" title={o.clientName}>{o.clientName || "-"}</Td>
