@@ -163,6 +163,7 @@ const ProductGroups = () => {
   };
 
   const getMarketplaceUrl = (ad) => {
+    if (ad.product_url) return ad.product_url;
     const platform = (ad.platform || "").toLowerCase();
     const name = ad.ad_name || "";
     if (platform.includes("shopee")) {
