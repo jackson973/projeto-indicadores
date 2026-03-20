@@ -565,13 +565,22 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
        SUM(r.quantity * r.kit_qty)::numeric AS adjusted_quantity,
        SUM(r.total)::numeric AS revenue,
        COUNT(DISTINCT r.order_id) AS orders,
-       MAX(g.name) AS group_name,
-       BOOL_OR(gi.id IS NULL) AS has_ungrouped_rows
+       (
+         SELECT pg.name
+         FROM product_group_items gi2
+         JOIN product_groups pg ON pg.id = gi2.group_id
+         WHERE gi2.ad_name = r.svk
+           AND (gi2.variation_filter IS NULL OR r.variation_prefix = gi2.variation_filter)
+         ORDER BY gi2.variation_filter NULLS LAST
+         LIMIT 1
+       ) AS group_name,
+       NOT EXISTS (
+         SELECT 1 FROM product_group_items gi3
+         WHERE gi3.ad_name = r.svk
+           AND (gi3.variation_filter IS NULL OR r.variation_prefix = gi3.variation_filter)
+       ) AS has_ungrouped_rows
      FROM resolved r
      LEFT JOIN stores st ON st.id = r.cod_store
-     LEFT JOIN product_group_items gi ON gi.ad_name = r.svk
-       AND (gi.variation_filter IS NULL OR r.variation_prefix = gi.variation_filter)
-     LEFT JOIN product_groups g ON g.id = gi.group_id
      GROUP BY r.svk, r.ad_name
      ORDER BY adjusted_quantity DESC`,
     params
