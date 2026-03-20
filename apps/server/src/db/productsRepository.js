@@ -336,44 +336,54 @@ async function deleteProductGroup(id) {
 
 async function getGroupItems(groupId) {
   const result = await db.query(
-    'SELECT * FROM product_group_items WHERE group_id = $1 ORDER BY ad_name',
+    'SELECT id, group_id, ad_name, variation_filter, created_at FROM product_group_items WHERE group_id = $1 ORDER BY ad_name, variation_filter',
     [groupId]
   );
   return result.rows;
 }
 
-async function addItemToGroup(groupId, adName) {
-  await db.query('DELETE FROM product_group_items WHERE ad_name = $1', [adName]);
+async function addItemToGroup(groupId, adName, variationFilter = null) {
+  // Remove existing entry for same ad+variation combo
+  await db.query(
+    `DELETE FROM product_group_items WHERE ad_name = $1 AND COALESCE(variation_filter, '') = COALESCE($2, '')`,
+    [adName, variationFilter]
+  );
   const result = await db.query(
-    'INSERT INTO product_group_items (group_id, ad_name) VALUES ($1, $2) RETURNING *',
-    [groupId, adName]
+    'INSERT INTO product_group_items (group_id, ad_name, variation_filter) VALUES ($1, $2, $3) RETURNING *',
+    [groupId, adName, variationFilter || null]
   );
   return result.rows[0];
 }
 
-async function removeItemFromGroup(groupId, adName) {
+async function removeItemFromGroup(groupId, adName, variationFilter = null) {
   const result = await db.query(
-    'DELETE FROM product_group_items WHERE group_id = $1 AND ad_name = $2',
-    [groupId, adName]
+    `DELETE FROM product_group_items WHERE group_id = $1 AND ad_name = $2 AND COALESCE(variation_filter, '') = COALESCE($3, '')`,
+    [groupId, adName, variationFilter]
   );
   return result.rowCount > 0;
 }
 
-async function addItemsToGroupBatch(groupId, adNames) {
+async function addItemsToGroupBatch(groupId, items) {
   const results = [];
-  for (const adName of adNames) {
-    const row = await addItemToGroup(groupId, adName);
+  for (const item of items) {
+    // Support both string (legacy) and object { ad_name, variation_filter }
+    const adName = typeof item === 'string' ? item : item.ad_name;
+    const variationFilter = typeof item === 'string' ? null : (item.variation_filter || null);
+    const row = await addItemToGroup(groupId, adName, variationFilter);
     results.push(row);
   }
   return results;
 }
 
-async function removeItemsFromGroupBatch(groupId, adNames) {
-  const result = await db.query(
-    'DELETE FROM product_group_items WHERE group_id = $1 AND ad_name = ANY($2::text[])',
-    [groupId, adNames]
-  );
-  return result.rowCount;
+async function removeItemsFromGroupBatch(groupId, items) {
+  let count = 0;
+  for (const item of items) {
+    const adName = typeof item === 'string' ? item : item.ad_name;
+    const variationFilter = typeof item === 'string' ? null : (item.variation_filter || null);
+    const removed = await removeItemFromGroup(groupId, adName, variationFilter);
+    if (removed) count++;
+  }
+  return count;
 }
 
 /**
@@ -391,7 +401,8 @@ async function getAllAdsWithGroup() {
       s.platform,
       s.sku,
       gi.group_id,
-      g.name AS group_name
+      g.name AS group_name,
+      gi.variation_filter
     FROM (
       SELECT
         ${saKeyExpr} AS store_variation_key,
@@ -421,7 +432,8 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
   if (groupIds && groupIds.length > 0) {
     const placeholders = groupIds.map((_, i) => `$${params.length + i + 1}`);
     params.push(...groupIds);
-    groupFilter = `INNER JOIN product_group_items gf ON gf.ad_name = sk.svk AND gf.group_id IN (${placeholders.join(',')})`;
+    groupFilter = `INNER JOIN product_group_items gf ON gf.ad_name = sk.svk AND gf.group_id IN (${placeholders.join(',')})
+      AND (gf.variation_filter IS NULL OR sk.variation_prefix = gf.variation_filter)`;
   }
   let storeFilter = '';
   if (lojas && lojas.length > 0) {
@@ -450,6 +462,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
         s.image,
         s.store,
         s.cod_store,
+        ${variationPrefixExpr} AS variation_prefix,
         CASE
           WHEN s.variation IS NOT NULL AND TRIM(s.variation) != ''
           THEN COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name) || '|||' || ${variationPrefixExpr}
@@ -506,6 +519,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
        COALESCE(SUM(r.total), 0) AS revenue
      FROM resolved r
      INNER JOIN product_group_items gi ON gi.ad_name = r.svk
+       AND (gi.variation_filter IS NULL OR r.variation_prefix = gi.variation_filter)
      INNER JOIN product_groups g ON g.id = gi.group_id
      GROUP BY g.id, g.name
      ORDER BY units DESC`,
@@ -530,6 +544,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
      FROM resolved r
      LEFT JOIN stores st ON st.id = r.cod_store
      LEFT JOIN product_group_items gi ON gi.ad_name = r.svk
+       AND (gi.variation_filter IS NULL OR r.variation_prefix = gi.variation_filter)
      LEFT JOIN product_groups g ON g.id = gi.group_id
      GROUP BY r.svk, r.ad_name
      ORDER BY adjusted_quantity DESC`,

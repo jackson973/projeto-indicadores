@@ -159,9 +159,9 @@ router.get('/groups/:id/items', async (req, res) => {
 // ── POST /api/products/groups/:id/items ──────────────────────────────────────
 router.post('/groups/:id/items', async (req, res) => {
   try {
-    const { ad_name } = req.body;
+    const { ad_name, variation_filter } = req.body;
     if (!ad_name) return res.status(400).json({ message: 'ad_name é obrigatório.' });
-    const item = await productsRepo.addItemToGroup(req.params.id, ad_name);
+    const item = await productsRepo.addItemToGroup(req.params.id, ad_name, variation_filter || null);
     res.status(201).json(item);
   } catch (err) {
     console.error('[Products] add item error:', err);
@@ -172,10 +172,12 @@ router.post('/groups/:id/items', async (req, res) => {
 // ── POST /api/products/groups/:id/items/batch ────────────────────────────────
 router.post('/groups/:id/items/batch', async (req, res) => {
   try {
-    const { ad_names } = req.body;
-    if (!ad_names || !ad_names.length) return res.status(400).json({ message: 'ad_names é obrigatório.' });
-    const items = await productsRepo.addItemsToGroupBatch(req.params.id, ad_names);
-    res.status(201).json(items);
+    const { ad_names, items } = req.body;
+    // Support legacy (ad_names: string[]) and new (items: {ad_name, variation_filter}[])
+    const data = items || (ad_names || []).map((n) => (typeof n === 'string' ? n : n));
+    if (!data.length) return res.status(400).json({ message: 'ad_names ou items é obrigatório.' });
+    const result = await productsRepo.addItemsToGroupBatch(req.params.id, data);
+    res.status(201).json(result);
   } catch (err) {
     console.error('[Products] batch add error:', err);
     res.status(500).json({ message: 'Erro ao adicionar itens.' });
@@ -185,7 +187,8 @@ router.post('/groups/:id/items/batch', async (req, res) => {
 // ── DELETE /api/products/groups/:groupId/items/:adName ───────────────────────
 router.delete('/groups/:groupId/items/:adName', async (req, res) => {
   try {
-    await productsRepo.removeItemFromGroup(req.params.groupId, decodeURIComponent(req.params.adName));
+    const variationFilter = req.query.variation_filter || null;
+    await productsRepo.removeItemFromGroup(req.params.groupId, decodeURIComponent(req.params.adName), variationFilter);
     res.json({ ok: true });
   } catch (err) {
     console.error('[Products] remove item error:', err);
@@ -196,9 +199,11 @@ router.delete('/groups/:groupId/items/:adName', async (req, res) => {
 // ── DELETE /api/products/groups/:groupId/items/batch ─────────────────────────
 router.delete('/groups/:groupId/items/batch', async (req, res) => {
   try {
-    const { ad_names } = req.body;
-    if (!ad_names || !ad_names.length) return res.status(400).json({ message: 'ad_names é obrigatório.' });
-    const count = await productsRepo.removeItemsFromGroupBatch(req.params.groupId, ad_names);
+    const { ad_names, items } = req.body;
+    // Support legacy (ad_names: string[]) and new (items: {ad_name, variation_filter}[])
+    const data = items || ad_names;
+    if (!data || !data.length) return res.status(400).json({ message: 'ad_names ou items é obrigatório.' });
+    const count = await productsRepo.removeItemsFromGroupBatch(req.params.groupId, data);
     res.json({ removed: count });
   } catch (err) {
     console.error('[Products] batch remove error:', err);

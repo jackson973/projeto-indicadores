@@ -1027,36 +1027,40 @@ export const fetchProductGroupItems = async (groupId) => {
   return handleResponse(response);
 };
 
-export const addProductGroupItem = async (groupId, adName) => {
+export const addProductGroupItem = async (groupId, adName, variationFilter = null) => {
   const response = await authFetch(`/api/products/groups/${groupId}/items`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ad_name: adName }),
+    body: JSON.stringify({ ad_name: adName, variation_filter: variationFilter }),
   });
   return handleResponse(response);
 };
 
-export const addProductGroupItemsBatch = async (groupId, adNames) => {
+export const addProductGroupItemsBatch = async (groupId, items) => {
+  // Support both string[] (legacy) and {ad_name, variation_filter}[]
+  const isLegacy = items.length > 0 && typeof items[0] === 'string';
   const response = await authFetch(`/api/products/groups/${groupId}/items/batch`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ad_names: adNames }),
+    body: JSON.stringify(isLegacy ? { ad_names: items } : { items }),
   });
   return handleResponse(response);
 };
 
-export const removeProductGroupItem = async (groupId, adName) => {
-  const response = await authFetch(`/api/products/groups/${groupId}/items/${encodeURIComponent(adName)}`, {
+export const removeProductGroupItem = async (groupId, adName, variationFilter = null) => {
+  const params = variationFilter ? `?variation_filter=${encodeURIComponent(variationFilter)}` : '';
+  const response = await authFetch(`/api/products/groups/${groupId}/items/${encodeURIComponent(adName)}${params}`, {
     method: 'DELETE',
   });
   return handleResponse(response);
 };
 
-export const removeProductGroupItemsBatch = async (groupId, adNames) => {
+export const removeProductGroupItemsBatch = async (groupId, items) => {
+  const isLegacy = items.length > 0 && typeof items[0] === 'string';
   const response = await authFetch(`/api/products/groups/${groupId}/items/batch`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ad_names: adNames }),
+    body: JSON.stringify(isLegacy ? { ad_names: items } : { items }),
   });
   return handleResponse(response);
 };

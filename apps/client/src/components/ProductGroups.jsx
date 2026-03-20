@@ -51,6 +51,7 @@ import {
   removeProductGroupItem,
   removeProductGroupItemsBatch,
   fetchAllAdsWithGroup,
+  fetchProductVariations,
 } from "../api";
 
 const ProductGroups = () => {
@@ -84,6 +85,16 @@ const ProductGroups = () => {
   const [assigningAd, setAssigningAd] = useState(null);
   const [selectedUngrouped, setSelectedUngrouped] = useState(new Set());
   const [batchAssigning, setBatchAssigning] = useState(false);
+
+  // Variation filter modal
+  const variationModal = useDisclosure();
+  const [variationAd, setVariationAd] = useState(null); // ad being added
+  const [variationPrefixes, setVariationPrefixes] = useState([]); // available prefixes
+  const [selectedVariation, setSelectedVariation] = useState(null); // chosen filter (null = all)
+  const [variationTargetGroupId, setVariationTargetGroupId] = useState(null); // which group to add to
+  const [loadingVariations, setLoadingVariations] = useState(false);
+  const [variationQueue, setVariationQueue] = useState([]); // queue of ads waiting for variation pick
+  const [batchAddedCount, setBatchAddedCount] = useState(0); // counter for batch progress
 
   const toast = useToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -126,6 +137,9 @@ const ProductGroups = () => {
 
   // Keys already in the selected group (ad_name column stores store_variation_key)
   const groupKeys = useMemo(() => new Set(groupItems.map((i) => i.ad_name)), [groupItems]);
+
+  // Unique key for each group item (includes variation_filter)
+  const itemKey = (i) => `${i.ad_name}::\x01${i.variation_filter || ""}`;
 
   // Map store_variation_key → display info from allAds
   const adsMap = useMemo(() => {
@@ -173,23 +187,48 @@ const ProductGroups = () => {
     });
   }, [groupItems, groupFilter, adsMap]);
 
+  // An ad is fully grouped only if it has group_id WITHOUT variation_filter (= all variations).
+  // Ads with variation_filter are partially grouped and should still appear available.
+  // Deduplicate allAds by store_variation_key (backend may return multiple rows per ad if multiple associations)
+  const uniqueAds = useMemo(() => {
+    const map = new Map();
+    for (const a of allAds) {
+      const existing = map.get(a.store_variation_key);
+      if (!existing) {
+        map.set(a.store_variation_key, { ...a, _associations: a.group_id ? [{ group_id: a.group_id, group_name: a.group_name, variation_filter: a.variation_filter }] : [] });
+      } else {
+        if (a.group_id) existing._associations.push({ group_id: a.group_id, group_name: a.group_name, variation_filter: a.variation_filter });
+        // Keep first non-null thumbnail/loja etc
+        if (!existing.thumbnail && a.thumbnail) existing.thumbnail = a.thumbnail;
+      }
+    }
+    return [...map.values()];
+  }, [allAds]);
+
+  // Fully grouped = has at least one association WITHOUT variation_filter
+  const isFullyGrouped = (ad) => ad._associations?.some((a) => !a.variation_filter);
+
   const ungroupedAds = useMemo(() => {
     const term = ungroupedSearch.toLowerCase().trim();
-    return allAds.filter((a) => {
-      if (a.group_id) return false;
+    return uniqueAds.filter((a) => {
+      if (isFullyGrouped(a)) return false;
+      // Partially grouped (only variation_filter associations) still shows as ungrouped
+      if (a._associations?.length > 0 && !a._associations.some((x) => !x.variation_filter)) {
+        // Has partial associations — still show
+      } else if (a.group_id && !a.variation_filter) return false;
       if (!term) return true;
       return (a.ad_name || "").toLowerCase().includes(term) || (a.loja || "").toLowerCase().includes(term);
     });
-  }, [allAds, ungroupedSearch]);
+  }, [uniqueAds, ungroupedSearch]);
 
   const filteredAds = useMemo(() => {
     if (!productSearch.trim()) return [];
     const term = productSearch.toLowerCase();
-    return allAds
+    return uniqueAds
       .filter((a) => !groupKeys.has(a.store_variation_key) &&
         ((a.ad_name || "").toLowerCase().includes(term) || (a.loja || "").toLowerCase().includes(term)))
       .slice(0, 50);
-  }, [productSearch, allAds, groupKeys]);
+  }, [productSearch, uniqueAds, groupKeys]);
 
   // ── CRUD ──────────────────────────────────────────────────────────────
   const handleCreate = async () => {
@@ -224,33 +263,135 @@ const ProductGroups = () => {
   };
 
   // ── Add/remove items (ad_name stores store_variation_key) ─────────────
-  const handleAddItem = async (ad) => {
-    if (!selectedGroupId) return;
+
+  // Check if ad has multiple variation prefixes before adding
+  const checkVariationsAndAdd = async (ad, targetGroupId) => {
+    if (!targetGroupId) return;
     setAddingAd(ad.store_variation_key);
     try {
-      await addProductGroupItem(selectedGroupId, ad.store_variation_key);
-      await loadGroupItems(selectedGroupId); await loadGroups(); await loadAllAds();
+      // Extract store_key and ad_name from store_variation_key
+      const svk = ad.store_variation_key;
+      const sepIdx = svk.indexOf("|||");
+      if (sepIdx > -1) {
+        const storeKey = svk.substring(0, sepIdx);
+        const adName = svk.substring(sepIdx + 3);
+        const prefixes = await fetchProductVariations(storeKey, adName);
+        if (prefixes && prefixes.length > 1) {
+          // Has multiple variations — show modal to pick
+          setVariationAd(ad);
+          setVariationPrefixes(prefixes);
+          setSelectedVariation(null);
+          setVariationTargetGroupId(targetGroupId);
+          variationModal.onOpen();
+          setAddingAd(null);
+          return;
+        }
+      }
+      // No variations or single variation — add directly
+      await addProductGroupItem(targetGroupId, ad.store_variation_key, null);
+      await loadGroupItems(selectedGroupId || targetGroupId); await loadGroups(); await loadAllAds();
     } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
     finally { setAddingAd(null); }
+  };
+
+  const handleAddItem = (ad) => checkVariationsAndAdd(ad, selectedGroupId);
+
+  // Process next ad in the variation queue
+  const processVariationQueue = async (queue, targetGroupId) => {
+    if (queue.length === 0) {
+      // Queue done — refresh
+      if (batchAddedCount > 0 || true) {
+        await loadGroupItems(selectedGroupId || targetGroupId);
+        await loadGroups();
+        await loadAllAds();
+      }
+      return;
+    }
+    const { ad, prefixes } = queue[0];
+    setVariationAd(ad);
+    setVariationPrefixes(prefixes);
+    setSelectedVariation(null);
+    setVariationTargetGroupId(targetGroupId);
+    setVariationQueue(queue.slice(1));
+    variationModal.onOpen();
+  };
+
+  const handleConfirmVariation = async () => {
+    if (!variationAd || !variationTargetGroupId) return;
+    setLoadingVariations(true);
+    try {
+      await addProductGroupItem(variationTargetGroupId, variationAd.store_variation_key, selectedVariation);
+      setBatchAddedCount((c) => c + 1);
+      variationModal.onClose();
+      // Process next in queue
+      if (variationQueue.length > 0) {
+        setTimeout(() => processVariationQueue(variationQueue, variationTargetGroupId), 200);
+      } else {
+        // All done — refresh
+        await loadGroupItems(selectedGroupId || variationTargetGroupId); await loadGroups(); await loadAllAds();
+        setBatchAddedCount(0);
+      }
+    } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
+    finally { setLoadingVariations(false); }
+  };
+
+  // Batch add with variation detection
+  const handleBatchWithVariations = async (ads, targetGroupId) => {
+    const directItems = []; // ads without variations — add directly
+    const withVariations = []; // ads with variations — queue for modal
+
+    for (const ad of ads) {
+      const svk = ad.store_variation_key;
+      const sepIdx = svk.indexOf("|||");
+      if (sepIdx > -1) {
+        const storeKey = svk.substring(0, sepIdx);
+        const adName = svk.substring(sepIdx + 3);
+        try {
+          const prefixes = await fetchProductVariations(storeKey, adName);
+          if (prefixes && prefixes.length > 1) {
+            withVariations.push({ ad, prefixes });
+            continue;
+          }
+        } catch { /* ignore — treat as no variations */ }
+      }
+      directItems.push(ad.store_variation_key);
+    }
+
+    // Add direct items in batch
+    if (directItems.length > 0) {
+      await addProductGroupItemsBatch(targetGroupId, directItems);
+    }
+
+    if (directItems.length > 0 && withVariations.length === 0) {
+      toast({ title: `${directItems.length} anúncio(s) adicionado(s).`, status: "success", duration: 3000 });
+    } else if (directItems.length > 0 && withVariations.length > 0) {
+      toast({ title: `${directItems.length} adicionado(s). ${withVariations.length} precisam selecionar variação.`, status: "info", duration: 4000 });
+    }
+
+    // Process variations queue
+    if (withVariations.length > 0) {
+      setBatchAddedCount(directItems.length);
+      await processVariationQueue(withVariations, targetGroupId);
+    } else {
+      await loadGroupItems(selectedGroupId || targetGroupId); await loadGroups(); await loadAllAds();
+    }
   };
 
   const handleBatchAdd = async () => {
     if (!selectedGroupId || selectedSearchResults.size === 0) return;
     setBatchAdding(true);
     try {
-      const keys = filteredAds.filter((a) => selectedSearchResults.has(a.store_variation_key)).map((a) => a.store_variation_key);
-      await addProductGroupItemsBatch(selectedGroupId, keys);
-      toast({ title: `${keys.length} anúncio(s) adicionado(s).`, status: "success", duration: 3000 });
+      const ads = filteredAds.filter((a) => selectedSearchResults.has(a.store_variation_key));
+      await handleBatchWithVariations(ads, selectedGroupId);
       setSelectedSearchResults(new Set()); setProductSearch("");
-      await loadGroupItems(selectedGroupId); await loadGroups(); await loadAllAds();
     } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
     finally { setBatchAdding(false); }
   };
 
-  const handleRemoveItem = async (key) => {
+  const handleRemoveItem = async (key, variationFilter = null) => {
     if (!selectedGroupId) return;
     try {
-      await removeProductGroupItem(selectedGroupId, key);
+      await removeProductGroupItem(selectedGroupId, key, variationFilter);
       toast({ title: "Anúncio removido do grupo.", status: "success", duration: 3000 });
       await loadGroupItems(selectedGroupId); await loadGroups(); await loadAllAds();
     } catch (err) { toast({ title: err.message || "Erro ao remover.", status: "error", duration: 3000 }); }
@@ -260,34 +401,31 @@ const ProductGroups = () => {
     if (!selectedGroupId || selectedItems.size === 0) return;
     setRemovingBatch(true);
     try {
-      const keys = Array.from(selectedItems);
-      await removeProductGroupItemsBatch(selectedGroupId, keys);
-      toast({ title: `${keys.length} anúncio(s) removido(s).`, status: "success", duration: 3000 });
+      // selectedItems stores "ad_name::vf" keys — parse back
+      const items = Array.from(selectedItems).map((k) => {
+        const [adName, vf] = k.split("::\x01");
+        return { ad_name: adName, variation_filter: vf || null };
+      });
+      await removeProductGroupItemsBatch(selectedGroupId, items);
+      toast({ title: `${items.length} anúncio(s) removido(s).`, status: "success", duration: 3000 });
       setSelectedItems(new Set());
       await loadGroupItems(selectedGroupId); await loadGroups(); await loadAllAds();
     } catch (err) { toast({ title: err.message || "Erro ao remover.", status: "error", duration: 3000 }); }
     finally { setRemovingBatch(false); }
   };
 
-  const handleAssignToGroup = async (ad) => {
+  const handleAssignToGroup = (ad) => {
     if (!assignTargetGroupId) return;
-    setAssigningAd(ad.store_variation_key);
-    try {
-      await addProductGroupItem(parseInt(assignTargetGroupId), ad.store_variation_key);
-      await loadAllAds(); await loadGroups();
-    } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
-    finally { setAssigningAd(null); }
+    checkVariationsAndAdd(ad, parseInt(assignTargetGroupId));
   };
 
   const handleBatchAssignUngrouped = async () => {
     if (!assignTargetGroupId || selectedUngrouped.size === 0) return;
     setBatchAssigning(true);
     try {
-      const keys = ungroupedAds.filter((a) => selectedUngrouped.has(a.store_variation_key)).map((a) => a.store_variation_key);
-      await addProductGroupItemsBatch(parseInt(assignTargetGroupId), keys);
-      toast({ title: `${keys.length} anúncio(s) adicionado(s) ao grupo.`, status: "success", duration: 3000 });
+      const ads = ungroupedAds.filter((a) => selectedUngrouped.has(a.store_variation_key));
+      await handleBatchWithVariations(ads, parseInt(assignTargetGroupId));
       setSelectedUngrouped(new Set());
-      await loadAllAds(); await loadGroups();
     } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
     finally { setBatchAssigning(false); }
   };
@@ -302,7 +440,7 @@ const ProductGroups = () => {
   const toggleAllFiltered = useCallback(() => {
     if (selectedItems.size === filteredGroupItems.length && filteredGroupItems.length > 0)
       setSelectedItems(new Set());
-    else setSelectedItems(new Set(filteredGroupItems.map((i) => i.ad_name)));
+    else setSelectedItems(new Set(filteredGroupItems.map((i) => itemKey(i))));
   }, [filteredGroupItems, selectedItems]);
 
   const toggleAllSearch = useCallback(() => {
@@ -448,6 +586,11 @@ const ProductGroups = () => {
                           <Image src={a.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
                         )}
                         <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.ad_name}</Text>
+                        {a._associations?.filter((x) => x.variation_filter).map((x) => (
+                          <Tag key={x.variation_filter} size="sm" fontSize="9px" variant="solid" colorScheme="green" ml={1} flexShrink={0}>
+                            {x.variation_filter} → {x.group_name}
+                          </Tag>
+                        ))}
                         {url && (
                           <Link href={url} isExternal ml={1} flexShrink={0}>
                             <ExternalLinkIcon boxSize={3} color="gray.400" />
@@ -573,15 +716,19 @@ const ProductGroups = () => {
                     const adInfo = adsMap.get(i.ad_name);
                     const thumb = adInfo?.thumbnail;
                     const url = adInfo ? getMarketplaceUrl(adInfo) : null;
+                    const ik = itemKey(i);
                     return (
-                      <Flex key={i.ad_name} align="center" px={3} py={2}
+                      <Flex key={ik} align="center" px={3} py={2}
                         borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }} _hover={{ bg: hoverBg }}>
-                        <Checkbox size="sm" mr={2} isChecked={selectedItems.has(i.ad_name)}
-                          onChange={() => toggleItem(i.ad_name, selectedItems, setSelectedItems)} />
+                        <Checkbox size="sm" mr={2} isChecked={selectedItems.has(ik)}
+                          onChange={() => toggleItem(ik, selectedItems, setSelectedItems)} />
                         {thumb && (
                           <Image src={thumb} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
                         )}
                         <Text fontSize="sm" flex={1} minW={0} isTruncated>{getAdDisplay(i.ad_name)}</Text>
+                        {i.variation_filter && (
+                          <Tag size="sm" fontSize="10px" variant="solid" colorScheme="purple" ml={2} flexShrink={0}>{i.variation_filter}</Tag>
+                        )}
                         {url && (
                           <Link href={url} isExternal onClick={(e) => e.stopPropagation()} ml={1} flexShrink={0}>
                             <ExternalLinkIcon boxSize={3} color="gray.400" />
@@ -591,7 +738,7 @@ const ProductGroups = () => {
                           <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{getAdLoja(i.ad_name)}</Tag>
                         )}
                         <IconButton icon={<CloseIcon />} size="xs" variant="ghost" colorScheme="red"
-                          aria-label="Remover" ml={2} flexShrink={0} onClick={() => handleRemoveItem(i.ad_name)} />
+                          aria-label="Remover" ml={2} flexShrink={0} onClick={() => handleRemoveItem(i.ad_name, i.variation_filter)} />
                       </Flex>
                     );
                   })}
@@ -616,6 +763,59 @@ const ProductGroups = () => {
           <ModalFooter>
             <Button variant="ghost" mr={3} onClick={createModal.onClose}>Cancelar</Button>
             <Button colorScheme="blue" onClick={handleCreate} isLoading={creating}>Criar</Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Variation Filter Modal */}
+      <Modal isOpen={variationModal.isOpen} onClose={variationModal.onClose} size="md">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader fontSize="md">
+            Selecionar Variação
+            {variationQueue.length > 0 && (
+              <Badge ml={2} colorScheme="blue" fontSize="xs">+{variationQueue.length} restante{variationQueue.length > 1 ? "s" : ""}</Badge>
+            )}
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody>
+            <Text fontSize="sm" mb={3} color="gray.600">
+              Este anúncio possui múltiplas variações. Selecione qual variação associar ao grupo:
+            </Text>
+            {variationAd && (
+              <Text fontSize="sm" fontWeight="semibold" mb={3} isTruncated>{variationAd.ad_name}</Text>
+            )}
+            <VStack spacing={2} align="stretch">
+              <Box p={2} borderRadius="md" cursor="pointer" border="2px solid"
+                borderColor={selectedVariation === null ? "blue.400" : borderColor}
+                bg={selectedVariation === null ? "blue.50" : undefined}
+                _hover={{ bg: selectedVariation === null ? "blue.50" : hoverBg }}
+                onClick={() => setSelectedVariation(null)}>
+                <Text fontSize="sm" fontWeight={selectedVariation === null ? "semibold" : "normal"}>
+                  Todas as variações
+                </Text>
+              </Box>
+              {variationPrefixes.map((vp) => (
+                <Box key={vp.prefix} p={2} borderRadius="md" cursor="pointer" border="2px solid"
+                  borderColor={selectedVariation === vp.prefix ? "blue.400" : borderColor}
+                  bg={selectedVariation === vp.prefix ? "blue.50" : undefined}
+                  _hover={{ bg: selectedVariation === vp.prefix ? "blue.50" : hoverBg }}
+                  onClick={() => setSelectedVariation(vp.prefix)}>
+                  <HStack justify="space-between">
+                    <Text fontSize="sm" fontWeight={selectedVariation === vp.prefix ? "semibold" : "normal"}>
+                      {vp.prefix}
+                    </Text>
+                    <Badge fontSize="2xs" colorScheme="gray">{vp.count} venda{vp.count !== 1 ? "s" : ""}</Badge>
+                  </HStack>
+                </Box>
+              ))}
+            </VStack>
+          </ModalBody>
+          <ModalFooter>
+            <Button variant="ghost" mr={3} onClick={variationModal.onClose}>Cancelar</Button>
+            <Button colorScheme="blue" onClick={handleConfirmVariation} isLoading={loadingVariations}>
+              Confirmar
+            </Button>
           </ModalFooter>
         </ModalContent>
       </Modal>
