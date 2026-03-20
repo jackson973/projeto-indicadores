@@ -166,9 +166,7 @@ const ProductDashboard = () => {
   const sortedProducts = useMemo(() => {
     if (!data?.byProduct) return [];
     const base = pieGroupFilter
-      ? (pieGroupFilter === "Avulsos"
-          ? data.byProduct.filter((p) => !p.group_name || p.has_ungrouped_rows)
-          : data.byProduct.filter((p) => p.group_name === pieGroupFilter))
+      ? data.byProduct.filter((p) => p.group_name === pieGroupFilter)
       : data.byProduct;
     return [...base].sort((a, b) => {
       const va = a[sortField] ?? 0;
@@ -399,11 +397,11 @@ const ProductDashboard = () => {
                         outerRadius={90} label={({ percent }) => percent >= 0.05 ? `${(percent * 100).toFixed(0)}%` : ""}
                         labelLine={false} fontSize={10} cursor="pointer"
                         onClick={(entry) => {
-                          const name = entry?.group_name ?? "Avulsos";
+                          const name = entry?.group_name ?? "Sem grupo";
                           setPieGroupFilter((prev) => prev === name ? null : name);
                         }}>
                         {data.byGroup.map((g, i) => {
-                          const name = g.group_name ?? "Avulsos";
+                          const name = g.group_name ?? "Sem grupo";
                           const active = pieGroupFilter === null || pieGroupFilter === name;
                           return <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} opacity={active ? 1 : 0.3} />;
                         })}
@@ -415,7 +413,7 @@ const ProductDashboard = () => {
                     {data.byGroup.map((g, i) => {
                       const total = data.byGroup.reduce((s, x) => s + x.units, 0);
                       const pct = total > 0 ? ((g.units / total) * 100).toFixed(0) : 0;
-                      const name = g.group_name ?? "Avulsos";
+                      const name = g.group_name ?? "Sem grupo";
                       const active = pieGroupFilter === null || pieGroupFilter === name;
                       return (
                         <Flex key={g.group_id ?? name} align="center" gap={1} cursor="pointer"
