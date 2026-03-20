@@ -152,6 +152,8 @@ router.get('/backup', (req, res) => {
     '-d', database,
     '--no-owner',
     '--no-acl',
+    '--clean',
+    '--if-exists',
   ], {
     env: { ...process.env, PGPASSWORD: password },
   });
@@ -203,37 +205,65 @@ router.post('/restore', upload.single('backup'), (req, res) => {
 
   const cleanup = () => fs.unlink(filePath, () => {});
 
-  const psql = spawn(findBinary('psql'), ['-h', host, '-p', port, '-U', user, '-d', database], { env });
+  // 1. Limpa o schema public para garantir que dados antigos sejam removidos
+  const reset = spawn(findBinary('psql'), [
+    '-h', host, '-p', port, '-U', user, '-d', database,
+    '-c', 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;',
+  ], { env });
 
-  const stderr = [];
-  psql.stderr.on('data', (data) => stderr.push(data.toString()));
+  const resetErr = [];
+  reset.stderr.on('data', (d) => resetErr.push(d.toString()));
 
-  psql.on('error', (err) => {
+  reset.on('error', (err) => {
     cleanup();
     return res.status(500).json({ message: `psql não encontrado: ${err.message}` });
   });
 
-  psql.on('close', (code) => {
-    cleanup();
-    if (code !== 0) {
+  reset.on('close', (resetCode) => {
+    if (resetCode !== 0) {
+      cleanup();
       return res.status(500).json({
-        message: `Restore falhou (exit ${code}).`,
-        details: stderr.join('').slice(0, 2000),
+        message: `Falha ao limpar schema (exit ${resetCode}).`,
+        details: resetErr.join('').slice(0, 2000),
       });
     }
-    return res.json({ message: 'Restore concluído com sucesso.' });
-  });
 
-  if (isGzip) {
-    const gunzip = spawn(findBinary('gunzip'), ['-c', filePath]);
-    gunzip.on('error', (err) => {
+    // 2. Aplica o backup
+    const psql = spawn(findBinary('psql'), [
+      '-h', host, '-p', port, '-U', user, '-d', database,
+      '-v', 'ON_ERROR_STOP=0',
+    ], { env });
+
+    const stderr = [];
+    psql.stderr.on('data', (data) => stderr.push(data.toString()));
+
+    psql.on('error', (err) => {
       cleanup();
-      return res.status(500).json({ message: `gunzip não encontrado: ${err.message}` });
+      return res.status(500).json({ message: `psql erro: ${err.message}` });
     });
-    gunzip.stdout.pipe(psql.stdin);
-  } else {
-    fs.createReadStream(filePath).pipe(psql.stdin);
-  }
+
+    psql.on('close', (code) => {
+      cleanup();
+      if (code !== 0) {
+        return res.status(500).json({
+          message: `Restore falhou (exit ${code}).`,
+          details: stderr.join('').slice(0, 2000),
+        });
+      }
+      return res.json({ message: 'Restore concluído com sucesso.' });
+    });
+
+    if (isGzip) {
+      const gunzip = spawn(findBinary('gunzip'), ['-c', filePath]);
+      gunzip.on('error', (err) => {
+        cleanup();
+        return res.status(500).json({ message: `gunzip não encontrado: ${err.message}` });
+      });
+      gunzip.stdout.pipe(psql.stdin);
+    } else {
+      fs.createReadStream(filePath).pipe(psql.stdin);
+    }
+  });
 });
 
 module.exports = router;
