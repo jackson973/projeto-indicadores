@@ -2,6 +2,25 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db/connection');
 const { spawn } = require('child_process');
+const multer = require('multer');
+const os = require('os');
+const fs = require('fs');
+const path = require('path');
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: os.tmpdir(),
+    filename: (_req, file, cb) => cb(null, `restore-${Date.now()}${path.extname(file.originalname)}`),
+  }),
+  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.originalname.endsWith('.sql') || file.originalname.endsWith('.sql.gz') || file.originalname.endsWith('.gz')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Apenas arquivos .sql ou .sql.gz são aceitos.'));
+    }
+  },
+});
 
 // GET /api/database/schema - List all tables and their columns
 router.get('/schema', async (_req, res) => {
@@ -147,6 +166,50 @@ router.get('/backup', (req, res) => {
     if (code !== 0) {
       console.error(`pg_dump exited with code ${code}`);
     }
+  });
+});
+
+// POST /api/database/restore - Restore database from a .sql or .sql.gz file
+router.post('/restore', upload.single('backup'), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: 'Nenhum arquivo enviado.' });
+  }
+
+  const filePath = req.file.path;
+  const isGzip = req.file.originalname.endsWith('.gz');
+  const host = process.env.DB_HOST || 'localhost';
+  const port = process.env.DB_PORT || '5432';
+  const database = process.env.DB_NAME || 'indicadores';
+  const user = process.env.DB_USER || 'indicadores_user';
+  const password = process.env.DB_PASSWORD || 'indicadores_pass';
+
+  const cleanup = () => fs.unlink(filePath, () => {});
+
+  const cmd = isGzip
+    ? `gunzip -c "${filePath}" | psql -h ${host} -p ${port} -U ${user} -d ${database}`
+    : `psql -h ${host} -p ${port} -U ${user} -d ${database} < "${filePath}"`;
+
+  const proc = spawn('sh', ['-c', cmd], {
+    env: { ...process.env, PGPASSWORD: password },
+  });
+
+  const stderr = [];
+  proc.stderr.on('data', (data) => stderr.push(data.toString()));
+
+  proc.on('error', (err) => {
+    cleanup();
+    return res.status(500).json({ message: `Erro ao executar restore: ${err.message}` });
+  });
+
+  proc.on('close', (code) => {
+    cleanup();
+    if (code !== 0) {
+      return res.status(500).json({
+        message: `Restore falhou (exit ${code}).`,
+        details: stderr.join('').slice(0, 2000),
+      });
+    }
+    return res.json({ message: 'Restore concluído com sucesso.' });
   });
 });
 

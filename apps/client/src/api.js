@@ -536,6 +536,16 @@ export const executeDatabaseQuery = async (sql) => {
   return handleResponse(response);
 };
 
+export const restoreDatabase = async (file) => {
+  const formData = new FormData();
+  formData.append('backup', file);
+  const response = await authFetch('/api/database/restore', {
+    method: 'POST',
+    body: formData,
+  });
+  return handleResponse(response);
+};
+
 export const downloadDatabaseBackup = async () => {
   const response = await authFetch("/api/database/backup");
   if (!response.ok) {

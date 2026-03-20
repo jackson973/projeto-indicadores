@@ -30,6 +30,12 @@ import {
   DrawerHeader,
   DrawerBody,
   useDisclosure,
+  AlertDialog,
+  AlertDialogBody,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogContent,
+  AlertDialogOverlay,
 } from "@chakra-ui/react";
 import {
   ChevronRightIcon,
@@ -39,7 +45,7 @@ import {
   DeleteIcon,
 } from "@chakra-ui/icons";
 import Editor from "@monaco-editor/react";
-import { fetchDatabaseSchema, executeDatabaseQuery, downloadDatabaseBackup } from "../api";
+import { fetchDatabaseSchema, executeDatabaseQuery, downloadDatabaseBackup, restoreDatabase } from "../api";
 
 // Memoized result table - only re-renders when result/error/executing change
 const ResultsPanel = memo(function ResultsPanel({ result, error, executing, hoverBg, borderColor, resultHeaderBg, panelBg }) {
@@ -176,6 +182,11 @@ export default function DatabaseManager() {
   const [loadingSchema, setLoadingSchema] = useState(true);
   const [statusText, setStatusText] = useState(null);
   const [downloadingBackup, setDownloadingBackup] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
+  const [pendingRestoreFile, setPendingRestoreFile] = useState(null);
+  const restoreInputRef = useRef(null);
+  const restoreDialog = useDisclosure();
+  const restoreCancelRef = useRef(null);
   const editorRef = useRef(null);
   const sqlRef = useRef("");
   const schemaDrawer = useDisclosure();
@@ -557,6 +568,31 @@ export default function DatabaseManager() {
           >
             Backup
           </Button>
+          <input
+            ref={restoreInputRef}
+            type="file"
+            accept=".sql,.gz"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) {
+                setPendingRestoreFile(file);
+                restoreDialog.onOpen();
+              }
+            }}
+          />
+          <Button
+            size="sm"
+            variant="outline"
+            colorScheme="orange"
+            isLoading={restoringBackup}
+            loadingText="Restaurando..."
+            title="Restaurar base a partir de um arquivo .sql ou .sql.gz"
+            onClick={() => restoreInputRef.current?.click()}
+          >
+            Restaurar
+          </Button>
           {statusText && (
             <Text fontSize="xs" color="gray.500" ml="auto" whiteSpace="nowrap">
               {statusText}
@@ -611,6 +647,52 @@ export default function DatabaseManager() {
           />
         </Box>
       </Flex>
+
+      <AlertDialog
+        isOpen={restoreDialog.isOpen}
+        leastDestructiveRef={restoreCancelRef}
+        onClose={restoreDialog.onClose}
+        isCentered
+      >
+        <AlertDialogOverlay>
+          <AlertDialogContent>
+            <AlertDialogHeader fontSize="lg" fontWeight="bold">
+              Restaurar banco de dados
+            </AlertDialogHeader>
+            <AlertDialogBody>
+              Tem certeza? O arquivo <strong>{pendingRestoreFile?.name}</strong> será aplicado
+              sobre a base atual. Dados que não estejam no backup podem ser perdidos.
+            </AlertDialogBody>
+            <AlertDialogFooter>
+              <Button ref={restoreCancelRef} onClick={restoreDialog.onClose}>
+                Cancelar
+              </Button>
+              <Button
+                colorScheme="orange"
+                ml={3}
+                isLoading={restoringBackup}
+                onClick={async () => {
+                  if (!pendingRestoreFile) return;
+                  setRestoringBackup(true);
+                  restoreDialog.onClose();
+                  try {
+                    const data = await restoreDatabase(pendingRestoreFile);
+                    alert(data.message || "Restore concluído.");
+                    loadSchema();
+                  } catch (err) {
+                    alert(`Erro: ${err.message}`);
+                  } finally {
+                    setRestoringBackup(false);
+                    setPendingRestoreFile(null);
+                  }
+                }}
+              >
+                Confirmar Restore
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialogOverlay>
+      </AlertDialog>
     </Flex>
   );
 }
