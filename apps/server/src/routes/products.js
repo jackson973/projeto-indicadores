@@ -184,19 +184,8 @@ router.post('/groups/:id/items/batch', async (req, res) => {
   }
 });
 
-// ── DELETE /api/products/groups/:groupId/items/:adName ───────────────────────
-router.delete('/groups/:groupId/items/:adName', async (req, res) => {
-  try {
-    const variationFilter = req.query.variation_filter || null;
-    await productsRepo.removeItemFromGroup(req.params.groupId, decodeURIComponent(req.params.adName), variationFilter);
-    res.json({ ok: true });
-  } catch (err) {
-    console.error('[Products] remove item error:', err);
-    res.status(500).json({ message: 'Erro ao remover item.' });
-  }
-});
-
 // ── DELETE /api/products/groups/:groupId/items/batch ─────────────────────────
+// IMPORTANT: batch route must come before :adName to avoid matching "batch" as adName
 router.delete('/groups/:groupId/items/batch', async (req, res) => {
   try {
     const { ad_names, items } = req.body;
@@ -208,6 +197,18 @@ router.delete('/groups/:groupId/items/batch', async (req, res) => {
   } catch (err) {
     console.error('[Products] batch remove error:', err);
     res.status(500).json({ message: 'Erro ao remover itens.' });
+  }
+});
+
+// ── DELETE /api/products/groups/:groupId/items/:adName ───────────────────────
+router.delete('/groups/:groupId/items/:adName', async (req, res) => {
+  try {
+    const variationFilter = req.query.variation_filter || null;
+    await productsRepo.removeItemFromGroup(req.params.groupId, decodeURIComponent(req.params.adName), variationFilter);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Products] remove item error:', err);
+    res.status(500).json({ message: 'Erro ao remover item.' });
   }
 });
 
