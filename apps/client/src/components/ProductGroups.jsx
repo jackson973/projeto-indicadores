@@ -187,35 +187,48 @@ const ProductGroups = () => {
     });
   }, [groupItems, groupFilter, adsMap]);
 
-  // An ad is fully grouped only if it has group_id WITHOUT variation_filter (= all variations).
-  // Ads with variation_filter are partially grouped and should still appear available.
-  // Deduplicate allAds by store_variation_key (backend may return multiple rows per ad if multiple associations)
+  // Deduplicate allAds by store_variation_key (backend returns multiple rows per ad if multiple associations)
   const uniqueAds = useMemo(() => {
     const map = new Map();
     for (const a of allAds) {
       const existing = map.get(a.store_variation_key);
       if (!existing) {
-        map.set(a.store_variation_key, { ...a, _associations: a.group_id ? [{ group_id: a.group_id, group_name: a.group_name, variation_filter: a.variation_filter }] : [] });
+        map.set(a.store_variation_key, {
+          ...a,
+          _associations: a.group_id ? [{ group_id: a.group_id, group_name: a.group_name, variation_filter: a.variation_filter }] : [],
+          _variationCount: a.variation_count || 0,
+        });
       } else {
         if (a.group_id) existing._associations.push({ group_id: a.group_id, group_name: a.group_name, variation_filter: a.variation_filter });
-        // Keep first non-null thumbnail/loja etc
         if (!existing.thumbnail && a.thumbnail) existing.thumbnail = a.thumbnail;
       }
     }
     return [...map.values()];
   }, [allAds]);
 
-  // Fully grouped = has at least one association WITHOUT variation_filter
-  const isFullyGrouped = (ad) => ad._associations?.some((a) => !a.variation_filter);
+  // Fully grouped when:
+  // 1. Has association WITHOUT variation_filter (= "all variations" selected), OR
+  // 2. All variation prefixes are covered by associations with variation_filter
+  const isFullyGrouped = (ad) => {
+    if (!ad._associations || ad._associations.length === 0) return false;
+    // Has "all variations" association
+    if (ad._associations.some((a) => !a.variation_filter)) return true;
+    // Has <= 1 variation prefix — no split needed, but has association
+    if (ad._variationCount <= 1) return ad._associations.length > 0;
+    // All variation prefixes covered
+    const assignedCount = ad._associations.filter((a) => a.variation_filter).length;
+    return assignedCount >= ad._variationCount;
+  };
 
   const ungroupedAds = useMemo(() => {
     const term = ungroupedSearch.toLowerCase().trim();
     return uniqueAds.filter((a) => {
       if (isFullyGrouped(a)) return false;
-      // Partially grouped (only variation_filter associations) still shows as ungrouped
-      if (a._associations?.length > 0 && !a._associations.some((x) => !x.variation_filter)) {
-        // Has partial associations — still show
-      } else if (a.group_id && !a.variation_filter) return false;
+      if (!a._associations || a._associations.length === 0) {
+        // No associations at all — ungrouped
+      } else {
+        // Has some associations but not fully grouped — still show
+      }
       if (!term) return true;
       return (a.ad_name || "").toLowerCase().includes(term) || (a.loja || "").toLowerCase().includes(term);
     });
