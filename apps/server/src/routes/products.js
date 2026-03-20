@@ -184,9 +184,9 @@ router.post('/groups/:id/items/batch', async (req, res) => {
   }
 });
 
-// ── DELETE /api/products/groups/:groupId/items/batch ─────────────────────────
-// IMPORTANT: batch route must come before :adName to avoid matching "batch" as adName
-router.delete('/groups/:groupId/items/batch', async (req, res) => {
+// ── POST /api/products/groups/:groupId/items/remove-batch ────────────────────
+// Uses POST instead of DELETE to avoid nginx issues with encoded slashes in body
+router.post('/groups/:groupId/items/remove-batch', async (req, res) => {
   try {
     const { ad_names, items } = req.body;
     // Support legacy (ad_names: string[]) and new (items: {ad_name, variation_filter}[])
@@ -200,11 +200,14 @@ router.delete('/groups/:groupId/items/batch', async (req, res) => {
   }
 });
 
-// ── DELETE /api/products/groups/:groupId/items/:adName ───────────────────────
-router.delete('/groups/:groupId/items/:adName', async (req, res) => {
+// ── POST /api/products/groups/:groupId/items/remove ─────────────────────────
+// Uses POST instead of DELETE with :adName in URL path because ad_name can
+// contain slashes (e.g. "RN/P/M/G/GG") which nginx rejects even when encoded.
+router.post('/groups/:groupId/items/remove', async (req, res) => {
   try {
-    const variationFilter = req.query.variation_filter || null;
-    await productsRepo.removeItemFromGroup(req.params.groupId, decodeURIComponent(req.params.adName), variationFilter);
+    const { ad_name, variation_filter } = req.body;
+    if (!ad_name) return res.status(400).json({ message: 'ad_name é obrigatório.' });
+    await productsRepo.removeItemFromGroup(req.params.groupId, ad_name, variation_filter || null);
     res.json({ ok: true });
   } catch (err) {
     console.error('[Products] remove item error:', err);

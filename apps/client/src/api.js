@@ -1048,17 +1048,18 @@ export const addProductGroupItemsBatch = async (groupId, items) => {
 };
 
 export const removeProductGroupItem = async (groupId, adName, variationFilter = null) => {
-  const params = variationFilter ? `?variation_filter=${encodeURIComponent(variationFilter)}` : '';
-  const response = await authFetch(`/api/products/groups/${groupId}/items/${encodeURIComponent(adName)}${params}`, {
-    method: 'DELETE',
+  const response = await authFetch(`/api/products/groups/${groupId}/items/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ad_name: adName, variation_filter: variationFilter }),
   });
   return handleResponse(response);
 };
 
 export const removeProductGroupItemsBatch = async (groupId, items) => {
   const isLegacy = items.length > 0 && typeof items[0] === 'string';
-  const response = await authFetch(`/api/products/groups/${groupId}/items/batch`, {
-    method: 'DELETE',
+  const response = await authFetch(`/api/products/groups/${groupId}/items/remove-batch`, {
+    method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(isLegacy ? { ad_names: items } : { items }),
   });
