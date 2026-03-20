@@ -143,17 +143,21 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
     const result = await client.query(query, params);
 
     // Atualiza cache de URLs para vendas que trouxeram product_url
-    const withUrl = batch.filter(s => s.productUrl);
-    if (withUrl.length > 0) {
+    // Deduplica por SVK para evitar "ON CONFLICT DO UPDATE command cannot affect row a second time"
+    const urlCacheMap = new Map();
+    batch.filter(s => s.productUrl).forEach((sale) => {
+      const storeName = (sale.store || 'Todas').trim();
+      const codStore = storeMap.get(storeName.toLowerCase()) || null;
+      const svk = (codStore != null ? String(codStore) : storeName) + '|||' + (sale.adName || 'Geral').trim();
+      urlCacheMap.set(svk, sale.productUrl);
+    });
+    if (urlCacheMap.size > 0) {
       const cacheValues = [];
       const cacheParams = [];
       let ci = 1;
-      withUrl.forEach((sale) => {
-        const storeName = (sale.store || 'Todas').trim();
-        const codStore = storeMap.get(storeName.toLowerCase()) || null;
-        const svk = (codStore != null ? String(codStore) : storeName) + '|||' + (sale.adName || 'Geral').trim();
+      urlCacheMap.forEach((url, svk) => {
         cacheValues.push(`($${ci++}, $${ci++})`);
-        cacheParams.push(svk, sale.productUrl);
+        cacheParams.push(svk, url);
       });
       await client.query(`
         INSERT INTO product_url_cache (store_variation_key, product_url)
