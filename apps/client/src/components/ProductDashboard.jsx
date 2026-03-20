@@ -86,6 +86,7 @@ const ProductDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  const [pieGroupFilter, setPieGroupFilter] = useState(null);
   const [sortField, setSortField] = useState("adjusted_quantity");
   const [sortDir, setSortDir] = useState("desc");
   const [chartGrouping, setChartGrouping] = useState("auto");
@@ -164,13 +165,16 @@ const ProductDashboard = () => {
 
   const sortedProducts = useMemo(() => {
     if (!data?.byProduct) return [];
-    return [...data.byProduct].sort((a, b) => {
+    const base = pieGroupFilter
+      ? data.byProduct.filter((p) => (p.group_name ?? "Avulsos") === pieGroupFilter)
+      : data.byProduct;
+    return [...base].sort((a, b) => {
       const va = a[sortField] ?? 0;
       const vb = b[sortField] ?? 0;
       if (typeof va === "string") return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
       return sortDir === "asc" ? va - vb : vb - va;
     });
-  }, [data, sortField, sortDir]);
+  }, [data, sortField, sortDir, pieGroupFilter]);
 
   const SortIcon = ({ field }) => {
     if (sortField !== field) return null;
@@ -391,10 +395,16 @@ const ProductDashboard = () => {
                     <PieChart>
                       <Pie data={data.byGroup} dataKey="units" nameKey="group_name" cx="50%" cy="50%"
                         outerRadius={90} label={({ percent }) => percent >= 0.05 ? `${(percent * 100).toFixed(0)}%` : ""}
-                        labelLine={false} fontSize={10}>
-                        {data.byGroup.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                        ))}
+                        labelLine={false} fontSize={10} cursor="pointer"
+                        onClick={(entry) => {
+                          const name = entry?.group_name ?? "Avulsos";
+                          setPieGroupFilter((prev) => prev === name ? null : name);
+                        }}>
+                        {data.byGroup.map((g, i) => {
+                          const name = g.group_name ?? "Avulsos";
+                          const active = pieGroupFilter === null || pieGroupFilter === name;
+                          return <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} opacity={active ? 1 : 0.3} />;
+                        })}
                       </Pie>
                       <Tooltip content={<CustomTooltipPie />} />
                     </PieChart>
@@ -403,10 +413,16 @@ const ProductDashboard = () => {
                     {data.byGroup.map((g, i) => {
                       const total = data.byGroup.reduce((s, x) => s + x.units, 0);
                       const pct = total > 0 ? ((g.units / total) * 100).toFixed(0) : 0;
+                      const name = g.group_name ?? "Avulsos";
+                      const active = pieGroupFilter === null || pieGroupFilter === name;
                       return (
-                        <Flex key={g.group_id} align="center" gap={1}>
+                        <Flex key={g.group_id ?? name} align="center" gap={1} cursor="pointer"
+                          opacity={active ? 1 : 0.4}
+                          onClick={() => setPieGroupFilter((prev) => prev === name ? null : name)}>
                           <Box w="10px" h="10px" borderRadius="2px" bg={PIE_COLORS[i % PIE_COLORS.length]} flexShrink={0} />
-                          <Text fontSize="10px" color="gray.600">{g.group_name} ({pct}%)</Text>
+                          <Text fontSize="10px" color="gray.600" fontWeight={pieGroupFilter === name ? "bold" : "normal"}>
+                            {name} ({pct}%)
+                          </Text>
                         </Flex>
                       );
                     })}
@@ -420,9 +436,16 @@ const ProductDashboard = () => {
 
           {/* Product Grid */}
           <Box bg={panelBg} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
-            <Text fontSize="sm" fontWeight="bold" p={4} pb={2}>
-              Produtos ({sortedProducts.length})
-            </Text>
+            <Flex align="center" p={4} pb={2} gap={2}>
+              <Text fontSize="sm" fontWeight="bold">
+                Produtos ({sortedProducts.length})
+              </Text>
+              {pieGroupFilter && (
+                <Tag size="sm" colorScheme="purple" cursor="pointer" onClick={() => setPieGroupFilter(null)}>
+                  {pieGroupFilter} <SmallCloseIcon ml={1} />
+                </Tag>
+              )}
+            </Flex>
 
             {isMobile ? (
               /* Mobile: cards */
