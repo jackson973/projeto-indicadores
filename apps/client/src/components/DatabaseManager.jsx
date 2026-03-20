@@ -537,27 +537,26 @@ export default function DatabaseManager() {
           >
             Limpar
           </Button>
-          <Tooltip label="Baixar backup completo da base (.sql.gz)">
-            <Button
-              size="sm"
-              variant="outline"
-              colorScheme="purple"
-              isLoading={downloadingBackup}
-              loadingText="Gerando..."
-              onClick={async () => {
-                setDownloadingBackup(true);
-                try {
-                  await downloadDatabaseBackup();
-                } catch (err) {
-                  alert(err.message);
-                } finally {
-                  setDownloadingBackup(false);
-                }
-              }}
-            >
-              Baixar Backup
-            </Button>
-          </Tooltip>
+          <Button
+            size="sm"
+            variant="outline"
+            colorScheme="purple"
+            isLoading={downloadingBackup}
+            loadingText="Gerando..."
+            title="Baixar backup completo da base (.sql.gz)"
+            onClick={async () => {
+              setDownloadingBackup(true);
+              try {
+                await downloadDatabaseBackup();
+              } catch (err) {
+                alert(err.message);
+              } finally {
+                setDownloadingBackup(false);
+              }
+            }}
+          >
+            Backup
+          </Button>
           {statusText && (
             <Text fontSize="xs" color="gray.500" ml="auto" whiteSpace="nowrap">
               {statusText}
