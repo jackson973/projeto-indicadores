@@ -22,6 +22,12 @@ async function getSettings() {
             of_last_sync_status AS "ofLastSyncStatus",
             of_last_sync_message AS "ofLastSyncMessage",
             of_last_sync_rows AS "ofLastSyncRows",
+            product_active AS "productActive", product_sql_query AS "productSqlQuery",
+            product_column_mapping AS "productColumnMapping",
+            product_last_sync_at AT TIME ZONE 'America/Sao_Paulo' AS "productLastSyncAt",
+            product_last_sync_status AS "productLastSyncStatus",
+            product_last_sync_message AS "productLastSyncMessage",
+            product_last_sync_rows AS "productLastSyncRows",
             created_at AT TIME ZONE 'America/Sao_Paulo' AS "createdAt", updated_at AT TIME ZONE 'America/Sao_Paulo' AS "updatedAt"
      FROM sisplan_settings WHERE id = 1`
   );
@@ -49,7 +55,8 @@ async function updateSettings({
   active, host, port, databasePath, fbUser, fbPassword,
   sqlQuery, columnMapping, syncIntervalMinutes,
   nfActive, nfSqlQuery, nfColumnMapping, nfBasePath, nfLocalPath,
-  ofActive, ofSqlQuery, ofColumnMapping
+  ofActive, ofSqlQuery, ofColumnMapping,
+  productActive, productSqlQuery, productColumnMapping
 }) {
   let passwordClause = '';
   const params = [
@@ -59,9 +66,11 @@ async function updateSettings({
     nfColumnMapping || {}, (nfBasePath || '').trim() || null,
     (nfLocalPath || '').trim() || null,
     ofActive || false, (ofSqlQuery || '').trim() || null,
-    ofColumnMapping || {}
+    ofColumnMapping || {},
+    productActive || false, (productSqlQuery || '').trim() || null,
+    productColumnMapping || {}
   ];
-  let paramIndex = 17;
+  let paramIndex = 20; // 1-19 used above, password goes at 20+
 
   if (fbPassword) {
     const encrypted = encrypt(fbPassword);
@@ -76,7 +85,8 @@ async function updateSettings({
        sql_query = $6, column_mapping = $7, sync_interval_minutes = $8,
        nf_active = $9, nf_sql_query = $10, nf_column_mapping = $11, nf_base_path = $12,
        nf_local_path = $13,
-       of_active = $14, of_sql_query = $15, of_column_mapping = $16
+       of_active = $14, of_sql_query = $15, of_column_mapping = $16,
+       product_active = $17, product_sql_query = $18, product_column_mapping = $19
        ${passwordClause}
      WHERE id = 1
      RETURNING id, active, host, port, database_path AS "databasePath",
@@ -160,11 +170,24 @@ async function updateOfSyncStatus(status, message, rows) {
   );
 }
 
+async function updateProductSyncStatus(status, message, rows) {
+  await db.query(
+    `UPDATE sisplan_settings SET
+       product_last_sync_at = CURRENT_TIMESTAMP,
+       product_last_sync_status = $1,
+       product_last_sync_message = $2,
+       product_last_sync_rows = $3
+     WHERE id = 1`,
+    [status, message, rows || 0]
+  );
+}
+
 module.exports = {
   getSettings,
   updateSettings,
   isActive,
   updateSyncStatus,
   updateNfSyncStatus,
-  updateOfSyncStatus
+  updateOfSyncStatus,
+  updateProductSyncStatus
 };

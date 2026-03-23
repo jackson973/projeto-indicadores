@@ -39,7 +39,8 @@ import {
   testSisplanQuery,
   triggerSisplanSync,
   triggerSisplanNfSync,
-  triggerOfSync
+  triggerOfSync,
+  triggerSisplanProductSync
 } from "../api";
 
 const SYSTEM_FIELDS = [
@@ -111,6 +112,14 @@ const NF_SYSTEM_FIELDS = [
   { key: "cnpj", label: "cnpj", description: "CNPJ do cliente", required: false }
 ];
 
+const PRODUCT_SYSTEM_FIELDS = [
+  { key: "codigo",    label: "codigo",    description: "Código do produto",    required: true },
+  { key: "descricao", label: "descricao", description: "Descrição do produto",  required: true },
+  { key: "cod_cor",   label: "cod_cor",   description: "Código da cor",         required: false },
+  { key: "desc_cor",  label: "desc_cor",  description: "Descrição da cor",      required: false },
+  { key: "tamanho",   label: "tamanho",   description: "Tamanho",               required: false },
+];
+
 const SisplanSettings = () => {
   const [form, setForm] = useState({
     active: false,
@@ -129,20 +138,28 @@ const SisplanSettings = () => {
     nfLocalPath: "",
     ofActive: false,
     ofSqlQuery: "",
-    ofColumnMapping: {}
+    ofColumnMapping: {},
+    productActive: false,
+    productSqlQuery: "",
+    productColumnMapping: {}
   });
   const [syncStatus, setSyncStatus] = useState({});
   const [nfSyncStatus, setNfSyncStatus] = useState({});
   const [ofSyncStatus, setOfSyncStatus] = useState({});
+  const [productSyncStatus, setProductSyncStatus] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testingConnection, setTestingConnection] = useState(false);
   const [testingQuery, setTestingQuery] = useState(false);
   const [testingNfQuery, setTestingNfQuery] = useState(false);
   const [testingOfQuery, setTestingOfQuery] = useState(false);
+  const [testingProductQuery, setTestingProductQuery] = useState(false);
   const [syncingOf, setSyncingOf] = useState(false);
+  const [syncingProduct, setSyncingProduct] = useState(false);
   const [ofQueryColumns, setOfQueryColumns] = useState([]);
   const [ofPreviewRows, setOfPreviewRows] = useState([]);
+  const [productQueryColumns, setProductQueryColumns] = useState([]);
+  const [productPreviewRows, setProductPreviewRows] = useState([]);
   const [syncing, setSyncing] = useState(false);
   const [syncingNf, setSyncingNf] = useState(false);
   const [queryColumns, setQueryColumns] = useState([]);
@@ -179,7 +196,10 @@ const SisplanSettings = () => {
         nfLocalPath: data.nfLocalPath || "",
         ofActive: data.ofActive || false,
         ofSqlQuery: data.ofSqlQuery || "",
-        ofColumnMapping: data.ofColumnMapping || {}
+        ofColumnMapping: data.ofColumnMapping || {},
+        productActive: data.productActive || false,
+        productSqlQuery: data.productSqlQuery || "",
+        productColumnMapping: data.productColumnMapping || {}
       });
       setSyncStatus({
         lastSyncAt: data.lastSyncAt,
@@ -198,6 +218,12 @@ const SisplanSettings = () => {
         lastSyncStatus: data.ofLastSyncStatus,
         lastSyncMessage: data.ofLastSyncMessage,
         lastSyncRows: data.ofLastSyncRows
+      });
+      setProductSyncStatus({
+        lastSyncAt: data.productLastSyncAt,
+        lastSyncStatus: data.productLastSyncStatus,
+        lastSyncMessage: data.productLastSyncMessage,
+        lastSyncRows: data.productLastSyncRows
       });
     } catch (err) {
       toast({ title: err.message, status: "error", duration: 5000 });
@@ -376,6 +402,54 @@ const SisplanSettings = () => {
       ...prev,
       ofColumnMapping: {
         ...prev.ofColumnMapping,
+        [systemField]: sourceColumn || undefined
+      }
+    }));
+  };
+
+  const handleTestProductQuery = async () => {
+    setTestingProductQuery(true);
+    try {
+      const result = await testSisplanQuery({
+        host: form.host,
+        port: form.port,
+        databasePath: form.databasePath,
+        fbUser: form.fbUser,
+        fbPassword: form.fbPassword,
+        sqlQuery: form.productSqlQuery
+      });
+      setProductQueryColumns(result.columns || []);
+      setProductPreviewRows(result.rows || []);
+      toast({
+        title: `Query executada: ${result.totalPreview} registros retornados`,
+        status: "success",
+        duration: 3000
+      });
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setTestingProductQuery(false);
+    }
+  };
+
+  const handleProductSync = async () => {
+    setSyncingProduct(true);
+    try {
+      const result = await triggerSisplanProductSync();
+      toast({ title: result.message, status: "success", duration: 4000 });
+      await loadSettings();
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setSyncingProduct(false);
+    }
+  };
+
+  const updateProductMapping = (systemField, sourceColumn) => {
+    setForm(prev => ({
+      ...prev,
+      productColumnMapping: {
+        ...prev.productColumnMapping,
         [systemField]: sourceColumn || undefined
       }
     }));
@@ -928,7 +1002,145 @@ const SisplanSettings = () => {
           </AccordionPanel>
         </AccordionItem>
 
-        {/* 5. Agendamento (ultimo) */}
+        {/* 5. Catálogo de Produtos */}
+        <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
+          <AccordionButton py={3} _expanded={{ bg: refBg }}>
+            <Box flex="1" textAlign="left">
+              <Text fontWeight="semibold">Catálogo de Produtos</Text>
+            </Box>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel pb={4}>
+            <HStack mb={4}>
+              <Text fontSize="sm">Ativo</Text>
+              <Switch
+                isChecked={form.productActive}
+                onChange={(e) => setForm(prev => ({ ...prev, productActive: e.target.checked }))}
+                colorScheme="green"
+                size="sm"
+              />
+            </HStack>
+
+            {form.productActive && (
+              <VStack spacing={4} align="stretch">
+                <Text fontSize="xs" color="gray.500">
+                  Importa todos os produtos cadastrados no Sisplan independentemente de pedidos.
+                  Campos do SKU: <strong>codigo</strong> + <strong>cod_cor</strong> + <strong>tamanho</strong> (separados por "-").
+                </Text>
+
+                <FormControl>
+                  <FormLabel fontSize="sm">Query SQL para produtos</FormLabel>
+                  <Textarea
+                    size="sm"
+                    rows={6}
+                    fontFamily="mono"
+                    fontSize="xs"
+                    placeholder="SELECT CODPRO, DESCPRO, CODCOR, DESCCOR, TAMANHO FROM PRODUTOS WHERE ATIVO = 'S'"
+                    value={form.productSqlQuery}
+                    onChange={(e) => setForm(prev => ({ ...prev, productSqlQuery: e.target.value }))}
+                  />
+                </FormControl>
+
+                <Button
+                  size="sm"
+                  colorScheme="blue"
+                  variant="outline"
+                  isLoading={testingProductQuery}
+                  loadingText="Testando..."
+                  onClick={handleTestProductQuery}
+                  isDisabled={!form.productSqlQuery}
+                >
+                  Testar Query Produtos
+                </Button>
+
+                {productPreviewRows.length > 0 && (
+                  <Box borderWidth="1px" borderColor={borderColor} borderRadius="md" overflowX="auto" maxH="200px">
+                    <Table size="sm" variant="simple">
+                      <Thead>
+                        <Tr>
+                          {productQueryColumns.map((col) => (
+                            <Th key={col} fontSize="xs" whiteSpace="nowrap">{col}</Th>
+                          ))}
+                        </Tr>
+                      </Thead>
+                      <Tbody>
+                        {productPreviewRows.map((row, i) => (
+                          <Tr key={i}>
+                            {productQueryColumns.map((col) => (
+                              <Td key={col} fontSize="xs" whiteSpace="nowrap" maxW="200px" overflow="hidden" textOverflow="ellipsis">
+                                {row[col] != null ? String(row[col]).substring(0, 50) : ''}
+                              </Td>
+                            ))}
+                          </Tr>
+                        ))}
+                      </Tbody>
+                    </Table>
+                  </Box>
+                )}
+
+                {productQueryColumns.length > 0 && (
+                  <Box>
+                    <Text fontSize="sm" fontWeight="semibold" mb={2}>Mapeamento de Colunas (Produtos)</Text>
+                    <Divider mb={3} />
+                    <SimpleGrid columns={{ base: 1, md: 2 }} spacing={3}>
+                      {PRODUCT_SYSTEM_FIELDS.map(field => (
+                        <FormControl key={field.key}>
+                          <FormLabel fontSize="xs">
+                            {field.description}
+                            {field.required && <Text as="span" color="red.400" ml={1}>*</Text>}
+                          </FormLabel>
+                          <Select
+                            size="sm"
+                            placeholder="-- Selecione --"
+                            value={form.productColumnMapping[field.key] || ''}
+                            onChange={(e) => updateProductMapping(field.key, e.target.value)}
+                          >
+                            {productQueryColumns.map(col => (
+                              <option key={col} value={col}>{col}</option>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      ))}
+                    </SimpleGrid>
+                  </Box>
+                )}
+
+                <Box mt={2} p={3} bg={refBg} borderRadius="md">
+                  <Text fontSize="sm" fontWeight="medium" mb={1}>Status do sync de produtos</Text>
+                  <HStack spacing={2}>
+                    {productSyncStatus.lastSyncStatus && (
+                      <Badge colorScheme={productSyncStatus.lastSyncStatus === "success" ? "green" : "red"}>
+                        {productSyncStatus.lastSyncStatus === "success" ? "Sucesso" : "Erro"}
+                      </Badge>
+                    )}
+                    <Text fontSize="xs" color="gray.500">
+                      {formatSyncDate(productSyncStatus.lastSyncAt)}
+                    </Text>
+                  </HStack>
+                  {productSyncStatus.lastSyncMessage && (
+                    <Text fontSize="xs" color="gray.500" mt={1}>{productSyncStatus.lastSyncMessage}</Text>
+                  )}
+                  {productSyncStatus.lastSyncRows > 0 && (
+                    <Text fontSize="xs" color="gray.500">{productSyncStatus.lastSyncRows} registros</Text>
+                  )}
+                  <Button
+                    mt={3}
+                    size="sm"
+                    colorScheme="teal"
+                    variant="outline"
+                    isLoading={syncingProduct}
+                    loadingText="Sincronizando..."
+                    onClick={handleProductSync}
+                  >
+                    Sincronizar Produtos Agora
+                  </Button>
+                </Box>
+              </VStack>
+            )}
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* 6. Agendamento (ultimo) */}
         <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
           <AccordionButton py={3} _expanded={{ bg: refBg }}>
             <Box flex="1" textAlign="left">

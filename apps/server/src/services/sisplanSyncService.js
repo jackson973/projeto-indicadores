@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const Firebird = require('node-firebird');
 const { XdrReader, BlrReader } = require('node-firebird/lib/wire/serialize');
+const db = require('../db/connection');
 const sisplanRepo = require('../db/sisplanRepository');
 const salesRepo = require('../db/salesRepository');
 const notasFiscaisRepo = require('../db/notasFiscaisRepository');
@@ -403,6 +404,121 @@ async function runOfSync() {
   }
 }
 
+// ─── Sync de catálogo de produtos ────────────────────────────────────────────
+
+function mapProductRow(row, columnMapping) {
+  const fieldKeys = Object.keys(row);
+  const getValue = (field) => {
+    const col = columnMapping[field];
+    if (!col) return '';
+    const key = fieldKeys.find(k => k.toUpperCase() === col.toUpperCase());
+    if (key === undefined) return '';
+    const val = row[key];
+    return val !== null && val !== undefined ? String(val).trim() : '';
+  };
+
+  const codigo  = getValue('codigo');
+  const codCor  = getValue('cod_cor');
+  const tamanho = getValue('tamanho');
+
+  // SKU composto: codigo-codcor-tamanho (omite partes vazias)
+  const sku = [codigo, codCor, tamanho].filter(Boolean).join('-');
+
+  return {
+    codigo,
+    descricao: getValue('descricao'),
+    codCor,
+    descCor:  getValue('desc_cor'),
+    tamanho,
+    sku,
+  };
+}
+
+async function batchUpsertSisplanProducts(products) {
+  let inserted = 0;
+  let updated  = 0;
+
+  for (const p of products) {
+    if (!p.codigo || !p.sku) continue;
+    const { rows } = await db.query(`
+      INSERT INTO sisplan_products (codigo, descricao, cod_cor, desc_cor, tamanho, sku, active, synced_at)
+      VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
+      ON CONFLICT (sku) DO UPDATE SET
+        codigo    = EXCLUDED.codigo,
+        descricao = EXCLUDED.descricao,
+        cod_cor   = EXCLUDED.cod_cor,
+        desc_cor  = EXCLUDED.desc_cor,
+        tamanho   = EXCLUDED.tamanho,
+        active    = true,
+        synced_at = NOW()
+      RETURNING (xmax = 0) AS is_insert
+    `, [p.codigo, p.descricao || p.codigo, p.codCor || null, p.descCor || null, p.tamanho || null, p.sku]);
+    if (rows[0]?.is_insert) inserted++; else updated++;
+  }
+  return { inserted, updated };
+}
+
+async function runProductSync() {
+  slog('[Sisplan Product Sync] Starting...');
+
+  try {
+    const settings = await sisplanRepo.getSettings();
+    if (!settings || !settings.productActive) {
+      slog('[Sisplan Product Sync] Not active, skipping.');
+      return { success: false, message: 'Sync de produtos não ativo.' };
+    }
+
+    if (!settings.host || !settings.databasePath || !settings.fbUser || !settings.fbPassword || !settings.productSqlQuery) {
+      await sisplanRepo.updateProductSyncStatus('error', 'Configuração incompleta.', 0);
+      return { success: false, message: 'Configuração incompleta.' };
+    }
+
+    const fbOptions = {
+      host: settings.host,
+      port: settings.port || 3050,
+      database: settings.databasePath,
+      user: settings.fbUser,
+      password: settings.fbPassword
+    };
+
+    const rows = await queryFirebird(fbOptions, settings.productSqlQuery);
+    console.log(`[Sisplan Product Sync] Query returned ${rows.length} rows`);
+
+    if (!rows.length) {
+      await sisplanRepo.updateProductSyncStatus('success', 'Nenhum produto encontrado.', 0);
+      return { success: true, message: 'Nenhum produto encontrado.', rows: 0 };
+    }
+
+    const columnMapping = settings.productColumnMapping || {};
+    const mapped  = rows.map(row => mapProductRow(row, columnMapping));
+    const valid   = mapped.filter(r => r.codigo && r.sku);
+    console.log(`[Sisplan Product Sync] ${valid.length} valid rows`);
+
+    const { inserted, updated } = await batchUpsertSisplanProducts(valid);
+
+    // Desativa SKUs que não vieram no sync (produto encerrado)
+    const activeSKUs = valid.map(r => r.sku);
+    if (activeSKUs.length > 0) {
+      const { rowCount } = await db.query(`
+        UPDATE sisplan_products SET active = false, synced_at = NOW()
+        WHERE active = true AND sku NOT IN (SELECT UNNEST($1::text[]))
+      `, [activeSKUs]);
+      if (rowCount > 0) console.log(`[Sisplan Product Sync] ${rowCount} produtos desativados`);
+    }
+
+    const message = `Sincronizado: ${inserted} inseridos, ${updated} atualizados.`;
+    console.log(`[Sisplan Product Sync] ${message}`);
+    await sisplanRepo.updateProductSyncStatus('success', message, valid.length);
+
+    return { success: true, message, rows: valid.length, inserted, updated };
+  } catch (error) {
+    const message = error.message || 'Erro desconhecido';
+    serr('[Sisplan Product Sync] Error:', message);
+    await sisplanRepo.updateProductSyncStatus('error', message, 0);
+    return { success: false, message };
+  }
+}
+
 async function startSisplanSyncScheduler() {
   slog('[Sisplan Sync] Initializing scheduler...');
 
@@ -461,6 +577,7 @@ module.exports = {
   runSync,
   runNfSync,
   runOfSync,
+  runProductSync,
   testFirebirdConnection,
   queryFirebird,
   getFirebirdOptions

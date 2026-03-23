@@ -256,6 +256,24 @@ async function getVariationPrefixes(storeKey, adName) {
     prefixMap.set(prefix, existing + row.qty);
   }
 
+  // Complementa com variações do catálogo Upseller que ainda não têm venda
+  const catalogResult = await db.query(
+    `SELECT DISTINCT upv.variation_option
+     FROM upseller_products up
+     JOIN upseller_product_variations upv ON upv.product_id = up.id
+     WHERE up.ad_name = $1
+       AND up.active  = true
+       AND upv.variation_option IS NOT NULL
+       AND upv.variation_option != ''`,
+    [adName]
+  );
+  for (const row of catalogResult.rows) {
+    const opt = row.variation_option.trim();
+    if (opt && !prefixMap.has(opt)) {
+      prefixMap.set(opt, 0); // existe no catálogo mas ainda sem venda
+    }
+  }
+
   // Se só tem 1 prefixo, não há sub-variações relevantes
   if (prefixMap.size <= 1) return [];
 
@@ -397,30 +415,54 @@ async function getAllAdsWithGroup() {
       s.store_variation_key,
       s.ad_name,
       s.loja,
-      s.thumbnail,
+      sale.thumbnail,
       s.platform,
-      s.sku,
+      sale.sku,
       s.variation_count,
-      COALESCE(s.product_url, uc.product_url) AS product_url,
+      COALESCE(sale.product_url, uc.product_url) AS product_url,
       gi.group_id,
       g.name AS group_name,
       gi.variation_filter
     FROM (
+      -- Catálogo Upseller (Shopee, Shein, ML)
       SELECT
-        ${saKeyExpr} AS store_variation_key,
-        TRIM(sa.ad_name) AS ad_name,
-        COALESCE(MAX(st.name), sa.store) AS loja,
-        MAX(CASE WHEN sa.image IS NOT NULL AND TRIM(sa.image) != '' THEN sa.image END) AS thumbnail,
-        MAX(sa.platform) AS platform,
-        MAX(CASE WHEN sa.sku IS NOT NULL AND TRIM(sa.sku) != '' THEN sa.sku END) AS sku,
-        MAX(sa.product_url) AS product_url,
-        COUNT(DISTINCT ${variationPrefixExpr.replace(/s\.variation/g, 'sa.variation')})
-          FILTER (WHERE sa.variation IS NOT NULL AND TRIM(sa.variation) != '')::int AS variation_count
-      FROM sales sa
-      LEFT JOIN stores st ON st.id = sa.cod_store
-      WHERE sa.ad_name IS NOT NULL AND TRIM(sa.ad_name) != '' AND sa.ad_name != 'Geral'
-      GROUP BY ${saKeyExpr}, TRIM(sa.ad_name), sa.store
+        up.shop_name || '|||' || up.ad_name AS store_variation_key,
+        up.ad_name,
+        up.shop_name AS loja,
+        up.platform,
+        (SELECT COUNT(DISTINCT upv.variation_option)
+         FROM upseller_product_variations upv
+         WHERE upv.product_id = up.id
+           AND upv.variation_option IS NOT NULL AND TRIM(upv.variation_option) != ''
+        )::int AS variation_count
+      FROM upseller_products up
+      WHERE up.active = true
+
+      UNION ALL
+
+      -- Catálogo Sisplan (Fábrica) — agrupado por descricao
+      SELECT DISTINCT ON (sp.descricao)
+        'Fabrica|||' || sp.descricao AS store_variation_key,
+        sp.descricao AS ad_name,
+        'Fabrica' AS loja,
+        'Sisplan' AS platform,
+        (SELECT COUNT(DISTINCT sp2.cod_cor)
+         FROM sisplan_products sp2
+         WHERE sp2.descricao = sp.descricao AND sp2.active = true
+           AND sp2.cod_cor IS NOT NULL AND TRIM(sp2.cod_cor) != ''
+        )::int AS variation_count
+      FROM sisplan_products sp
+      WHERE sp.active = true
     ) s
+    -- Enriquece com thumbnail/sku/product_url das vendas
+    LEFT JOIN LATERAL (
+      SELECT
+        MAX(CASE WHEN sa.image IS NOT NULL AND TRIM(sa.image) != '' THEN sa.image END) AS thumbnail,
+        MAX(CASE WHEN sa.sku IS NOT NULL AND TRIM(sa.sku) != '' THEN sa.sku END) AS sku,
+        MAX(sa.product_url) AS product_url
+      FROM sales sa
+      WHERE COALESCE(sa.cod_store::text, sa.store) || '|||' || TRIM(sa.ad_name) = s.store_variation_key
+    ) sale ON true
     LEFT JOIN product_url_cache uc ON uc.store_variation_key = s.store_variation_key
     LEFT JOIN product_group_items gi ON gi.ad_name = s.store_variation_key
     LEFT JOIN product_groups g ON g.id = gi.group_id

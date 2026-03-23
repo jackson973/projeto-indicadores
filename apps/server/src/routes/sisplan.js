@@ -5,6 +5,7 @@ const {
   runSync,
   runNfSync,
   runOfSync,
+  runProductSync,
   restartSisplanSyncScheduler,
   testFirebirdConnection,
   queryFirebird,
@@ -58,7 +59,8 @@ router.put('/', async (req, res) => {
       active, host, port, databasePath, fbUser, fbPassword,
       sqlQuery, columnMapping, syncIntervalMinutes,
       nfActive, nfSqlQuery, nfColumnMapping, nfBasePath, nfLocalPath,
-      ofActive, ofSqlQuery, ofColumnMapping
+      ofActive, ofSqlQuery, ofColumnMapping,
+      productActive, productSqlQuery, productColumnMapping
     } = req.body;
 
     const result = await sisplanRepo.updateSettings({
@@ -78,7 +80,10 @@ router.put('/', async (req, res) => {
       nfLocalPath: (nfLocalPath || '').trim(),
       ofActive: ofActive || false,
       ofSqlQuery: (ofSqlQuery || '').trim(),
-      ofColumnMapping: ofColumnMapping || {}
+      ofColumnMapping: ofColumnMapping || {},
+      productActive: productActive || false,
+      productSqlQuery: (productSqlQuery || '').trim(),
+      productColumnMapping: productColumnMapping || {}
     });
 
     // Reiniciar scheduler com novas configurações
@@ -205,6 +210,20 @@ router.post('/of-sync', async (req, res) => {
     return res.status(400).json(result);
   } catch (error) {
     console.error('Manual OF sync error:', error);
+    return res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// POST /api/sisplan/product-sync - Sync manual de catálogo de produtos
+router.post('/product-sync', async (req, res) => {
+  try {
+    const result = await runProductSync();
+    if (result.success) {
+      return res.json(result);
+    }
+    return res.status(400).json(result);
+  } catch (error) {
+    console.error('Manual product sync error:', error);
     return res.status(500).json({ success: false, message: error.message });
   }
 });

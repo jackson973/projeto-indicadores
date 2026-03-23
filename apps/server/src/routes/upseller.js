@@ -1,15 +1,18 @@
 const express = require('express');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const upsellerRepo = require('../db/upsellerRepository');
+const axios = require('axios');
 const {
   runSync,
   restartUpsellerSyncScheduler,
+  getOrCreateSession,
 } = require('../services/upsellerSyncService');
 const {
   getTodayAnalytics,
   syncAnalytics,
   restartAnalyticsScheduler,
 } = require('../services/upsellerAnalyticsService');
+const { syncCatalog, PLATFORM_CFG } = require('../services/upsellerCatalogService');
 
 const router = express.Router();
 
@@ -191,6 +194,59 @@ router.put('/', async (req, res) => {
   } catch (error) {
     console.error('Update upseller settings error:', error);
     return res.status(500).json({ message: 'Erro ao salvar configurações.' });
+  }
+});
+
+// GET /api/upseller/products?platform=shopee — Catálogo de produtos da plataforma
+const PLATFORM_PRODUCT_URLS = {
+  mercado: 'https://app.upseller.com/api/mercado/product/export',
+  shopee:  'https://app.upseller.com/api/shopee/product/Export',
+  shein:   'https://app.upseller.com/api/shein/product/export',
+  tiktok:  'https://app.upseller.com/api/tiktok/product/export',
+};
+
+router.get('/products', async (req, res) => {
+  try {
+    const platform = (req.query.platform || '').toLowerCase();
+    const url = PLATFORM_PRODUCT_URLS[platform];
+    if (!url) {
+      return res.status(400).json({
+        message: `Plataforma inválida. Use: ${Object.keys(PLATFORM_PRODUCT_URLS).join(', ')}`,
+      });
+    }
+
+    const cookies = await getOrCreateSession();
+    if (!cookies) {
+      return res.status(503).json({ message: 'Sessão Upseller não disponível. Configure e aguarde o login.' });
+    }
+
+    const { data } = await axios.get(url, {
+      headers: { Cookie: cookies },
+      timeout: 30000,
+    });
+
+    return res.json(data);
+  } catch (err) {
+    console.error('[Upseller] products error:', err.message);
+    if (err.response) {
+      return res.status(err.response.status).json({ message: `Upseller retornou ${err.response.status}`, data: err.response.data });
+    }
+    return res.status(500).json({ message: err.message });
+  }
+});
+
+// POST /api/upseller/sync-catalog?platform=shopee — Sync catálogo de produtos
+router.post('/sync-catalog', async (req, res) => {
+  try {
+    const platform = (req.query.platform || req.body?.platform || 'shopee').toLowerCase();
+    if (!PLATFORM_CFG[platform]) {
+      return res.status(400).json({ message: `Plataforma inválida. Use: ${Object.keys(PLATFORM_CFG).join(', ')}` });
+    }
+    const result = await syncCatalog(platform);
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('[Catalog] sync-catalog error:', error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 });
 

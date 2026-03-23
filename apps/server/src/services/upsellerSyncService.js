@@ -39,7 +39,7 @@ async function fetchVerificationCode(imapConfig, startTime, timeout = 120000) {
   const { ImapFlow } = require('imapflow');
   const { simpleParser } = require('mailparser');
 
-  const client = new ImapFlow({
+  const createClient = () => new ImapFlow({
     host: imapConfig.host,
     port: imapConfig.port,
     secure: true,
@@ -48,68 +48,78 @@ async function fetchVerificationCode(imapConfig, startTime, timeout = 120000) {
     logger: false,
   });
 
-  console.log('[UpSeller] Connecting to IMAP...');
-  await client.connect();
-
-  const lock = await client.getMailboxLock('INBOX');
-
+  // Limpa emails antigos do UpSeller antes de começar
+  console.log('[UpSeller] Cleaning old verification emails...');
+  const cleanClient = createClient();
+  await cleanClient.connect();
+  const cleanLock = await cleanClient.getMailboxLock('INBOX');
   try {
-    // Delete old UpSeller emails (search returns sequence numbers)
-    const oldMsgs = await client.search({ subject: 'UpSeller' });
+    const oldMsgs = await cleanClient.search({ subject: 'UpSeller' });
     if (oldMsgs.length > 0) {
       console.log(`[UpSeller] Deleting ${oldMsgs.length} old UpSeller emails`);
-      await client.messageDelete(oldMsgs).catch((err) => {
-        console.log(`[UpSeller] Delete error: ${err.message}`);
-      });
+      await cleanClient.messageDelete(oldMsgs).catch(() => {});
     }
-
-    const start = Date.now();
-    const interval = 4000;
-
-    while (Date.now() - start < timeout) {
-      console.log('[UpSeller] Searching for verification email...');
-      await client.noop();
-
-      // Search for 'UpSeller' (matches both PT "código de verificação do UpSeller" and EN "UpSeller verification code")
-      const messages = await client.search({ subject: 'UpSeller' });
-      if (messages.length > 0) {
-        const msgId = messages[messages.length - 1];
-        const msgMeta = await client.fetchOne(msgId, {
-          envelope: true, internalDate: true, source: true,
-        });
-
-        // Allow 30s tolerance for clock drift
-        if (startTime && msgMeta.internalDate < new Date(startTime.getTime() - 30000)) {
-          await sleep(interval);
-          continue;
-        }
-
-        const parsed = await simpleParser(msgMeta.source);
-        console.log(`[UpSeller] Email found: ${parsed.subject}`);
-
-        const match = parsed.subject?.match(/(\d{4,8})/);
-        if (match) {
-          console.log(`[UpSeller] Code: ${match[1]}`);
-          await client.messageDelete(messages).catch(() => {});
-          return match[1];
-        }
-
-        const bodyMatch = parsed.text?.match(/\b(\d{4,8})\b/);
-        if (bodyMatch) {
-          console.log(`[UpSeller] Code from body: ${bodyMatch[1]}`);
-          await client.messageDelete(messages).catch(() => {});
-          return bodyMatch[1];
-        }
-      }
-
-      await sleep(interval);
-    }
-
-    throw new Error(`No verification email within ${timeout / 1000}s`);
   } finally {
-    lock.release();
-    await client.logout().catch(() => {});
+    cleanLock.release();
+    await cleanClient.logout().catch(() => {});
   }
+
+  // Polling com reconexão a cada tentativa
+  const start = Date.now();
+  const interval = 2000;
+  let attempt = 0;
+
+  while (Date.now() - start < timeout) {
+    attempt++;
+    console.log(`[UpSeller] Checking for email (attempt ${attempt})...`);
+
+    const client = createClient();
+    try {
+      await client.connect();
+      const lock = await client.getMailboxLock('INBOX');
+      try {
+        const messages = await client.search({ subject: 'UpSeller' });
+        if (messages.length > 0) {
+          const msgId = messages[messages.length - 1];
+          const msgMeta = await client.fetchOne(msgId, {
+            envelope: true, internalDate: true, source: true,
+          });
+
+          // Allow 30s tolerance for clock drift
+          if (startTime && msgMeta.internalDate < new Date(startTime.getTime() - 30000)) {
+            continue;
+          }
+
+          const parsed = await simpleParser(msgMeta.source);
+          console.log(`[UpSeller] Email found: ${parsed.subject}`);
+
+          const match = parsed.subject?.match(/(\d{4,8})/);
+          if (match) {
+            console.log(`[UpSeller] Code: ${match[1]}`);
+            await client.messageDelete(messages).catch(() => {});
+            return match[1];
+          }
+
+          const bodyMatch = parsed.text?.match(/\b(\d{4,8})\b/);
+          if (bodyMatch) {
+            console.log(`[UpSeller] Code from body: ${bodyMatch[1]}`);
+            await client.messageDelete(messages).catch(() => {});
+            return bodyMatch[1];
+          }
+        }
+      } finally {
+        lock.release();
+      }
+    } catch (err) {
+      console.log(`[UpSeller] IMAP error: ${err.message}`);
+    } finally {
+      await client.logout().catch(() => {});
+    }
+
+    await sleep(interval);
+  }
+
+  throw new Error(`No verification email within ${timeout / 1000}s`);
 }
 
 // ─── PUPPETEER LOGIN ────────────────────────────────────────────────────────
@@ -137,9 +147,13 @@ async function fullLogin(settings) {
     }
   });
 
+  const t0 = Date.now();
+  const elapsed = (label) => console.log(`[UpSeller] [${((Date.now() - t0) / 1000).toFixed(1)}s] ${label}`);
+
   try {
-    console.log('[UpSeller] Navigating to login page...');
+    elapsed('Navigating to login page...');
     await page.goto(settings.upsellerUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+    elapsed('Page loaded');
 
     // Fill email and password
     const inputFields = await page.$$('input.ant-input');
@@ -150,15 +164,18 @@ async function fullLogin(settings) {
     // Focus CAPTCHA input to trigger captcha load
     const captchaInput = await getCaptchaInput(page);
     await captchaInput.focus();
-    await sleep(2000);
+    // Aguarda captcha carregar (polling rápido ao invés de sleep fixo)
+    for (let w = 0; w < 20 && !captchaBase64; w++) await sleep(100);
     if (!captchaBase64) throw new Error('Captcha not loaded');
+    elapsed('Captcha loaded');
 
     // Login with CAPTCHA retry
     let loginSuccess = false;
     for (let attempt = 1; attempt <= 3; attempt++) {
-      console.log(`[UpSeller] Login attempt ${attempt}`);
+      elapsed(`Login attempt ${attempt} — solving captcha...`);
 
       const captchaText = await solveImageCaptcha(captchaBase64, settings.anticaptchaKey);
+      elapsed(`Captcha solved: ${captchaText}`);
 
       await captchaInput.click({ clickCount: 3 });
       await captchaInput.press('Backspace');
@@ -168,14 +185,14 @@ async function fullLogin(settings) {
       if (!loginButton) throw new Error('Login button not found');
 
       await Promise.all([
-        page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {}),
+        page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {}),
         loginButton.click(),
       ]);
-      await sleep(1000);
+      await sleep(300);
 
       const captchaError = await page.$('div.ant-form-extra span.f_red');
       if (captchaError) {
-        console.log(`[UpSeller] CAPTCHA invalid, retrying...`);
+        elapsed('CAPTCHA invalid, retrying...');
         await page.waitForResponse(
           (res) => res.url().includes('/api/vcode') && res.status() === 200,
           { timeout: 10000 },
@@ -184,13 +201,14 @@ async function fullLogin(settings) {
       }
 
       loginSuccess = true;
+      elapsed('Login accepted');
       break;
     }
 
     if (!loginSuccess) throw new Error('All CAPTCHA attempts failed');
 
     // Email verification
-    console.log('[UpSeller] Checking for email verification...');
+    elapsed('Checking for email verification...');
     const needsVerification = await page.$('button.send_code_btn')
       .then((el) => !!el)
       .catch(() => false);
@@ -198,6 +216,7 @@ async function fullLogin(settings) {
     if (needsVerification) {
       await page.waitForSelector('button.send_code_btn', { visible: true, timeout: 5000 });
       await page.click('button.send_code_btn');
+      elapsed('Verification email requested');
       const sendTime = new Date();
 
       const code = await fetchVerificationCode(
@@ -205,28 +224,30 @@ async function fullLogin(settings) {
         sendTime,
         120000
       );
+      elapsed(`Verification code received: ${code}`);
 
       await page.waitForSelector('input.inp_code.ant-input', { visible: true });
       await page.click('input.inp_code.ant-input');
       await page.type('input.inp_code.ant-input', code, { delay: 100 });
 
       await Promise.all([
-        page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {}),
+        page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 15000 }).catch(() => {}),
         page.click('button.main_btn.ant-btn-primary'),
       ]);
 
-      console.log('[UpSeller] Email verification completed');
+      elapsed('Email verification completed');
     } else {
-      console.log('[UpSeller] No email verification needed');
+      elapsed('No email verification needed');
     }
 
-    await sleep(3000);
-    console.log(`[UpSeller] Authenticated: ${page.url()}`);
+    await sleep(500);
+    elapsed(`Authenticated: ${page.url()}`);
 
     // Extract cookies
     const browserCookies = await page.cookies();
     const cookieString = browserCookies.map((c) => `${c.name}=${c.value}`).join('; ');
 
+    elapsed('Login complete');
     return cookieString;
   } finally {
     await browser.close();
@@ -566,4 +587,5 @@ module.exports = {
   stopUpsellerSyncScheduler,
   restartUpsellerSyncScheduler,
   runSync,
+  getOrCreateSession,
 };

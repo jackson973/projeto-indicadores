@@ -1,0 +1,1 @@
+ALTER TABLE order_customers ADD COLUMN IF NOT EXISTS cidade VARCHAR(255);

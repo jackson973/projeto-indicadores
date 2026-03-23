@@ -24,6 +24,7 @@
     "node-cron": "^3.0.3",
     "node-firebird": "^1.1.10",
     "nodemailer": "^8.0.1",
+    "pdfkit": "^0.18.0",
     "pg": "^8.11.3",
     "puppeteer": "^24.37.5",
     "puppeteer-extra": "^3.3.6",

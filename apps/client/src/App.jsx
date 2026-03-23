@@ -69,6 +69,10 @@ import SystemSettings from "./components/SystemSettings";
 import StoresManagement from "./components/StoresManagement";
 import AnunciosDashboard from "./components/AnunciosDashboard";
 import ProductsManagement from "./components/ProductsManagement";
+import OrderProductsConfig from "./components/OrderProductsConfig";
+import PaymentConditionsConfig from "./components/PaymentConditionsConfig";
+import NewOrder from "./components/NewOrder";
+import OrdersList from "./components/OrdersList";
 import ProductDashboard from "./components/ProductDashboard";
 import ProductGroups from "./components/ProductGroups";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
@@ -190,6 +194,12 @@ const ProductIcon = (props) => (
 const AdsIcon = (props) => (
   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
     <path d="M3 3h18v2H3V3zm0 4h12v2H3V7zm0 4h18v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2z" />
+  </svg>
+);
+
+const OrderIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z" />
   </svg>
 );
 
@@ -434,6 +444,17 @@ const App = () => {
           view: "product-groups"
         }
       ]
+    },
+    {
+      label: "Pedidos",
+      icon: <OrderIcon />,
+      show: true,
+      submenu: [
+        { label: "Novo Pedido", view: "orders-new" },
+        { label: "Meus Pedidos", view: "orders-list" },
+        { label: "Config Produtos",  view: "orders-products",    show: user?.role === "admin" },
+        { label: "Cond. Pagamento",  view: "orders-conditions",  show: user?.role === "admin" }
+      ].filter(s => s.show !== false)
     },
     {
       label: "Terceiros",
@@ -803,7 +824,7 @@ const App = () => {
 
         <PWAInstallPrompt />
 
-        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && activeView !== "terceiros-settlement" && activeView !== "terceiros-groups" && activeView !== "terceiros-prices" && activeView !== "terceiros-rastreio" && activeView !== "system-settings" && activeView !== "products-management" && activeView !== "product-groups" && (
+        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && activeView !== "terceiros-settlement" && activeView !== "terceiros-groups" && activeView !== "terceiros-prices" && activeView !== "terceiros-rastreio" && activeView !== "system-settings" && activeView !== "products-management" && activeView !== "product-groups" && activeView !== "orders-new" && activeView !== "orders-list" && activeView !== "orders-products" && activeView !== "orders-conditions" && (
           <Center py={10}>
             <Box maxW="680px" w="full">
               <UploadForm onUpload={handleUpload} />
@@ -885,6 +906,22 @@ const App = () => {
 
         {activeView === "product-groups" && (
           <ProductGroups />
+        )}
+
+        {activeView === "orders-new" && (
+          <NewOrder />
+        )}
+
+        {activeView === "orders-list" && (
+          <OrdersList />
+        )}
+
+        {activeView === "orders-products" && user?.role === "admin" && (
+          <OrderProductsConfig />
+        )}
+
+        {activeView === "orders-conditions" && user?.role === "admin" && (
+          <PaymentConditionsConfig />
         )}
 
         {hasData && activeView === "dashboard" && (

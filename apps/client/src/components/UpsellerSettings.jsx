@@ -32,7 +32,8 @@ import { ViewIcon, ViewOffIcon, CopyIcon } from "@chakra-ui/icons";
 import {
   fetchUpsellerSettings,
   updateUpsellerSettings,
-  triggerUpsellerSync
+  triggerUpsellerSync,
+  triggerCatalogSync
 } from "../api";
 
 const UpsellerSettings = () => {
@@ -53,6 +54,7 @@ const UpsellerSettings = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [syncingCatalog, setSyncingCatalog] = useState(null); // platform being synced
   const [showCaptchaKey, setShowCaptchaKey] = useState(false);
   const [lastUsedCaptchaKey, setLastUsedCaptchaKey] = useState("");
   const toast = useToast();
@@ -128,6 +130,23 @@ const UpsellerSettings = () => {
       toast({ title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncing(false);
+    }
+  };
+
+  const handleCatalogSync = async (platform) => {
+    setSyncingCatalog(platform);
+    try {
+      const result = await triggerCatalogSync(platform);
+      toast({
+        title: `Catálogo ${platform} sincronizado`,
+        description: `${result.products} produtos, ${result.varUpserted} variações`,
+        status: "success",
+        duration: 5000,
+      });
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setSyncingCatalog(null);
     }
   };
 
@@ -403,6 +422,36 @@ const UpsellerSettings = () => {
           >
             Sincronizar Agora
           </Button>
+        </Box>
+
+        <Divider />
+
+        {/* Catálogo de Produtos */}
+        <Box>
+          <Text fontWeight="semibold" mb={1}>Catálogo de Produtos</Text>
+          <Text fontSize="xs" color="gray.500" mb={3}>
+            Importa todos os produtos e variações ativos nas plataformas para uso no Gerenciamento de Grupos.
+            Permite configurar filtros de variação mesmo para produtos que ainda não tiveram vendas.
+          </Text>
+          <HStack spacing={2} flexWrap="wrap">
+            {[
+              { key: "shopee",        label: "Shopee" },
+              { key: "shein",         label: "Shein" },
+              { key: "mercadolivre",  label: "Mercado Livre" },
+            ].map(({ key, label }) => (
+              <Button
+                key={key}
+                size="sm"
+                colorScheme="purple"
+                variant="outline"
+                isLoading={syncingCatalog === key}
+                loadingText={`Sincronizando ${label}...`}
+                onClick={() => handleCatalogSync(key)}
+              >
+                Sincronizar Catálogo {label}
+              </Button>
+            ))}
+          </HStack>
         </Box>
 
         <Divider />

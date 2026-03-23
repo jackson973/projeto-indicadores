@@ -89,6 +89,9 @@ const ProductGroups = () => {
   const [selectedUngrouped, setSelectedUngrouped] = useState(new Set());
   const [batchAssigning, setBatchAssigning] = useState(false);
 
+  // Add product modal
+  const addModal = useDisclosure();
+
   // Variation filter modal
   const variationModal = useDisclosure();
   const [variationAd, setVariationAd] = useState(null); // ad being added
@@ -101,6 +104,14 @@ const ProductGroups = () => {
 
   const toast = useToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
+
+  // Busca multi-palavra: "pijama emoji" bate em "PIJAMA MASC. MANGA LONGA JUVENIL ROBO EMOJI"
+  const matchesSearch = (text, search) => {
+    if (!search) return true;
+    const words = search.toLowerCase().split(/\s+/).filter(Boolean);
+    const lower = (text || "").toLowerCase();
+    return words.every((w) => lower.includes(w));
+  };
 
   const cardBg = useColorModeValue("white", "gray.800");
   const headerBg = useColorModeValue("gray.50", "gray.700");
@@ -153,7 +164,10 @@ const ProductGroups = () => {
 
   const getAdDisplay = (key) => {
     const a = adsMap.get(key);
-    return a ? a.ad_name : key;
+    if (a) return a.ad_name;
+    // Fallback: remove prefixo SVK (ex: "Fabrica|||NOME" → "NOME")
+    const sep = key.indexOf("|||");
+    return sep > -1 ? key.substring(sep + 3) : key;
   };
   const getAdLoja = (key) => {
     const a = adsMap.get(key);
@@ -184,11 +198,7 @@ const ProductGroups = () => {
 
   const filteredGroupItems = useMemo(() => {
     if (!groupFilter.trim()) return groupItems;
-    const term = groupFilter.toLowerCase();
-    return groupItems.filter((i) => {
-      const display = getAdDisplay(i.ad_name);
-      return display.toLowerCase().includes(term);
-    });
+    return groupItems.filter((i) => matchesSearch(getAdDisplay(i.ad_name), groupFilter));
   }, [groupItems, groupFilter, adsMap]);
 
   // Deduplicate allAds by store_variation_key (backend returns multiple rows per ad if multiple associations)
@@ -225,34 +235,26 @@ const ProductGroups = () => {
   };
 
   const allGroupedAds = useMemo(() => {
-    const term = allSearch.toLowerCase().trim();
     return uniqueAds.filter((a) => {
       if (!a._associations || a._associations.length === 0) return false;
-      if (!term) return true;
-      return (a.ad_name || "").toLowerCase().includes(term) || (a.loja || "").toLowerCase().includes(term);
+      if (!allSearch.trim()) return true;
+      return matchesSearch(a.ad_name, allSearch) || matchesSearch(a.loja, allSearch);
     });
   }, [uniqueAds, allSearch]);
 
   const ungroupedAds = useMemo(() => {
-    const term = ungroupedSearch.toLowerCase().trim();
     return uniqueAds.filter((a) => {
       if (isFullyGrouped(a)) return false;
-      if (!a._associations || a._associations.length === 0) {
-        // No associations at all — ungrouped
-      } else {
-        // Has some associations but not fully grouped — still show
-      }
-      if (!term) return true;
-      return (a.ad_name || "").toLowerCase().includes(term) || (a.loja || "").toLowerCase().includes(term);
+      if (!ungroupedSearch.trim()) return true;
+      return matchesSearch(a.ad_name, ungroupedSearch) || matchesSearch(a.loja, ungroupedSearch);
     });
   }, [uniqueAds, ungroupedSearch]);
 
   const filteredAds = useMemo(() => {
     if (!productSearch.trim()) return [];
-    const term = productSearch.toLowerCase();
     return uniqueAds
       .filter((a) => !groupKeys.has(a.store_variation_key) &&
-        ((a.ad_name || "").toLowerCase().includes(term) || (a.loja || "").toLowerCase().includes(term)))
+        (matchesSearch(a.ad_name, productSearch) || matchesSearch(a.loja, productSearch)))
       .slice(0, 50);
   }, [productSearch, uniqueAds, groupKeys]);
 
@@ -489,8 +491,9 @@ const ProductGroups = () => {
       <Flex direction={isMobile ? "column" : "row"} gap={4} align="flex-start">
         {/* Left: Groups */}
         <Box bg={cardBg} borderRadius="lg" boxShadow="sm" border="1px solid" borderColor={borderColor}
-          w={isMobile ? "100%" : "340px"} flexShrink={0}>
-          <Flex justify="space-between" align="center" p={4} borderBottomWidth="1px" borderColor={borderColor}>
+          w={isMobile ? "100%" : "340px"} flexShrink={0}
+          maxH={isMobile ? undefined : "calc(100vh - 120px)"} display="flex" flexDirection="column">
+          <Flex justify="space-between" align="center" p={4} borderBottomWidth="1px" borderColor={borderColor} flexShrink={0}>
             <Heading size="sm">Grupos de Produtos</Heading>
             <Button leftIcon={<AddIcon />} size="xs" colorScheme="blue" onClick={createModal.onOpen}>Novo Grupo</Button>
           </Flex>
@@ -498,7 +501,7 @@ const ProductGroups = () => {
           {loadingGroups ? (
             <Center p={8}><Spinner /></Center>
           ) : (
-            <VStack spacing={0} align="stretch">
+            <VStack spacing={0} align="stretch" overflowY="auto" flex={1}>
               <Flex align="center" px={4} py={2.5} cursor="pointer"
                 bg={showAll ? selectedBg : undefined}
                 _hover={{ bg: showAll ? selectedBg : hoverBg }}
@@ -559,8 +562,9 @@ const ProductGroups = () => {
 
         {/* Right: Items */}
         <Box bg={cardBg} borderRadius="lg" boxShadow="sm" border="1px solid" borderColor={borderColor}
-          flex={1} w={isMobile ? "100%" : undefined} minW={0}>
-          <Flex justify="space-between" align="center" p={4} borderBottomWidth="1px" borderColor={borderColor}>
+          flex={1} w={isMobile ? "100%" : undefined} minW={0}
+          maxH={isMobile ? undefined : "calc(100vh - 120px)"} display="flex" flexDirection="column">
+          <Flex justify="space-between" align="center" p={4} borderBottomWidth="1px" borderColor={borderColor} flexShrink={0}>
             <Heading size="sm" isTruncated>
               {showAll ? "Todos os anúncios em grupos" : showUngrouped ? "Anúncios sem grupo" : selectedGroup ? `Anúncios — ${selectedGroup.name}` : "Anúncios"}
             </Heading>
@@ -574,7 +578,7 @@ const ProductGroups = () => {
           </Flex>
 
           {showAll ? (
-            <Box p={4}>
+            <Box p={4} overflowY="auto" flex={1}>
               <InputGroup size="sm" mb={3}>
                 <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
                 <Input placeholder="Pesquisar por nome ou loja..." value={allSearch}
@@ -590,7 +594,7 @@ const ProductGroups = () => {
                   </Text>
                 </Center>
               ) : (
-                <VStack spacing={0} align="stretch" maxH="600px" overflowY="auto">
+                <VStack spacing={0} align="stretch">
                   {allGroupedAds.map((a) => {
                     const url = getMarketplaceUrl(a);
                     return (
@@ -619,7 +623,7 @@ const ProductGroups = () => {
               )}
             </Box>
           ) : showUngrouped ? (
-            <Box p={4}>
+            <Box p={4} overflowY="auto" flex={1}>
               <InputGroup size="sm" mb={3}>
                 <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
                 <Input placeholder="Filtrar por nome ou loja..." value={ungroupedSearch}
@@ -658,7 +662,7 @@ const ProductGroups = () => {
                   </Text>
                 </Center>
               ) : (
-                <VStack spacing={0} align="stretch" maxH="500px" overflowY="auto">
+                <VStack spacing={0} align="stretch">
                   {ungroupedAds.map((a) => {
                     const url = getMarketplaceUrl(a);
                     return (
@@ -697,73 +701,19 @@ const ProductGroups = () => {
               <Text fontSize="sm" color="gray.500">Selecione um grupo para gerenciar os anúncios.</Text>
             </Center>
           ) : (
-            <Box p={4}>
-              {/* Search / add */}
-              <Box position="relative" mb={4}>
-                <InputGroup size="sm">
+            <Box p={4} overflowY="auto" flex={1}>
+              {/* Filter + add button */}
+              <Flex gap={2} mb={3}>
+                <InputGroup size="sm" flex={1}>
                   <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
-                  <Input placeholder="Buscar anúncio para adicionar..." value={productSearch}
-                    onChange={(e) => { setProductSearch(e.target.value); setSelectedSearchResults(new Set()); }} />
+                  <Input placeholder="Filtrar anúncios do grupo..." value={groupFilter}
+                    onChange={(e) => { setGroupFilter(e.target.value); setSelectedItems(new Set()); }} />
                 </InputGroup>
-
-                {filteredAds.length > 0 && (
-                  <Box position="absolute" top="100%" left={0} right={0} zIndex={10}
-                    bg={searchResultBg} border="1px solid" borderColor={borderColor} borderRadius="md"
-                    maxH="350px" overflowY="auto" boxShadow="lg" mt={1}>
-                    <Flex align="center" gap={2} px={3} py={2} bg={headerBg}
-                      borderBottomWidth="1px" borderColor={borderColor} position="sticky" top={0} zIndex={1}>
-                      <Checkbox size="sm"
-                        isChecked={selectedSearchResults.size === filteredAds.length && filteredAds.length > 0}
-                        isIndeterminate={selectedSearchResults.size > 0 && selectedSearchResults.size < filteredAds.length}
-                        onChange={toggleAllSearch}>
-                        <Text fontSize="xs">Todos ({filteredAds.length})</Text>
-                      </Checkbox>
-                      {selectedSearchResults.size > 0 && (
-                        <Button size="xs" colorScheme="blue" leftIcon={<AddIcon />}
-                          onClick={handleBatchAdd} isLoading={batchAdding}>
-                          Adicionar {selectedSearchResults.size}
-                        </Button>
-                      )}
-                    </Flex>
-
-                    {filteredAds.map((ad) => (
-                      <Flex key={ad.store_variation_key} align="center" px={3} py={2}
-                        _hover={{ bg: searchResultHover }} borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }}>
-                        <Checkbox size="sm" mr={2} isChecked={selectedSearchResults.has(ad.store_variation_key)}
-                          onChange={() => toggleItem(ad.store_variation_key, selectedSearchResults, setSelectedSearchResults)} />
-                        {ad.thumbnail && (
-                          <Image src={ad.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
-                        )}
-                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{ad.ad_name}</Text>
-                        {(() => { const url = getMarketplaceUrl(ad); return url ? (
-                          <Link href={url} isExternal onClick={(e) => e.stopPropagation()} ml={1} flexShrink={0}>
-                            <ExternalLinkIcon boxSize={3} color="gray.400" />
-                          </Link>
-                        ) : null; })()}
-                        {ad.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{ad.loja}</Tag>}
-                        {ad.group_name && (
-                          <Badge colorScheme="orange" fontSize="2xs" ml={2} flexShrink={0}>{ad.group_name}</Badge>
-                        )}
-                        <Box ml={2} flexShrink={0}>
-                          {addingAd === ad.store_variation_key ? (
-                            <Spinner size="xs" />
-                          ) : (
-                            <IconButton icon={<AddIcon />} size="xs" variant="ghost" colorScheme="blue"
-                              aria-label="Adicionar" onClick={() => handleAddItem(ad)} />
-                          )}
-                        </Box>
-                      </Flex>
-                    ))}
-                  </Box>
-                )}
-              </Box>
-
-              {/* Filter within group */}
-              <InputGroup size="sm" mb={3}>
-                <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
-                <Input placeholder="Pesquisar nos anúncios do grupo..." value={groupFilter}
-                  onChange={(e) => { setGroupFilter(e.target.value); setSelectedItems(new Set()); }} />
-              </InputGroup>
+                <Button size="sm" leftIcon={<AddIcon />} colorScheme="blue" flexShrink={0}
+                  onClick={() => { setProductSearch(""); setSelectedSearchResults(new Set()); addModal.onOpen(); }}>
+                  Adicionar
+                </Button>
+              </Flex>
 
               {/* Batch actions */}
               {filteredGroupItems.length > 0 && (
@@ -795,7 +745,7 @@ const ProductGroups = () => {
                   <Text fontSize="sm" color="gray.500">Nenhum anúncio encontrado com esse filtro.</Text>
                 </Center>
               ) : (
-                <VStack spacing={0} align="stretch" maxH="500px" overflowY="auto">
+                <VStack spacing={0} align="stretch">
                   {filteredGroupItems.map((i) => {
                     const adInfo = adsMap.get(i.ad_name);
                     const thumb = adInfo?.thumbnail;
@@ -848,6 +798,79 @@ const ProductGroups = () => {
             <Button variant="ghost" mr={3} onClick={createModal.onClose}>Cancelar</Button>
             <Button colorScheme="blue" onClick={handleCreate} isLoading={creating}>Criar</Button>
           </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* Add Product Modal */}
+      <Modal isOpen={addModal.isOpen} onClose={addModal.onClose} size="xl">
+        <ModalOverlay />
+        <ModalContent maxH="80vh" display="flex" flexDirection="column">
+          <ModalHeader fontSize="md">Adicionar anúncio ao grupo</ModalHeader>
+          <ModalCloseButton />
+          <ModalBody overflowY="auto" flex={1}>
+            <InputGroup size="sm" mb={3}>
+              <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
+              <Input placeholder="Buscar por nome ou loja..." value={productSearch} autoFocus
+                onChange={(e) => { setProductSearch(e.target.value); setSelectedSearchResults(new Set()); }} />
+            </InputGroup>
+
+            {!productSearch.trim() ? (
+              <Center p={6}><Text fontSize="sm" color="gray.500">Digite para buscar anúncios...</Text></Center>
+            ) : filteredAds.length === 0 ? (
+              <Center p={6}><Text fontSize="sm" color="gray.500">Nenhum anúncio encontrado.</Text></Center>
+            ) : (
+              <>
+                <Flex align="center" gap={2} mb={2}>
+                  <Checkbox size="sm"
+                    isChecked={selectedSearchResults.size === filteredAds.length && filteredAds.length > 0}
+                    isIndeterminate={selectedSearchResults.size > 0 && selectedSearchResults.size < filteredAds.length}
+                    onChange={toggleAllSearch}>
+                    <Text fontSize="xs">Todos ({filteredAds.length})</Text>
+                  </Checkbox>
+                  {selectedSearchResults.size > 0 && (
+                    <Button size="xs" colorScheme="blue" leftIcon={<AddIcon />}
+                      onClick={async () => { await handleBatchAdd(); addModal.onClose(); }} isLoading={batchAdding}>
+                      Adicionar {selectedSearchResults.size}
+                    </Button>
+                  )}
+                </Flex>
+
+                <VStack spacing={0} align="stretch">
+                  {filteredAds.map((ad) => {
+                    const url = getMarketplaceUrl(ad);
+                    return (
+                      <Flex key={ad.store_variation_key} align="center" px={3} py={2}
+                        _hover={{ bg: hoverBg }} borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }}>
+                        <Checkbox size="sm" mr={2} isChecked={selectedSearchResults.has(ad.store_variation_key)}
+                          onChange={() => toggleItem(ad.store_variation_key, selectedSearchResults, setSelectedSearchResults)} />
+                        {ad.thumbnail && (
+                          <Image src={ad.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
+                        )}
+                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{ad.ad_name}</Text>
+                        {url && (
+                          <Link href={url} isExternal onClick={(e) => e.stopPropagation()} ml={1} flexShrink={0}>
+                            <ExternalLinkIcon boxSize={3} color="gray.400" />
+                          </Link>
+                        )}
+                        {ad.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{ad.loja}</Tag>}
+                        {ad.group_name && (
+                          <Badge colorScheme="orange" fontSize="2xs" ml={2} flexShrink={0}>{ad.group_name}</Badge>
+                        )}
+                        <Box ml={2} flexShrink={0}>
+                          {addingAd === ad.store_variation_key ? (
+                            <Spinner size="xs" />
+                          ) : (
+                            <IconButton icon={<AddIcon />} size="xs" variant="ghost" colorScheme="blue"
+                              aria-label="Adicionar" onClick={async () => { await handleAddItem(ad); }} />
+                          )}
+                        </Box>
+                      </Flex>
+                    );
+                  })}
+                </VStack>
+              </>
+            )}
+          </ModalBody>
         </ModalContent>
       </Modal>
 

@@ -19,7 +19,7 @@ const handleResponse = async (response) => {
   }
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.message || "Erro na requisição.");
+    throw new Error(payload.message || payload.error || "Erro na requisição.");
   }
   return response.json();
 };
@@ -429,6 +429,11 @@ export const updateUpsellerSettings = async (data) => {
 
 export const triggerUpsellerSync = async () => {
   const response = await authFetch("/api/upseller/sync", { method: "POST" });
+  return handleResponse(response);
+};
+
+export const triggerCatalogSync = async (platform) => {
+  const response = await authFetch(`/api/upseller/sync-catalog?platform=${platform}`, { method: "POST" });
   return handleResponse(response);
 };
 
@@ -861,6 +866,11 @@ export const triggerOfSync = async () => {
   return handleResponse(response);
 };
 
+export const triggerSisplanProductSync = async () => {
+  const response = await authFetch("/api/sisplan/product-sync", { method: "POST" });
+  return handleResponse(response);
+};
+
 // ── System Settings ─────────────────────────────────────────────────────────
 
 export const fetchSystemSettings = async () => {
@@ -1098,4 +1108,122 @@ export const removeProductGroupItemsBatch = async (groupId, items) => {
 export const fetchAllAdsWithGroup = async () => {
   const response = await authFetch('/api/products/ads');
   return handleResponse(response);
+};
+
+// ─── Orders Module ───────────────────────────────────────────────────────────
+
+export const fetchPaymentConditions = async () => {
+  const r = await authFetch('/api/orders/payment-conditions');
+  return handleResponse(r);
+};
+export const createPaymentCondition = async (data) => {
+  const r = await authFetch('/api/orders/payment-conditions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  return handleResponse(r);
+};
+export const updatePaymentCondition = async (id, data) => {
+  const r = await authFetch(`/api/orders/payment-conditions/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  return handleResponse(r);
+};
+export const deletePaymentCondition = async (id) => {
+  const r = await authFetch(`/api/orders/payment-conditions/${id}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
+export const fetchSisplanProductsForOrders = async () => {
+  const r = await authFetch('/api/orders/sisplan-products');
+  return handleResponse(r);
+};
+
+export const fetchOrderCatalog = async () => {
+  const r = await authFetch('/api/orders/catalog');
+  return handleResponse(r);
+};
+
+export const createOrderCatalogProduct = async (data) => {
+  const r = await authFetch('/api/orders/catalog', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const updateOrderCatalogProduct = async (id, data) => {
+  const r = await authFetch(`/api/orders/catalog/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const deleteOrderCatalogProduct = async (id) => {
+  const r = await authFetch(`/api/orders/catalog/${id}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
+export const uploadOrderProductPhoto = async (id, file) => {
+  const form = new FormData();
+  form.append('photo', file);
+  const r = await authFetch(`/api/orders/catalog/${id}/photo`, { method: 'POST', body: form });
+  return handleResponse(r);
+};
+
+export const fetchOrderCustomers = async (search = '') => {
+  const q = search ? `?search=${encodeURIComponent(search)}` : '';
+  const r = await authFetch(`/api/orders/customers${q}`);
+  return handleResponse(r);
+};
+
+export const syncOrderCustomers = async (sql) => {
+  const r = await authFetch('/api/orders/customers/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(sql ? { sql } : {}),
+  });
+  return handleResponse(r);
+};
+
+export const fetchOrders = async (params = {}) => {
+  const q = new URLSearchParams();
+  if (params.status) q.set('status', params.status);
+  if (params.type)   q.set('type', params.type);
+  if (params.search) q.set('search', params.search);
+  const r = await authFetch(`/api/orders?${q}`);
+  return handleResponse(r);
+};
+
+export const fetchOrderById = async (id) => {
+  const r = await authFetch(`/api/orders/${id}`);
+  return handleResponse(r);
+};
+
+export const createOrder = async (data) => {
+  const r = await authFetch('/api/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const updateOrderStatus = async (id, data) => {
+  const r = await authFetch(`/api/orders/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const getOrderPdfUrl = (order) => {
+  const token = getToken();
+  const d = new Date(order.created_at);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(2);
+  const clientName = (order.customer_snapshot?.fantasy_name || order.customer_snapshot?.company_name || '').replace(/[^a-zA-Z0-9À-ÿ\s]/g, '').trim();
+  const fileType = order.type === 'pedido' ? 'Pedido' : 'Orçamento';
+  const filename = encodeURIComponent(`${fileType} ${dd}_${mm}_${yy} - ${clientName}.pdf`);
+  return `/api/orders/${order.id}/pdf/${filename}?token=${token}`;
 };
