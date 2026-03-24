@@ -536,6 +536,7 @@ async function startSisplanSyncScheduler() {
       await runSync();
       await runNfSync();
       await runOfSync();
+      await runProductSync();
     }, {
       scheduled: true,
       timezone: 'America/Sao_Paulo',
