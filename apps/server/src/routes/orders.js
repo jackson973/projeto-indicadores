@@ -325,21 +325,25 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const loadImage = async (urlPath) => {
       if (!urlPath) return null;
       const http = require('http');
+      const url = `http://127.0.0.1:${PORT}${urlPath}`;
+      console.log('[PDF] loadImage fetching:', url);
       return new Promise((resolve) => {
-        http.get(`http://127.0.0.1:${PORT}${urlPath}`, (resp) => {
-          if (resp.statusCode !== 200) return resolve(null);
+        http.get(url, (resp) => {
+          console.log('[PDF] loadImage status:', resp.statusCode, 'for', urlPath);
+          if (resp.statusCode !== 200) { resp.resume(); return resolve(null); }
           const chunks = [];
           resp.on('data', (c) => chunks.push(c));
           resp.on('end', async () => {
             try {
               const buf = Buffer.concat(chunks);
-              // Always convert through sharp to guarantee PNG format
+              console.log('[PDF] loadImage got', buf.length, 'bytes for', urlPath);
               const png = await sharp(buf).png().toBuffer();
+              console.log('[PDF] loadImage converted to PNG:', png.length, 'bytes');
               resolve(png);
-            } catch (_) { resolve(null); }
+            } catch (e) { console.error('[PDF] loadImage sharp error:', e.message); resolve(null); }
           });
-          resp.on('error', () => resolve(null));
-        }).on('error', () => resolve(null));
+          resp.on('error', (e) => { console.error('[PDF] loadImage resp error:', e.message); resolve(null); });
+        }).on('error', (e) => { console.error('[PDF] loadImage fetch error:', e.message); resolve(null); });
       });
     };
 
