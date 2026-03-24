@@ -238,7 +238,7 @@ async function getDistinctProducts() {
     `SELECT DISTINCT o.fac_codigo_produto AS "code", o.fac_desc_produto AS "name",
             gp.group_id AS "groupId", pg.name AS "groupName"
      FROM terceiros_ofs o
-     LEFT JOIN terceiros_group_products gp ON gp.product_code = o.fac_codigo_produto
+     LEFT JOIN terceiros_group_products gp ON TRIM(gp.product_code) = TRIM(o.fac_codigo_produto)
      LEFT JOIN terceiros_product_groups pg ON pg.id = gp.group_id AND pg.active = true
      WHERE o.fac_codigo_produto IS NOT NULL
      ORDER BY o.fac_desc_produto`
@@ -489,10 +489,17 @@ async function findPrice(codcli, productCode, part, date, etapa, tamanho) {
   const groupResult = await db.query(
     `SELECT gp.group_id, pg.name AS group_name FROM terceiros_group_products gp
      INNER JOIN terceiros_product_groups pg ON pg.id = gp.group_id AND pg.active = true
-     WHERE gp.product_code = $1`,
+     WHERE TRIM(gp.product_code) = TRIM($1)`,
     [productCode]
   );
   if (groupResult.rows.length === 0) {
+    // Log only once per product (caller may invoke per-size)
+    if (!findPrice._warned) findPrice._warned = new Set();
+    const warnKey = `${codcli}|${productCode}`;
+    if (!findPrice._warned.has(warnKey)) {
+      findPrice._warned.add(warnKey);
+      console.log(`[findPrice] No group found for product "${productCode}" (codcli=${codcli})`);
+    }
     return {
       price: null, source: 'no_group',
       error: `Produto ${productCode} nao pertence a nenhum grupo cadastrado`
@@ -507,22 +514,23 @@ async function findPrice(codcli, productCode, part, date, etapa, tamanho) {
   // tamanho is stored comma-separated (e.g. "P,M,G"); match if tamanho IS NULL or contains the OF's tamanho
   const priceResult = await db.query(
     `SELECT price FROM terceiros_supplier_prices
-     WHERE codcli = $1 AND group_id = $2
-       AND (part = $3 OR part IS NULL)
-       AND (etapa = $5 OR etapa IS NULL)
-       AND (tamanho IS NULL OR $6 IS NULL OR tamanho ~* ('(^|,)\\s*' || $6 || '\\s*(,|$)'))
+     WHERE TRIM(codcli) = TRIM($1) AND group_id = $2
+       AND (TRIM(part) = TRIM($3) OR part IS NULL)
+       AND (TRIM(etapa) = TRIM($5) OR etapa IS NULL)
+       AND (tamanho IS NULL OR $6::text IS NULL OR tamanho ~* ('(^|,)\\s*' || $6::text || '\\s*(,|$)'))
        AND (valid_from IS NULL OR valid_from <= $4)
        AND (valid_until IS NULL OR valid_until >= $4)
      ORDER BY
        CASE WHEN tamanho IS NOT NULL AND $6 IS NOT NULL THEN 0 ELSE 1 END,
-       CASE WHEN etapa = $5 THEN 0 ELSE 1 END,
-       CASE WHEN part = $3 THEN 0 ELSE 1 END,
+       CASE WHEN TRIM(etapa) = TRIM($5) THEN 0 ELSE 1 END,
+       CASE WHEN TRIM(part) = TRIM($3) THEN 0 ELSE 1 END,
        valid_from DESC NULLS LAST
      LIMIT 1`,
     [codcli, groupId, part, date, etapa || null, tamanho || null]
   );
 
   if (priceResult.rows.length === 0) {
+    console.log(`[findPrice] No price found for codcli="${codcli}", group="${groupName}"(${groupId}), part="${part}", etapa="${etapa}", tamanho="${tamanho}", date="${date}"`);
     return {
       price: null, source: 'no_price', groupId, groupName,
       error: `Sem preco vigente para grupo "${groupName}", parte "${part || 'todas'}", tamanho "${tamanho || 'todos'}" na data ${date}`

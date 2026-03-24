@@ -1587,7 +1587,7 @@ const TerceirosSettlement = () => {
                       <Box as={ChevronRightIcon} transform={isExpanded ? "rotate(90deg)" : "rotate(0deg)"} transition="transform 0.2s" boxSize={4} color="gray.500" flex="0 0 auto" />
                       <HStack spacing={4} flex="1" wrap="wrap" fontSize="sm">
                         <Text fontWeight="bold">OF {ofGroup.facNumero}</Text>
-                        <Text color="gray.600">{ofGroup.facDescProduto}</Text>
+                        <Text color="gray.600">{ofGroup.facCodigoProduto ? `${ofGroup.facCodigoProduto} - ` : ""}{ofGroup.facDescProduto}</Text>
                         {ofGroup.facCodsetor && (
                           <Text color="gray.500">Etapa: {ofGroup.facCodsetor}{ofGroup.facDescsetor ? ` - ${ofGroup.facDescsetor}` : ""}</Text>
                         )}
@@ -1796,6 +1796,7 @@ const TerceirosSettlement = () => {
           facNumero: cg.facNumero,
           facCodsetor: cg.facCodsetor,
           facDescsetor: cg.facDescsetor,
+          facCodigoProduto: cg.facCodigoProduto,
           facParte: cg.facParte,
           facDescparte: cg.facDescparte,
           facDescProduto: cg.facDescProduto || cg.facCodigoProduto,
@@ -1977,7 +1978,7 @@ const TerceirosSettlement = () => {
                     />
                     <HStack spacing={4} flex="1" wrap="wrap" fontSize="sm">
                       <Text fontWeight="bold">OF {ofGroup.facNumero}</Text>
-                      <Text color="gray.600">{ofGroup.facDescProduto}</Text>
+                      <Text color="gray.600">{ofGroup.facCodigoProduto ? `${ofGroup.facCodigoProduto} - ` : ""}{ofGroup.facDescProduto}</Text>
                       {ofGroup.facCodsetor && (
                         <Text color="gray.500">Etapa: {ofGroup.facCodsetor}{ofGroup.facDescsetor ? ` - ${ofGroup.facDescsetor}` : ""}</Text>
                       )}
@@ -2388,7 +2389,7 @@ const TerceirosSettlement = () => {
                       />
                       <HStack spacing={4} flex="1" wrap="wrap" fontSize="sm">
                         <Text fontWeight="bold">OF {ofGroup.facNumero}</Text>
-                        <Text color="gray.600">{ofGroup.facDescProduto}</Text>
+                        <Text color="gray.600">{ofGroup.facCodigoProduto ? `${ofGroup.facCodigoProduto} - ` : ""}{ofGroup.facDescProduto}</Text>
                         {ofGroup.facCodsetor && (
                           <Text color="gray.500">Etapa: {ofGroup.facCodsetor}{ofGroup.facDescsetor ? ` - ${ofGroup.facDescsetor}` : ""}</Text>
                         )}

@@ -164,21 +164,21 @@ const TerceirosProductGroups = () => {
   // ── Filtered group products (search within group) ────────────────────────
   const filteredGroupProducts = useMemo(() => {
     if (!groupFilter.trim()) return groupProducts;
-    const term = groupFilter.toLowerCase();
-    return groupProducts.filter(
-      (p) =>
-        (p.productCode || "").toLowerCase().includes(term) ||
-        (p.productName || "").toLowerCase().includes(term)
-    );
+    const words = groupFilter.toLowerCase().split(/\s+/).filter(Boolean);
+    return groupProducts.filter((p) => {
+      const text = `${p.productCode || ""} ${p.productName || ""}`.toLowerCase();
+      return words.every((w) => text.includes(w));
+    });
   }, [groupProducts, groupFilter]);
 
   // ── Products not assigned to any group ────────────────────────────────────
   const ungroupedProducts = useMemo(() => {
-    const term = ungroupedSearch.toLowerCase().trim();
+    const words = ungroupedSearch.toLowerCase().trim().split(/\s+/).filter(Boolean);
     return allProducts.filter((p) => {
       if (p.groupName) return false;
-      if (!term) return true;
-      return (p.code || "").toLowerCase().includes(term) || (p.name || "").toLowerCase().includes(term);
+      if (words.length === 0) return true;
+      const text = `${p.code || ""} ${p.name || ""}`.toLowerCase();
+      return words.every((w) => text.includes(w));
     });
   }, [allProducts, ungroupedSearch]);
 
@@ -220,14 +220,13 @@ const TerceirosProductGroups = () => {
   // ── Filtered product search results ──────────────────────────────────────
   const filteredProducts = useMemo(() => {
     if (!productSearch.trim()) return [];
-    const term = productSearch.toLowerCase();
+    const words = productSearch.toLowerCase().split(/\s+/).filter(Boolean);
     return allProducts
-      .filter(
-        (p) =>
-          !groupProductCodes.has(p.code) &&
-          ((p.code || "").toLowerCase().includes(term) ||
-          (p.name || "").toLowerCase().includes(term))
-      )
+      .filter((p) => {
+        if (groupProductCodes.has(p.code)) return false;
+        const text = `${p.code || ""} ${p.name || ""}`.toLowerCase();
+        return words.every((w) => text.includes(w));
+      })
       .slice(0, 50);
   }, [productSearch, allProducts, groupProductCodes]);
 
