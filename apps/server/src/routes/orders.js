@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const PDFDocument = require('pdfkit');
+const sharp = require('sharp');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const repo = require('../db/ordersRepository');
 const sisplanRepo = require('../db/sisplanRepository');
@@ -307,10 +308,10 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const WHITE   = '#FFFFFF';
     const THBG    = '#EEF2F8';
 
-    const logo    = path.join(UPLOADS_ROOT, 'logo.png');
-    console.log('[PDF DEBUG] __dirname:', __dirname);
-    console.log('[PDF DEBUG] UPLOADS_ROOT:', UPLOADS_ROOT);
-    console.log('[PDF DEBUG] logo path:', logo, '| exists:', fs.existsSync(logo));
+    // Fetch logo path from system_settings
+    const { rows: settingsRows } = await db.query('SELECT logo_path FROM system_settings WHERE id=1');
+    const logoFile = settingsRows[0]?.logo_path;
+    const logo = logoFile ? path.join(UPLOADS_ROOT, logoFile) : null;
     const dateStr = new Date(order.created_at).toLocaleDateString('pt-BR',
       { day: '2-digit', month: '2-digit', year: 'numeric' });
     const isOrc   = order.type === 'orcamento';
@@ -320,6 +321,16 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
     const fmtBRL = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Convert image to PNG buffer if needed (PDFKit only supports PNG/JPEG)
+    const loadImage = async (filePath) => {
+      if (!filePath || !fs.existsSync(filePath)) return null;
+      const ext = path.extname(filePath).toLowerCase();
+      if (ext === '.webp' || ext === '.svg') {
+        return await sharp(filePath).png().toBuffer();
+      }
+      return filePath;
+    };
 
     const hline = (y, x1 = M, x2 = M + PW, color = RULE, lw = 0.5) =>
       doc.save().moveTo(x1, y).lineTo(x2, y).lineWidth(lw).strokeColor(color).stroke().restore();
@@ -343,8 +354,9 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const LOGO_W = 80;
     const LOGO_H = 64;
 
-    if (fs.existsSync(logo)) {
-      doc.image(logo, M, curY, { width: LOGO_W, fit: [LOGO_W, LOGO_H] });
+    const logoData = await loadImage(logo);
+    if (logoData) {
+      doc.image(logoData, M, curY, { width: LOGO_W, fit: [LOGO_W, LOGO_H] });
     }
 
     // Company info
@@ -444,12 +456,12 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
       // Photo
       if (photo_url) {
         const imgPath = path.join(UPLOADS_ROOT, photo_url.replace(/^\/?uploads\/?/, ''));
-        console.log('[PDF DEBUG] photo_url:', photo_url, '| imgPath:', imgPath, '| exists:', fs.existsSync(imgPath));
-        if (fs.existsSync(imgPath)) {
-          try {
-            doc.image(imgPath, M + 3, curY + 3, { fit: [IMG_COL - 6, ROW_H - 6] });
-          } catch (e) { console.error('[PDF DEBUG] image error:', e.message); }
-        }
+        try {
+          const imgData = await loadImage(imgPath);
+          if (imgData) {
+            doc.image(imgData, M + 3, curY + 3, { fit: [IMG_COL - 6, ROW_H - 6] });
+          }
+        } catch (_) { /* skip if image fails */ }
       }
 
       // Product name + sizes
