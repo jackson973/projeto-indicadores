@@ -27,13 +27,7 @@ const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'uploads');
 const uploadDir = path.join(UPLOADS_ROOT, 'order-products');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: uploadDir,
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || '.jpg';
-    cb(null, `product-${req.params.id}-${Date.now()}${ext}`);
-  },
-});
+const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -127,7 +121,11 @@ router.delete('/catalog/:id', requireAdmin, async (req, res) => {
 router.post('/catalog/:id/photo', requireAdmin, upload.single('photo'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-    const photoUrl = `/uploads/order-products/${req.file.filename}`;
+    // Always convert to PNG for PDF compatibility
+    const filename = `product-${req.params.id}-${Date.now()}.png`;
+    const destPath = path.join(uploadDir, filename);
+    await sharp(req.file.buffer).png().toFile(destPath);
+    const photoUrl = `/uploads/order-products/${filename}`;
     await repo.updateCatalogProductPhoto(req.params.id, photoUrl);
     res.json({ photoUrl });
   } catch (err) {
@@ -311,7 +309,7 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     // Fetch logo path from system_settings
     const { rows: settingsRows } = await db.query('SELECT logo_path FROM system_settings WHERE id=1');
     const logoFile = settingsRows[0]?.logo_path;
-    const logo = logoFile ? path.join(UPLOADS_ROOT, logoFile) : null;
+    const logoUrl = logoFile ? `/uploads/${logoFile}` : null;
     const dateStr = new Date(order.created_at).toLocaleDateString('pt-BR',
       { day: '2-digit', month: '2-digit', year: 'numeric' });
     const isOrc   = order.type === 'orcamento';
@@ -322,14 +320,27 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     // ── Helpers ──────────────────────────────────────────────────────────────
     const fmtBRL = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    // Convert image to PNG buffer if needed (PDFKit only supports PNG/JPEG)
-    const loadImage = async (filePath) => {
-      if (!filePath || !fs.existsSync(filePath)) return null;
-      const ext = path.extname(filePath).toLowerCase();
-      if (ext === '.webp' || ext === '.svg') {
-        return await sharp(filePath).png().toBuffer();
-      }
-      return filePath;
+    // Fetch image via HTTP and convert to PNG buffer for PDFKit (supports PNG/JPEG only)
+    const PORT = process.env.PORT || 4000;
+    const loadImage = async (urlPath) => {
+      if (!urlPath) return null;
+      const http = require('http');
+      return new Promise((resolve) => {
+        http.get(`http://127.0.0.1:${PORT}${urlPath}`, (resp) => {
+          if (resp.statusCode !== 200) return resolve(null);
+          const chunks = [];
+          resp.on('data', (c) => chunks.push(c));
+          resp.on('end', async () => {
+            try {
+              const buf = Buffer.concat(chunks);
+              // Always convert through sharp to guarantee PNG format
+              const png = await sharp(buf).png().toBuffer();
+              resolve(png);
+            } catch (_) { resolve(null); }
+          });
+          resp.on('error', () => resolve(null));
+        }).on('error', () => resolve(null));
+      });
     };
 
     const hline = (y, x1 = M, x2 = M + PW, color = RULE, lw = 0.5) =>
@@ -354,7 +365,7 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const LOGO_W = 80;
     const LOGO_H = 64;
 
-    const logoData = await loadImage(logo);
+    const logoData = await loadImage(logoUrl);
     if (logoData) {
       doc.image(logoData, M, curY, { width: LOGO_W, fit: [LOGO_W, LOGO_H] });
     }
@@ -455,9 +466,8 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
 
       // Photo
       if (photo_url) {
-        const imgPath = path.join(UPLOADS_ROOT, photo_url.replace(/^\/?uploads\/?/, ''));
         try {
-          const imgData = await loadImage(imgPath);
+          const imgData = await loadImage(photo_url);
           if (imgData) {
             doc.image(imgData, M + 3, curY + 3, { fit: [IMG_COL - 6, ROW_H - 6] });
           }
