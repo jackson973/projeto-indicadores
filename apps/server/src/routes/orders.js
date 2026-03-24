@@ -22,7 +22,8 @@ router.use(authenticate);
 
 // ─── Multer setup ────────────────────────────────────────────────────────────
 
-const uploadDir = path.join(process.cwd(), 'uploads', 'order-products');
+const UPLOADS_ROOT = path.join(__dirname, '..', '..', 'uploads');
+const uploadDir = path.join(UPLOADS_ROOT, 'order-products');
 if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -306,7 +307,7 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const WHITE   = '#FFFFFF';
     const THBG    = '#EEF2F8';
 
-    const logo    = path.join(__dirname, '..', '..', 'uploads', 'logo.png');
+    const logo    = path.join(UPLOADS_ROOT, 'logo.png');
     const dateStr = new Date(order.created_at).toLocaleDateString('pt-BR',
       { day: '2-digit', month: '2-digit', year: 'numeric' });
     const isOrc   = order.type === 'orcamento';
@@ -439,7 +440,7 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
 
       // Photo
       if (photo_url) {
-        const imgPath = path.join(process.cwd(), photo_url.replace(/^\//, ''));
+        const imgPath = path.join(UPLOADS_ROOT, photo_url.replace(/^\/?uploads\/?/, ''));
         if (fs.existsSync(imgPath)) {
           try {
             doc.image(imgPath, M + 3, curY + 3, { fit: [IMG_COL - 6, ROW_H - 6] });
