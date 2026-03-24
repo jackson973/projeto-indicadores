@@ -306,7 +306,7 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const WHITE   = '#FFFFFF';
     const THBG    = '#EEF2F8';
 
-    const logo    = path.join(process.cwd(), 'uploads', 'logo.png');
+    const logo    = path.join(__dirname, '..', '..', 'uploads', 'logo.png');
     const dateStr = new Date(order.created_at).toLocaleDateString('pt-BR',
       { day: '2-digit', month: '2-digit', year: 'numeric' });
     const isOrc   = order.type === 'orcamento';
@@ -315,6 +315,8 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const c         = order.customer_snapshot || {};
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+    const fmtBRL = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
     const hline = (y, x1 = M, x2 = M + PW, color = RULE, lw = 0.5) =>
       doc.save().moveTo(x1, y).lineTo(x2, y).lineWidth(lw).strokeColor(color).stroke().restore();
 
@@ -455,12 +457,12 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
         { size: 9, font: 'Helvetica-Bold', color: DARK, align: 'center', w: QT_COL });
 
       // Unit price
-      txt(`R$ ${unitPrice.toFixed(2).replace('.', ',')}`,
+      txt(`R$ ${fmtBRL(unitPrice)}`,
         M + IMG_COL + NM_COL + QT_COL, curY + (ROW_H - 9) / 2,
         { size: 9, color: MID, align: 'right', w: PR_COL });
 
       // Total
-      txt(`R$ ${prodTotal.toFixed(2).replace('.', ',')}`,
+      txt(`R$ ${fmtBRL(prodTotal)}`,
         M + IMG_COL + NM_COL + QT_COL + PR_COL, curY + (ROW_H - 9) / 2,
         { size: 9, font: 'Helvetica-Bold', color: ACCENT, align: 'right', w: TOT_COL });
 
@@ -478,7 +480,7 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const totX = M + PW - 200;
     txt(`Total de peças: ${totalQty}`, totX, curY, { size: 9, color: MID, w: 200, align: 'right' });
     curY += 14;
-    txt(`R$ ${totalVal.toFixed(2).replace('.', ',')}`, totX, curY,
+    txt(`R$ ${fmtBRL(totalVal)}`, totX, curY,
       { size: 18, font: 'Helvetica-Bold', color: ACCENT, w: 200, align: 'right' });
 
     doc.end();
