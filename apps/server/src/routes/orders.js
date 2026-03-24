@@ -308,6 +308,9 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const THBG    = '#EEF2F8';
 
     const logo    = path.join(UPLOADS_ROOT, 'logo.png');
+    console.log('[PDF DEBUG] __dirname:', __dirname);
+    console.log('[PDF DEBUG] UPLOADS_ROOT:', UPLOADS_ROOT);
+    console.log('[PDF DEBUG] logo path:', logo, '| exists:', fs.existsSync(logo));
     const dateStr = new Date(order.created_at).toLocaleDateString('pt-BR',
       { day: '2-digit', month: '2-digit', year: 'numeric' });
     const isOrc   = order.type === 'orcamento';
@@ -441,10 +444,11 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
       // Photo
       if (photo_url) {
         const imgPath = path.join(UPLOADS_ROOT, photo_url.replace(/^\/?uploads\/?/, ''));
+        console.log('[PDF DEBUG] photo_url:', photo_url, '| imgPath:', imgPath, '| exists:', fs.existsSync(imgPath));
         if (fs.existsSync(imgPath)) {
           try {
             doc.image(imgPath, M + 3, curY + 3, { fit: [IMG_COL - 6, ROW_H - 6] });
-          } catch (_) { /* skip if image fails */ }
+          } catch (e) { console.error('[PDF DEBUG] image error:', e.message); }
         }
       }
 
