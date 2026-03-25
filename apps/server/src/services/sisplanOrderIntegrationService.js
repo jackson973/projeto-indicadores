@@ -434,19 +434,12 @@ async function loadOrderData(orderId, userId) {
   return { order, items, customer, user };
 }
 
-// ─── Verificação de pedidos deletados no Sisplan ─────────────────────────────
+// ─── Verificação de vendas/pedidos deletados no Sisplan ──────────────────────
 
 async function checkDeletedOrders() {
   let fbDb = null;
 
   try {
-    // Buscar pedidos integrados no PostgreSQL
-    const { rows: integrated } = await db.query(
-      `SELECT id, sisplan_order_id FROM orders WHERE sisplan_order_id IS NOT NULL`
-    );
-    if (integrated.length === 0) return;
-
-    // Conectar ao Firebird
     const settings = await sisplanRepo.getSettings();
     if (!settings || !settings.active) return;
     const fbOptions = getFirebirdOptions(settings);
@@ -454,32 +447,62 @@ async function checkDeletedOrders() {
     fbDb = await firebirdAttach(fbOptions);
     const transaction = await firebirdTransaction(fbDb);
 
-    // Buscar quais números existem no Sisplan
-    const numeros = integrated.map(o => escapeFirebird(o.sisplan_order_id)).join(',');
+    // Buscar todos os números de pedido que existem no Sisplan (Fabrica)
     const rows = await firebirdQuery(
       transaction,
-      `SELECT NUMERO FROM PEDIDO_001 WHERE NUMERO IN (${numeros})`
+      `SELECT NUMERO FROM PEDIDO_001`
     );
     await firebirdCommit(transaction);
 
-    const existingSet = new Set(rows.map(r => (r.NUMERO || '').trim()));
+    const sisplanNumeros = new Set(rows.map(r => (r.NUMERO || '').trim()));
+    console.log(`[Sisplan Order Check] ${sisplanNumeros.size} pedidos encontrados no Sisplan`);
 
-    // Identificar pedidos que sumiram do Sisplan
-    const deleted = integrated.filter(o => !existingSet.has(o.sisplan_order_id));
+    let salesDeleted = 0;
+    let ordersDeleted = 0;
 
-    if (deleted.length > 0) {
-      for (const order of deleted) {
-        await db.query(
-          `UPDATE orders SET sisplan_order_id = NULL, updated_at = NOW() WHERE id = $1`,
-          [order.id]
+    // 1. Verificar tabela sales (vendas Fabrica) — deletar registros órfãos
+    const { rows: fabricaSales } = await db.query(
+      `SELECT DISTINCT order_id FROM sales WHERE store = 'Fabrica'`
+    );
+
+    if (fabricaSales.length > 0) {
+      const orphanSales = fabricaSales.filter(s => !sisplanNumeros.has(s.order_id.trim()));
+      if (orphanSales.length > 0) {
+        const orphanIds = orphanSales.map(s => s.order_id);
+        const placeholders = orphanIds.map((_, i) => `$${i + 1}`).join(',');
+        const { rowCount } = await db.query(
+          `DELETE FROM sales WHERE store = 'Fabrica' AND order_id IN (${placeholders})`,
+          orphanIds
         );
+        salesDeleted = rowCount;
+        console.log(`[Sisplan Order Check] ${rowCount} venda(s) Fabrica removida(s): ${orphanIds.join(', ')}`);
       }
-      console.log(`[Sisplan Order Check] ${deleted.length} pedido(s) removido(s) do Sisplan: ${deleted.map(o => `#${o.id} (${o.sisplan_order_id})`).join(', ')}`);
-    } else {
-      console.log(`[Sisplan Order Check] ${integrated.length} pedido(s) verificado(s), todos ok.`);
+    }
+
+    // 2. Verificar tabela orders (pedidos B2B) — limpar sisplan_order_id
+    const { rows: integrated } = await db.query(
+      `SELECT id, sisplan_order_id FROM orders WHERE sisplan_order_id IS NOT NULL`
+    );
+
+    if (integrated.length > 0) {
+      const orphanOrders = integrated.filter(o => !sisplanNumeros.has(o.sisplan_order_id.trim()));
+      if (orphanOrders.length > 0) {
+        for (const order of orphanOrders) {
+          await db.query(
+            `UPDATE orders SET sisplan_order_id = NULL, updated_at = NOW() WHERE id = $1`,
+            [order.id]
+          );
+        }
+        ordersDeleted = orphanOrders.length;
+        console.log(`[Sisplan Order Check] ${orphanOrders.length} pedido(s) B2B desvinculado(s): ${orphanOrders.map(o => `#${o.id} (${o.sisplan_order_id})`).join(', ')}`);
+      }
+    }
+
+    if (salesDeleted === 0 && ordersDeleted === 0) {
+      console.log(`[Sisplan Order Check] ${fabricaSales.length} vendas Fabrica + ${integrated.length} pedidos B2B verificados, todos ok.`);
     }
   } catch (err) {
-    console.error('[Sisplan Integration] Erro ao verificar pedidos deletados:', err.message);
+    console.error('[Sisplan Order Check] Erro:', err.message);
   } finally {
     if (fbDb) await firebirdDetach(fbDb);
   }
