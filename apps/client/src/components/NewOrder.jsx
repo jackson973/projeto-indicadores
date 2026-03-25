@@ -755,7 +755,13 @@ function ProductThumb({ product, totalInCart, priceTable, cardBg, borderColor, m
 
       <Box bg={photoBg} h={{ base: "100px", md: "120px" }} display="flex" alignItems="center" justifyContent="center">
         {product.photo_url ? (
-          <Image src={product.photo_url} alt={product.name} objectFit="contain" w="full" h="full" />
+          <Image
+            src={product.photo_url}
+            alt={product.name}
+            objectFit="contain"
+            w="full" h="full"
+            onError={e => { e.target.style.display = 'none'; e.target.parentElement.innerHTML = `<span style="font-size:2rem">${getEmoji(product.name)}</span>`; }}
+          />
         ) : (
           <Text fontSize={{ base: "2xl", md: "3xl" }}>{getEmoji(product.name)}</Text>
         )}
