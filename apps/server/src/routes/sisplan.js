@@ -175,16 +175,21 @@ router.post('/test-query', async (req, res) => {
 // POST /api/sisplan/sync - Sync manual
 router.post('/sync', async (req, res) => {
   try {
+    console.log('[Sisplan Sync Manual] Iniciando sincronização...');
     const result = await runSync();
+    console.log('[Sisplan Sync Manual] Vendas sincronizadas.');
 
     // Verificar pedidos deletados no Sisplan
     try {
+      console.log('[Sisplan Order Check] Verificando pedidos deletados...');
       const { checkDeletedOrders } = require('../services/sisplanOrderIntegrationService');
       await checkDeletedOrders();
+      console.log('[Sisplan Order Check] Verificação concluída.');
     } catch (checkErr) {
-      console.error('[Sisplan Order Check] Erro no sync manual:', checkErr.message);
+      console.error('[Sisplan Order Check] Erro:', checkErr.message);
     }
 
+    console.log('[Sisplan Sync Manual] Sincronização finalizada.');
     if (result.success) {
       return res.json(result);
     }

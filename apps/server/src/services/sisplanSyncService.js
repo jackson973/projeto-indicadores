@@ -535,11 +535,17 @@ async function startSisplanSyncScheduler() {
     const { checkDeletedOrders } = require('./sisplanOrderIntegrationService');
 
     currentJob = cron.schedule(schedule, async () => {
+      console.log('[Sisplan Sync] Iniciando ciclo de sincronização...');
       await runSync();
       await runNfSync();
       await runOfSync();
       await runProductSync();
-      await checkDeletedOrders();
+      try {
+        await checkDeletedOrders();
+      } catch (err) {
+        console.error('[Sisplan Order Check] Erro no scheduler:', err.message);
+      }
+      console.log('[Sisplan Sync] Ciclo de sincronização finalizado.');
     }, {
       scheduled: true,
       timezone: 'America/Sao_Paulo',
