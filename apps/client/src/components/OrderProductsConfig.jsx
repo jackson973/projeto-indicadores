@@ -684,57 +684,67 @@ export default function OrderProductsConfig() {
                 {/* ─── Códigos de Barras ──────────────────────── */}
                 {editing.id && (
                   <Box>
-                    <Flex justify="space-between" align="center" mb={2}>
+                    <Flex justify="space-between" align="center" mb={3}>
                       <FormLabel fontSize="sm" mb={0}>
                         Códigos de Barras{" "}
                         <Badge colorScheme="green" fontSize="xs" ml={1}>{barcodes.length}</Badge>
                       </FormLabel>
-                      <HStack spacing={1}>
-                        <Button
-                          size="xs"
-                          colorScheme={scannerActive ? "red" : "green"}
-                          variant={scannerActive ? "solid" : "outline"}
-                          onClick={() => { setScannerActive(!scannerActive); setLastScanned(null); setGroupSelectOpen(false); }}
-                        >
-                          {scannerActive ? "Fechar Scanner" : "Bipar"}
-                        </Button>
-                        <Button
-                          size="xs"
-                          colorScheme={groupSelectOpen ? "red" : "blue"}
-                          variant={groupSelectOpen ? "solid" : "outline"}
-                          onClick={() => { setGroupSelectOpen(!groupSelectOpen); setScannerActive(false); }}
-                          isLoading={associating}
-                          loadingText="..."
-                        >
-                          {groupSelectOpen ? "Cancelar" : "Associar por Grupo"}
-                        </Button>
-                      </HStack>
                     </Flex>
+
+                    {/* Action buttons — stacked on mobile */}
+                    <SimpleGrid columns={2} gap={2} mb={3}>
+                      <Button
+                        size="md"
+                        colorScheme={scannerActive ? "red" : "green"}
+                        variant={scannerActive ? "solid" : "outline"}
+                        onClick={() => { setScannerActive(!scannerActive); setLastScanned(null); setGroupSelectOpen(false); }}
+                        w="full"
+                      >
+                        {scannerActive ? "Fechar Scanner" : "Bipar"}
+                      </Button>
+                      <Button
+                        size="md"
+                        colorScheme={groupSelectOpen ? "red" : "blue"}
+                        variant={groupSelectOpen ? "solid" : "outline"}
+                        onClick={() => { setGroupSelectOpen(!groupSelectOpen); setScannerActive(false); }}
+                        isLoading={associating}
+                        loadingText="Associando..."
+                        w="full"
+                      >
+                        {groupSelectOpen ? "Cancelar" : "Por Grupo"}
+                      </Button>
+                    </SimpleGrid>
 
                     {/* Seleção de grupo para associação automática */}
                     <Collapse in={groupSelectOpen} animateOpacity>
-                      <Box mb={3} p={3} bg={photoBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
-                        <Text fontSize="xs" fontWeight="bold" mb={2}>
-                          Selecione o grupo para associar todos os códigos de barras automaticamente:
+                      <Box mb={3} p={3} bg={photoBg} borderRadius="lg" border="1px solid" borderColor={borderColor}>
+                        <Text fontSize="sm" fontWeight="bold" mb={3}>
+                          Selecione o grupo:
                         </Text>
-                        <VStack spacing={1} align="stretch" maxH="200px" overflowY="auto">
+                        <VStack spacing={2} align="stretch" maxH="280px" overflowY="auto">
                           {groups.map(g => (
                             <Button
                               key={g.id}
-                              size="sm"
+                              size="lg"
                               variant="outline"
                               justifyContent="flex-start"
                               isLoading={associating}
                               onClick={() => handleAssociateGroup(g.id)}
+                              py={4}
+                              h="auto"
+                              whiteSpace="normal"
+                              textAlign="left"
                             >
-                              {g.name}
-                              {g.product_count != null && (
-                                <Badge ml={2} colorScheme="gray" fontSize="xs">{g.product_count}</Badge>
-                              )}
+                              <Box>
+                                <Text fontSize="sm">{g.name}</Text>
+                                {g.product_count != null && (
+                                  <Text fontSize="xs" color={mutedColor}>{g.product_count} produtos</Text>
+                                )}
+                              </Box>
                             </Button>
                           ))}
                           {groups.length === 0 && (
-                            <Text fontSize="xs" color={mutedColor}>Nenhum grupo cadastrado.</Text>
+                            <Text fontSize="sm" color={mutedColor} textAlign="center" py={4}>Nenhum grupo cadastrado.</Text>
                           )}
                         </VStack>
                       </Box>
@@ -755,43 +765,43 @@ export default function OrderProductsConfig() {
                     {barcodesLoading ? (
                       <Flex justify="center" py={3}><Spinner size="sm" /></Flex>
                     ) : barcodes.length === 0 ? (
-                      <Text fontSize="xs" color={mutedColor} textAlign="center" py={3}>
-                        Nenhum código de barras vinculado. Use o botão acima para bipar do estoque.
+                      <Text fontSize="sm" color={mutedColor} textAlign="center" py={4}>
+                        Nenhum código de barras vinculado.
                       </Text>
                     ) : (
-                      <VStack spacing={1} align="stretch" maxH="200px" overflowY="auto">
+                      <VStack spacing={2} align="stretch" maxH="250px" overflowY="auto">
                         {barcodes.map(b => (
                           <Flex
                             key={b.id}
                             align="center"
                             gap={2}
-                            px={2}
-                            py={1.5}
-                            borderRadius="md"
+                            px={3}
+                            py={2.5}
+                            borderRadius="lg"
                             border="1px solid"
                             borderColor={borderColor}
                             bg={photoBg}
                           >
                             <Flex
-                              w="44px"
-                              h="26px"
+                              w="48px"
+                              h="32px"
                               align="center"
                               justify="center"
                               bg="green.500"
                               color="white"
                               borderRadius="md"
-                              fontSize="xs"
+                              fontSize="sm"
                               fontWeight="bold"
                               flexShrink={0}
                             >
                               {b.size_name}
                             </Flex>
                             <Box flex={1} minW={0}>
-                              <Text fontSize="xs" fontFamily="mono" fontWeight="bold" noOfLines={1}>
+                              <Text fontSize="sm" fontFamily="mono" fontWeight="bold" noOfLines={1}>
                                 {b.barcode}
                               </Text>
                               {b.label && (
-                                <Text fontSize="10px" color={mutedColor} noOfLines={1}>{b.label}</Text>
+                                <Text fontSize="xs" color={mutedColor} noOfLines={1}>{b.label}</Text>
                               )}
                             </Box>
                             <IconButton
