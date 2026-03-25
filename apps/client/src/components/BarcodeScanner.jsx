@@ -193,12 +193,7 @@ export default function BarcodeScanner({
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: "environment",
-            width: { ideal: 1920 },
-            height: { ideal: 1080 },
-            focusMode: { ideal: "continuous" },
-          },
+          video: { facingMode: "environment" },
           audio: false,
         });
         // Try to enable continuous autofocus via track constraints
