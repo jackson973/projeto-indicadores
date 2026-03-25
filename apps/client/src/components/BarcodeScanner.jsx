@@ -87,7 +87,7 @@ export default function BarcodeScanner({
       const code = decodedText.trim();
       if (!code) return;
       const now = Date.now();
-      if (code === lastCodeRef.current && now - lastTimeRef.current < 1500) return;
+      if (code === lastCodeRef.current && now - lastTimeRef.current < 800) return;
       lastCodeRef.current = code;
       lastTimeRef.current = now;
 
@@ -129,13 +129,14 @@ export default function BarcodeScanner({
         .start(
           { facingMode: "environment" },
           {
-            fps: 10,
+            fps: 30,
             qrbox: (viewfinderWidth, viewfinderHeight) => {
-              const w = Math.floor(viewfinderWidth * 0.85);
-              const h = Math.floor(viewfinderHeight * 0.35);
+              const w = Math.floor(viewfinderWidth * 0.9);
+              const h = Math.floor(viewfinderHeight * 0.4);
               return { width: Math.max(w, 250), height: Math.max(h, 150) };
             },
-            formatsToSupport: [0, 4, 3, 2, 7, 11],
+            formatsToSupport: [4, 3],  // EAN-13 and EAN-8 only — faster detection
+            disableFlip: true,
           },
           (decodedText) => {
             handleScan(decodedText);
