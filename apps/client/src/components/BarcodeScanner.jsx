@@ -158,14 +158,22 @@ export default function BarcodeScanner({
             id={containerId}
             ref={containerRef}
             w="full"
-            h={height}
+            minH={height}
             bg={bg}
             borderRadius="xl"
-            overflow="hidden"
             position="relative"
             sx={{
-              "& video": { borderRadius: "xl" },
+              "& video": {
+                borderRadius: "xl",
+                objectFit: "cover",
+                width: "100% !important",
+                height: `${height} !important`,
+                display: "block !important",
+              },
               "& #qr-shaded-region": { borderColor: "blue.400 !important" },
+              /* html5-qrcode injects elements that may be hidden by modal overflow */
+              "& > div": { overflow: "visible !important" },
+              "& img": { display: "none" }, /* hide scan-region image placeholder */
             }}
           />
           <Button
