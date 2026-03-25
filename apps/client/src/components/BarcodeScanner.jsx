@@ -58,8 +58,11 @@ function startNativeScanner(videoEl, onDetected, signal) {
   const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8"] });
   let running = true;
   let scanning = false;
+  let frameCount = 0;
+  const startTime = performance.now();
 
-  signal.addEventListener("abort", () => { running = false; });
+  console.log("[Scanner] Native BarcodeDetector started, waiting for video...");
+  signal.addEventListener("abort", () => { running = false; console.log("[Scanner] Stopped"); });
 
   async function scan() {
     if (!running) return;
@@ -68,21 +71,31 @@ function startNativeScanner(videoEl, onDetected, signal) {
       return;
     }
     scanning = true;
+    frameCount++;
     try {
+      const t0 = performance.now();
       const barcodes = await detector.detect(videoEl);
+      const dt = (performance.now() - t0).toFixed(1);
       if (barcodes.length > 0 && running) {
+        const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+        console.log(`[Scanner] DETECTED: ${barcodes[0].rawValue} (${dt}ms detect, frame #${frameCount}, ${elapsed}s since start)`);
         onDetected(barcodes[0].rawValue);
       }
-    } catch (_) {}
+    } catch (err) {
+      console.warn("[Scanner] detect() error:", err.message);
+    }
     scanning = false;
     if (running) requestAnimationFrame(scan);
   }
 
-  // Wait for video to be actually ready before starting scan loop
   if (videoEl.readyState >= 2) {
+    console.log("[Scanner] Video already ready, starting scan loop");
     requestAnimationFrame(scan);
   } else {
-    videoEl.addEventListener("loadeddata", () => requestAnimationFrame(scan), { once: true });
+    videoEl.addEventListener("loadeddata", () => {
+      console.log(`[Scanner] Video ready (${((performance.now() - startTime) / 1000).toFixed(1)}s), starting scan loop`);
+      requestAnimationFrame(scan);
+    }, { once: true });
   }
 }
 
@@ -115,6 +128,8 @@ async function startFallbackScanner(containerId, onDetected, signal) {
 
 const hasNativeDetector = typeof window !== "undefined"
   && "BarcodeDetector" in window;
+
+console.log(`[Scanner] BarcodeDetector nativo: ${hasNativeDetector ? "SIM" : "NÃO (usando fallback html5-qrcode)"}`);
 
 /**
  * BarcodeScanner — input para leitor/digitação + câmera fullscreen opcional.

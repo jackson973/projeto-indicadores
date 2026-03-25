@@ -149,15 +149,18 @@ router.get('/catalog/:id/barcodes', async (req, res) => {
 
 // POST /api/orders/catalog/:id/barcodes — bulk add barcodes
 router.post('/catalog/:id/barcodes', requireAdmin, async (req, res) => {
+  const t0 = Date.now();
   try {
-    const { barcodes } = req.body; // [{ size_name, barcode, sisplan_sku?, label? }]
+    const { barcodes } = req.body;
     if (!Array.isArray(barcodes) || barcodes.length === 0) {
       return res.status(400).json({ error: 'Envie um array de barcodes' });
     }
+    console.log(`[Scan] Adding ${barcodes.length} barcode(s) to product #${req.params.id}:`, barcodes.map(b => `${b.barcode} → ${b.size_name}`).join(', '));
     const results = await repo.addBarcodesBulk(req.params.id, barcodes);
+    console.log(`[Scan] Added OK (${Date.now() - t0}ms)`);
     res.json(results);
   } catch (err) {
-    console.error('orders/catalog/barcodes POST error:', err);
+    console.error(`[Scan] Add barcode error (${Date.now() - t0}ms):`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -175,11 +178,15 @@ router.delete('/catalog/barcodes/:barcodeId', requireAdmin, async (req, res) => 
 
 // GET /api/orders/scan/:barcode — lookup barcode → product + size
 router.get('/scan/:barcode', async (req, res) => {
+  const t0 = Date.now();
   try {
+    console.log(`[Scan] Lookup barcode: ${req.params.barcode}`);
     const result = await repo.lookupBarcode(req.params.barcode);
+    const dt = Date.now() - t0;
+    console.log(`[Scan] Result: found=${result.found}, source=${result.source || 'n/a'}, product=${result.product_name || 'n/a'}, size=${result.size_name || 'n/a'} (${dt}ms)`);
     res.json(result);
   } catch (err) {
-    console.error('orders/scan error:', err);
+    console.error(`[Scan] Error (${Date.now() - t0}ms):`, err.message);
     res.status(500).json({ error: err.message });
   }
 });
