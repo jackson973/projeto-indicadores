@@ -193,9 +193,27 @@ export default function BarcodeScanner({
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
+          video: {
+            facingMode: "environment",
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
+            focusMode: { ideal: "continuous" },
+          },
           audio: false,
         });
+        // Try to enable continuous autofocus via track constraints
+        try {
+          const track = stream.getVideoTracks()[0];
+          const caps = track.getCapabilities?.() || {};
+          if (caps.focusMode?.includes("continuous")) {
+            await track.applyConstraints({ advanced: [{ focusMode: "continuous" }] });
+            console.log("[Scanner] Continuous autofocus enabled");
+          }
+          if (caps.torch) {
+            console.log("[Scanner] Torch available");
+          }
+          console.log("[Scanner] Camera resolution:", track.getSettings().width, "x", track.getSettings().height);
+        } catch (_) {}
         if (abortController.signal.aborted) { stream.getTracks().forEach(t => t.stop()); return; }
 
         const video = videoRef.current;
