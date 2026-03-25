@@ -554,7 +554,6 @@ const TerceirosSettlement = () => {
       });
       setSelectedOfs(newSelectedSet);
 
-      setManualPrices({});
       setEtapaFilter("");
 
       // Fetch prices for these OFs (group by supplier)
@@ -604,9 +603,7 @@ const TerceirosSettlement = () => {
           }
         });
 
-        setOfPrices(legacyPriceMap);
-      } else {
-        setOfPrices({});
+        setOfPrices((prev) => ({ ...prev, ...legacyPriceMap }));
       }
     } catch (err) {
       toast({ title: "Erro ao carregar OFs.", status: "error", duration: 3000 });
