@@ -401,6 +401,77 @@ async function lookupBarcode(barcode) {
   return { found: false };
 }
 
+async function associateBarcodesByGroup(catalogProductId, groupId) {
+  // 1. Get the catalog product with its reference_codigo and sizes
+  const product = await getCatalogProductById(catalogProductId);
+  if (!product) throw new Error('Produto do catálogo não encontrado');
+
+  // 2. Get group items that are from Sisplan (Fabrica|||descricao)
+  const { rows: groupItems } = await pool.query(
+    `SELECT ad_name, variation_filter FROM product_group_items WHERE group_id = $1`,
+    [groupId]
+  );
+  const sisplanDescricoes = groupItems
+    .filter(gi => gi.ad_name.startsWith('Fabrica|||'))
+    .map(gi => gi.ad_name.split('|||')[1]);
+
+  if (sisplanDescricoes.length === 0) {
+    return { added: 0, skipped: 0, message: 'Nenhum produto Sisplan encontrado neste grupo' };
+  }
+
+  // 3. Find all sisplan_products matching those descricoes that have EAN
+  const { rows: sisplanProducts } = await pool.query(
+    `SELECT codigo, descricao, cod_cor, desc_cor, tamanho, sku, ean
+     FROM sisplan_products
+     WHERE active = true AND ean IS NOT NULL AND ean != ''
+       AND descricao = ANY($1)`,
+    [sisplanDescricoes]
+  );
+
+  if (sisplanProducts.length === 0) {
+    return { added: 0, skipped: 0, message: 'Nenhum produto com código de barras encontrado' };
+  }
+
+  // 4. Build barcode entries, matching tamanho to catalog sizes
+  const sizeMap = {};
+  for (const s of product.sizes) {
+    sizeMap[String(s.size_name).toUpperCase()] = s.size_name;
+  }
+
+  const client = await pool.connect();
+  let added = 0;
+  let skipped = 0;
+  try {
+    await client.query('BEGIN');
+    for (const sp of sisplanProducts) {
+      const sizeName = sizeMap[String(sp.tamanho).toUpperCase()];
+      if (!sizeName) { skipped++; continue; }
+
+      // EAN can be comma-separated
+      const eans = sp.ean.split(',').map(e => e.trim()).filter(Boolean);
+      for (const ean of eans) {
+        const label = [sp.descricao, sp.desc_cor].filter(Boolean).join(' - ');
+        const { rowCount } = await client.query(
+          `INSERT INTO order_catalog_barcodes (catalog_product_id, size_name, barcode, sisplan_sku, label)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (barcode) DO NOTHING`,
+          [catalogProductId, sizeName, ean, sp.sku, label]
+        );
+        if (rowCount > 0) added++; else skipped++;
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  console.log(`[Scan] Auto-associate by group #${groupId} → product #${catalogProductId}: ${added} added, ${skipped} skipped`);
+  return { added, skipped, message: `${added} códigos vinculados, ${skipped} ignorados (já existentes ou sem tamanho)` };
+}
+
 module.exports = {
   getPaymentConditions,
   createPaymentCondition,
@@ -417,6 +488,7 @@ module.exports = {
   addBarcodesBulk,
   removeBarcode,
   lookupBarcode,
+  associateBarcodesByGroup,
   getCustomers,
   upsertCustomers,
   getOrders,

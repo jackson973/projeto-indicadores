@@ -43,6 +43,8 @@ import {
   fetchCatalogBarcodes,
   addCatalogBarcodes,
   removeCatalogBarcode,
+  fetchProductGroups,
+  associateBarcodesByGroup,
 } from "../api";
 import BarcodeScanner from "./BarcodeScanner";
 
@@ -75,6 +77,9 @@ export default function OrderProductsConfig() {
   const [barcodesLoading, setBarcodesLoading] = useState(false);
   const [scannerActive, setScannerActive] = useState(false);
   const [lastScanned, setLastScanned]   = useState(null);
+  const [groups, setGroups]             = useState([]);
+  const [groupSelectOpen, setGroupSelectOpen] = useState(false);
+  const [associating, setAssociating]   = useState(false);
 
   const { isOpen, onOpen, onClose }                     = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
@@ -88,10 +93,11 @@ export default function OrderProductsConfig() {
   const photoBg     = useColorModeValue("gray.100", "gray.700");
 
   useEffect(() => {
-    Promise.all([fetchOrderCatalog(), fetchSisplanProductsForOrders()])
-      .then(([catalog, sp]) => {
+    Promise.all([fetchOrderCatalog(), fetchSisplanProductsForOrders(), fetchProductGroups()])
+      .then(([catalog, sp, grp]) => {
         setProducts(catalog);
         setSisplanProducts(sp);
+        setGroups(grp);
       })
       .catch(err => toast({ status: "error", description: err.message, duration: 3000 }))
       .finally(() => setLoading(false));
@@ -227,6 +233,23 @@ export default function OrderProductsConfig() {
       toast({ status: "success", description: "Código removido.", duration: 2000 });
     } catch (err) {
       toast({ status: "error", description: err.message, duration: 3000 });
+    }
+  }
+
+  async function handleAssociateGroup(groupId) {
+    if (!editing?.id || !groupId) return;
+    setAssociating(true);
+    try {
+      const result = await associateBarcodesByGroup(editing.id, groupId);
+      toast({ status: "success", description: result.message, duration: 4000 });
+      // Reload barcodes
+      const updated = await fetchCatalogBarcodes(editing.id);
+      setBarcodes(updated);
+    } catch (err) {
+      toast({ status: "error", description: err.message, duration: 3000 });
+    } finally {
+      setAssociating(false);
+      setGroupSelectOpen(false);
     }
   }
 
@@ -666,15 +689,56 @@ export default function OrderProductsConfig() {
                         Códigos de Barras{" "}
                         <Badge colorScheme="green" fontSize="xs" ml={1}>{barcodes.length}</Badge>
                       </FormLabel>
-                      <Button
-                        size="xs"
-                        colorScheme={scannerActive ? "red" : "green"}
-                        variant={scannerActive ? "solid" : "outline"}
-                        onClick={() => { setScannerActive(!scannerActive); setLastScanned(null); }}
-                      >
-                        {scannerActive ? "Fechar Scanner" : "Bipar do Estoque"}
-                      </Button>
+                      <HStack spacing={1}>
+                        <Button
+                          size="xs"
+                          colorScheme={scannerActive ? "red" : "green"}
+                          variant={scannerActive ? "solid" : "outline"}
+                          onClick={() => { setScannerActive(!scannerActive); setLastScanned(null); setGroupSelectOpen(false); }}
+                        >
+                          {scannerActive ? "Fechar Scanner" : "Bipar"}
+                        </Button>
+                        <Button
+                          size="xs"
+                          colorScheme={groupSelectOpen ? "red" : "blue"}
+                          variant={groupSelectOpen ? "solid" : "outline"}
+                          onClick={() => { setGroupSelectOpen(!groupSelectOpen); setScannerActive(false); }}
+                          isLoading={associating}
+                          loadingText="..."
+                        >
+                          {groupSelectOpen ? "Cancelar" : "Associar por Grupo"}
+                        </Button>
+                      </HStack>
                     </Flex>
+
+                    {/* Seleção de grupo para associação automática */}
+                    <Collapse in={groupSelectOpen} animateOpacity>
+                      <Box mb={3} p={3} bg={photoBg} borderRadius="md" border="1px solid" borderColor={borderColor}>
+                        <Text fontSize="xs" fontWeight="bold" mb={2}>
+                          Selecione o grupo para associar todos os códigos de barras automaticamente:
+                        </Text>
+                        <VStack spacing={1} align="stretch" maxH="200px" overflowY="auto">
+                          {groups.map(g => (
+                            <Button
+                              key={g.id}
+                              size="sm"
+                              variant="outline"
+                              justifyContent="flex-start"
+                              isLoading={associating}
+                              onClick={() => handleAssociateGroup(g.id)}
+                            >
+                              {g.name}
+                              {g.product_count != null && (
+                                <Badge ml={2} colorScheme="gray" fontSize="xs">{g.product_count}</Badge>
+                              )}
+                            </Button>
+                          ))}
+                          {groups.length === 0 && (
+                            <Text fontSize="xs" color={mutedColor}>Nenhum grupo cadastrado.</Text>
+                          )}
+                        </VStack>
+                      </Box>
+                    </Collapse>
 
                     {/* Scanner */}
                     <Collapse in={scannerActive} animateOpacity>

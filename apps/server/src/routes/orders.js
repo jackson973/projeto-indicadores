@@ -176,6 +176,22 @@ router.delete('/catalog/barcodes/:barcodeId', requireAdmin, async (req, res) => 
   }
 });
 
+// POST /api/orders/catalog/:id/associate-group — auto-associate barcodes from a product group
+router.post('/catalog/:id/associate-group', requireAdmin, async (req, res) => {
+  const t0 = Date.now();
+  try {
+    const { groupId } = req.body;
+    if (!groupId) return res.status(400).json({ error: 'groupId é obrigatório' });
+    console.log(`[Scan] Auto-associate: product #${req.params.id} ← group #${groupId}`);
+    const result = await repo.associateBarcodesByGroup(req.params.id, groupId);
+    console.log(`[Scan] Auto-associate done (${Date.now() - t0}ms): ${result.message}`);
+    res.json(result);
+  } catch (err) {
+    console.error(`[Scan] Auto-associate error (${Date.now() - t0}ms):`, err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/orders/scan/:barcode — lookup barcode → product + size
 router.get('/scan/:barcode', async (req, res) => {
   const t0 = Date.now();
