@@ -161,6 +161,8 @@ const TerceirosSettlement = () => {
   const [unsettledOfs, setUnsettledOfs] = useState([]);
   const [loadingOfs, setLoadingOfs] = useState(false);
   const [selectedOfs, setSelectedOfs] = useState(new Set());
+  const unsettledOfsRef = useRef([]);
+  const selectedOfsRef = useRef(new Set());
   const [ofPrices, setOfPrices] = useState({});
   const [manualPrices, setManualPrices] = useState({});
   const [notes, setNotes] = useState("");
@@ -181,6 +183,10 @@ const TerceirosSettlement = () => {
   const [expandedEditGroups, setExpandedEditGroups] = useState(new Set());
 
   const ofSearchNewRef = useRef(null);
+
+  // Keep refs in sync with state for use in loadUnsettledOfs
+  useEffect(() => { unsettledOfsRef.current = unsettledOfs; }, [unsettledOfs]);
+  useEffect(() => { selectedOfsRef.current = selectedOfs; }, [selectedOfs]);
 
   const toast = useToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -506,8 +512,48 @@ const TerceirosSettlement = () => {
       if (hasOfs) params.append("facNumero", ofNumbers.trim());
       const result = await fetchTerceirosOfs(params.toString());
       const data = result.rows || result || [];
-      setUnsettledOfs(data);
-      setSelectedOfs(new Set());
+      // Merge new OFs with existing ones, preserving previous selections
+      const prevOfs = unsettledOfsRef.current;
+      const prevSelected = selectedOfsRef.current;
+
+      // Build a set of unique keys for previously selected OFs
+      const prevSelectedKeys = new Set();
+      prevSelected.forEach((idx) => {
+        const of = prevOfs[idx];
+        if (of) {
+          prevSelectedKeys.add(`${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`);
+        }
+      });
+
+      // Merge: keep previously selected OFs that are NOT in new results, then add new results
+      const prevSelectedOfs = [];
+      prevSelected.forEach((idx) => {
+        const of = prevOfs[idx];
+        if (of) {
+          const key = `${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+          // Only keep if not already in new data (avoid duplicates)
+          const isDuplicate = data.some((d) =>
+            `${d.fac_numero}|${d.fac_codsetor}|${d.fac_codigo_produto}|${d.fac_parte}|${d.fac_cor}` === key
+          );
+          if (!isDuplicate) {
+            prevSelectedOfs.push(of);
+          }
+        }
+      });
+
+      const merged = [...prevSelectedOfs, ...data];
+      setUnsettledOfs(merged);
+
+      // Re-select the previously selected OFs in the merged list
+      const newSelectedSet = new Set();
+      merged.forEach((of, idx) => {
+        const key = `${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+        if (prevSelectedKeys.has(key)) {
+          newSelectedSet.add(idx);
+        }
+      });
+      setSelectedOfs(newSelectedSet);
+
       setManualPrices({});
       setEtapaFilter("");
 
@@ -521,7 +567,6 @@ const TerceirosSettlement = () => {
         });
 
         const priceMap = {};
-        const autoSelected = new Set();
 
         for (const [supplierCode, ofs] of Object.entries(bySupplier)) {
           if (supplierCode === "__none__") continue;
@@ -549,14 +594,6 @@ const TerceirosSettlement = () => {
           }
         }
 
-        // Map prices back and auto-select
-        data.forEach((of, idx) => {
-          const key = `${of.fac_codcli}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
-          if (priceMap[key] && priceMap[key].price != null) {
-            autoSelected.add(idx);
-          }
-        });
-
         // Also store with original key format for getOfPriceInfo
         const legacyPriceMap = {};
         data.forEach((of) => {
@@ -568,7 +605,6 @@ const TerceirosSettlement = () => {
         });
 
         setOfPrices(legacyPriceMap);
-        setSelectedOfs(autoSelected);
       } else {
         setOfPrices({});
       }
