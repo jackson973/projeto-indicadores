@@ -176,6 +176,15 @@ router.post('/test-query', async (req, res) => {
 router.post('/sync', async (req, res) => {
   try {
     const result = await runSync();
+
+    // Verificar pedidos deletados no Sisplan
+    try {
+      const { checkDeletedOrders } = require('../services/sisplanOrderIntegrationService');
+      await checkDeletedOrders();
+    } catch (checkErr) {
+      console.error('[Sisplan Order Check] Erro no sync manual:', checkErr.message);
+    }
+
     if (result.success) {
       return res.json(result);
     }
