@@ -16,15 +16,57 @@ import {
 } from "@chakra-ui/react";
 import { CloseIcon, SearchIcon } from "@chakra-ui/icons";
 
+// ─── Audio feedback via Web Audio API (no files needed) ─────────────────────
+
+function playBeep(type = "success") {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    if (type === "success") {
+      osc.frequency.value = 1200;
+      gain.gain.value = 0.3;
+      osc.start();
+      osc.stop(ctx.currentTime + 0.12);
+    } else if (type === "duplicate") {
+      osc.frequency.value = 600;
+      gain.gain.value = 0.2;
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } else {
+      // error: two short low beeps
+      osc.frequency.value = 300;
+      gain.gain.value = 0.3;
+      osc.start();
+      osc.stop(ctx.currentTime + 0.1);
+      const osc2 = ctx.createOscillator();
+      const gain2 = ctx.createGain();
+      osc2.connect(gain2);
+      gain2.connect(ctx.destination);
+      osc2.frequency.value = 300;
+      gain2.gain.value = 0.3;
+      osc2.start(ctx.currentTime + 0.15);
+      osc2.stop(ctx.currentTime + 0.25);
+    }
+  } catch (_) {}
+}
+
 /**
  * BarcodeScanner — input para leitor/digitação + câmera fullscreen opcional.
  *
- * - Input sempre visível para pistola bluetooth/USB
- * - Câmera abre em overlay fullscreen (fora do modal) ao clicar "Abrir câmera"
+ * Props:
+ *  - onScan(code) — deve retornar (ou resolver Promise com):
+ *      { status: "success", message: "..." }
+ *      { status: "duplicate", message: "..." }
+ *      { status: "error", message: "..." }
+ *    Se não retornar nada, assume sucesso.
+ *  - active, continuous
  */
 export default function BarcodeScanner({
   onScan,
-  onError,
   active = true,
   continuous = true,
 }) {
@@ -37,19 +79,28 @@ export default function BarcodeScanner({
   const [manualCode, setManualCode] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState(null);
-  const [lastResult, setLastResult] = useState(null);
+  const [feedback, setFeedback] = useState(null); // { status, message, code }
   const mutedColor = useColorModeValue("gray.500", "gray.400");
 
   const handleScan = useCallback(
-    (decodedText) => {
+    async (decodedText) => {
       const code = decodedText.trim();
       if (!code) return;
       const now = Date.now();
-      if (code === lastCodeRef.current && now - lastTimeRef.current < 2000) return;
+      if (code === lastCodeRef.current && now - lastTimeRef.current < 1500) return;
       lastCodeRef.current = code;
       lastTimeRef.current = now;
-      setLastResult(code);
-      onScan?.(code);
+
+      try {
+        const result = await onScan?.(code);
+        const status = result?.status || "success";
+        const message = result?.message || code;
+        setFeedback({ status, message, code });
+        playBeep(status);
+      } catch (err) {
+        setFeedback({ status: "error", message: err.message || "Erro", code });
+        playBeep("error");
+      }
     },
     [onScan]
   );
@@ -67,7 +118,6 @@ export default function BarcodeScanner({
   useEffect(() => {
     if (!active || !cameraOn) return;
 
-    // Small delay to ensure the portal DOM element is mounted
     const timeout = setTimeout(() => {
       const el = document.getElementById(containerId);
       if (!el) return;
@@ -80,7 +130,7 @@ export default function BarcodeScanner({
           { facingMode: "environment" },
           {
             fps: 10,
-            qrbox: { width: 280, height: 120 },
+            qrbox: { width: 320, height: 160 },
             formatsToSupport: [0, 4, 3, 2, 7, 11],
           },
           (decodedText) => {
@@ -112,17 +162,20 @@ export default function BarcodeScanner({
     };
   }, [active, cameraOn, continuous, handleScan, containerId]);
 
-  // Turn off camera when component deactivates
   useEffect(() => {
     if (!active) setCameraOn(false);
   }, [active]);
 
   if (!active) return null;
 
+  const feedbackColor = feedback?.status === "success" ? "green"
+    : feedback?.status === "duplicate" ? "yellow"
+    : feedback?.status === "error" ? "red" : "gray";
+
   return (
     <>
       <VStack spacing={2} w="full">
-        {/* Input — sempre visível, funciona com pistola bluetooth/USB */}
+        {/* Input — sempre visível */}
         <form onSubmit={handleManualSubmit} style={{ width: "100%" }}>
           <HStack spacing={2}>
             <InputGroup size="sm" flex={1}>
@@ -149,16 +202,26 @@ export default function BarcodeScanner({
           </HStack>
         </form>
 
-        {/* Botão para ativar câmera */}
         {!cameraOn && (
           <Button
             size="xs"
             variant="ghost"
             color={mutedColor}
-            onClick={() => { setCameraError(null); setLastResult(null); setCameraOn(true); }}
+            onClick={() => { setCameraError(null); setFeedback(null); setCameraOn(true); }}
           >
             Abrir câmera
           </Button>
+        )}
+
+        {/* Feedback inline (for gun/manual input) */}
+        {feedback && !cameraOn && (
+          <Box
+            w="full" px={3} py={2} borderRadius="md"
+            bg={`${feedbackColor}.50`} border="1px solid" borderColor={`${feedbackColor}.200`}
+          >
+            <Text fontSize="xs" fontFamily="mono" fontWeight="bold">{feedback.code}</Text>
+            <Text fontSize="xs" color={`${feedbackColor}.700`}>{feedback.message}</Text>
+          </Box>
         )}
 
         {cameraError && (
@@ -166,14 +229,11 @@ export default function BarcodeScanner({
         )}
       </VStack>
 
-      {/* Câmera fullscreen — renderizada fora do modal via portal */}
+      {/* Câmera fullscreen via portal */}
       {cameraOn && createPortal(
         <Box
           position="fixed"
-          top={0}
-          left={0}
-          right={0}
-          bottom={0}
+          top={0} left={0} right={0} bottom={0}
           zIndex={9999}
           bg="black"
           display="flex"
@@ -181,15 +241,10 @@ export default function BarcodeScanner({
         >
           {/* Header */}
           <Flex
-            px={4}
-            py={3}
-            align="center"
-            justify="space-between"
+            px={4} py={3}
+            align="center" justify="space-between"
             bg="blackAlpha.800"
-            position="absolute"
-            top={0}
-            left={0}
-            right={0}
+            position="absolute" top={0} left={0} right={0}
             zIndex={1}
           >
             <Text color="white" fontSize="sm" fontWeight="bold">Scanner</Text>
@@ -204,7 +259,7 @@ export default function BarcodeScanner({
             />
           </Flex>
 
-          {/* Camera view */}
+          {/* Camera */}
           <Box
             id={containerId}
             flex={1}
@@ -220,21 +275,23 @@ export default function BarcodeScanner({
             }}
           />
 
-          {/* Bottom bar — last scanned result */}
+          {/* Bottom feedback bar */}
           <Box
-            px={4}
-            py={3}
-            bg="blackAlpha.800"
-            position="absolute"
-            bottom={0}
-            left={0}
-            right={0}
+            px={4} py={3}
+            bg={feedback ? `${feedbackColor}.600` : "blackAlpha.800"}
+            position="absolute" bottom={0} left={0} right={0}
             zIndex={1}
+            transition="background 0.2s"
           >
-            {lastResult ? (
+            {feedback ? (
               <VStack spacing={0}>
-                <Text color="green.300" fontSize="xs" fontWeight="bold">Último código lido:</Text>
-                <Text color="white" fontSize="md" fontFamily="mono">{lastResult}</Text>
+                <Text color="white" fontSize="xs" fontWeight="bold">
+                  {feedback.status === "success" ? "Vinculado!"
+                    : feedback.status === "duplicate" ? "Já adicionado!"
+                    : "Erro!"}
+                </Text>
+                <Text color="white" fontSize="sm" fontFamily="mono">{feedback.code}</Text>
+                <Text color="whiteAlpha.800" fontSize="xs">{feedback.message}</Text>
               </VStack>
             ) : (
               <Text color="gray.400" fontSize="sm" textAlign="center">

@@ -91,7 +91,6 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   const [cart, setCart]                             = useState({});
   const [openProduct, setOpenProduct]               = useState(null);
   const [scannerOpen, setScannerOpen]               = useState(false);
-  const [lastScanResult, setLastScanResult]         = useState(null);
 
   const customerDrawer  = useDisclosure();
   const cartDrawer      = useDisclosure();
@@ -219,55 +218,32 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   }
 
   const handleScanBarcode = useCallback(async (code) => {
-    try {
-      const result = await scanBarcode(code);
-      if (!result.found) {
-        setLastScanResult({ code, error: "Código não encontrado" });
-        toast({ status: "warning", description: `Código ${code} não cadastrado.`, duration: 3000 });
-        return;
-      }
-      if (result.source === "catalog") {
-        // Found in catalog barcodes — add to cart
-        const product = catalog.find(p => p.id === Number(result.catalog_product_id));
-        if (!product) {
-          setLastScanResult({ code, error: "Produto não encontrado no catálogo" });
-          return;
-        }
-        const size = product.sizes.find(
-          s => (s.size_name || s.name)?.toUpperCase() === result.size_name?.toUpperCase()
-        );
-        if (!size) {
-          setLastScanResult({ code, error: `Tamanho ${result.size_name} não encontrado` });
-          return;
-        }
-        const k = cartKey(product.id, size.id);
-        const currentQty = cart[k]?.qty || 0;
-        const price = priceTable === "MN"
-          ? parseFloat(product.price_mn)
-          : parseFloat(product.price_pc);
-        setQty(product.id, size, currentQty + 1, cart[k]?.unitPrice ?? price);
-        setLastScanResult({
-          code,
-          success: true,
-          productName: product.name,
-          sizeName: result.size_name,
-          qty: currentQty + 1,
-        });
-        toast({
-          status: "success",
-          description: `${product.name} — Tam ${result.size_name} (${currentQty + 1}x)`,
-          duration: 2000,
-        });
-      } else {
-        // Found in sisplan but not mapped
-        setLastScanResult({ code, error: "Código existe no Sisplan mas não está vinculado a um produto do catálogo. Vincule na Config Produtos." });
-        toast({ status: "info", description: "Código encontrado no Sisplan mas não vinculado. Vincule na Config Produtos.", duration: 4000 });
-      }
-    } catch (err) {
-      setLastScanResult({ code, error: err.message });
-      toast({ status: "error", description: err.message, duration: 3000 });
+    const result = await scanBarcode(code);
+    if (!result.found) {
+      return { status: "error", message: "Código não cadastrado" };
     }
-  }, [catalog, cart, priceTable, toast, setQty]);
+    if (result.source === "catalog") {
+      const product = catalog.find(p => p.id === Number(result.catalog_product_id));
+      if (!product) {
+        return { status: "error", message: "Produto não encontrado no catálogo" };
+      }
+      const size = product.sizes.find(
+        s => (s.size_name || s.name)?.toUpperCase() === result.size_name?.toUpperCase()
+      );
+      if (!size) {
+        return { status: "error", message: `Tamanho ${result.size_name} não encontrado` };
+      }
+      const k = cartKey(product.id, size.id);
+      const currentQty = cart[k]?.qty || 0;
+      const price = priceTable === "MN"
+        ? parseFloat(product.price_mn)
+        : parseFloat(product.price_pc);
+      setQty(product.id, size, currentQty + 1, cart[k]?.unitPrice ?? price);
+      return { status: "success", message: `${product.name} — Tam ${result.size_name} (${currentQty + 1}x)` };
+    }
+    // Found in sisplan but not mapped
+    return { status: "error", message: "Não vinculado. Vincule na Config Produtos." };
+  }, [catalog, cart, priceTable, setQty]);
 
   async function handleSubmit(type) {
     if (!selectedCustomer) {
@@ -486,29 +462,8 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
             <BarcodeScanner
               active={scannerOpen}
               onScan={handleScanBarcode}
-              onError={(err) => toast({ status: "error", description: err, duration: 3000 })}
               continuous
-              height="200px"
             />
-            {lastScanResult && (
-              <Box
-                mt={2}
-                p={2}
-                borderRadius="md"
-                bg={lastScanResult.success ? "green.50" : "red.50"}
-                border="1px solid"
-                borderColor={lastScanResult.success ? "green.200" : "red.200"}
-              >
-                <Text fontSize="xs" fontFamily="mono" fontWeight="bold">{lastScanResult.code}</Text>
-                {lastScanResult.success ? (
-                  <Text fontSize="xs" color="green.700">
-                    {lastScanResult.productName} — Tam {lastScanResult.sizeName} ({lastScanResult.qty}x)
-                  </Text>
-                ) : (
-                  <Text fontSize="xs" color="red.700">{lastScanResult.error}</Text>
-                )}
-              </Box>
-            )}
           </Box>
         </Collapse>
 

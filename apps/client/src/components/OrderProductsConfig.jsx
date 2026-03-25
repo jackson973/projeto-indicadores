@@ -186,7 +186,7 @@ export default function OrderProductsConfig() {
   // ─── Barcode scanner handlers ───────────────────────────────────────────────
 
   const handleBarcodeScan = useCallback(async (code) => {
-    if (!editing?.id) return;
+    if (!editing?.id) return { status: "error", message: "Salve o produto antes de vincular barcodes" };
     // Find this barcode in sisplan_products to get tamanho
     // EAN field may contain multiple barcodes separated by comma
     const sp = sisplanProducts.find(p => {
@@ -195,42 +195,30 @@ export default function OrderProductsConfig() {
       return p.ean.split(",").map(e => e.trim()).includes(code);
     });
     if (!sp) {
-      setLastScanned({ code, error: "Código não encontrado no Sisplan" });
-      toast({ status: "warning", description: `Código ${code} não encontrado no Sisplan.`, duration: 3000 });
-      return;
+      return { status: "error", message: "Código não encontrado no Sisplan" };
     }
     // Check if size exists in this product
     const sizeMatch = editing.sizes.find(
       s => s.size_name?.toUpperCase() === sp.tamanho?.toUpperCase()
     );
     if (!sizeMatch) {
-      setLastScanned({ code, error: `Tamanho ${sp.tamanho} não existe neste produto` });
-      toast({ status: "warning", description: `Tamanho "${sp.tamanho}" não está na grade deste produto.`, duration: 3000 });
-      return;
+      return { status: "error", message: `Tamanho "${sp.tamanho}" não está na grade deste produto` };
     }
     // Check if already added
     if (barcodes.find(b => b.barcode === code)) {
-      setLastScanned({ code, label: sp.descricao, size: sp.tamanho, alreadyExists: true });
-      toast({ status: "info", description: `Código ${code} já vinculado.`, duration: 2000 });
-      return;
+      return { status: "duplicate", message: `Tam ${sp.tamanho} — ${sp.descricao}` };
     }
     // Add barcode
-    try {
-      const label = [sp.descricao, sp.desc_cor].filter(Boolean).join(" - ");
-      const results = await addCatalogBarcodes(editing.id, [{
-        size_name: sizeMatch.size_name,
-        barcode: code,
-        sisplan_sku: sp.sku,
-        label,
-      }]);
-      setBarcodes(prev => [...prev, ...results]);
-      setLastScanned({ code, label, size: sizeMatch.size_name, success: true });
-      toast({ status: "success", description: `Vinculado! ${sizeMatch.size_name} — ${label}`, duration: 2500 });
-    } catch (err) {
-      setLastScanned({ code, error: err.message });
-      toast({ status: "error", description: err.message, duration: 3000 });
-    }
-  }, [editing, sisplanProducts, barcodes, toast]);
+    const label = [sp.descricao, sp.desc_cor].filter(Boolean).join(" - ");
+    const results = await addCatalogBarcodes(editing.id, [{
+      size_name: sizeMatch.size_name,
+      barcode: code,
+      sisplan_sku: sp.sku,
+      label,
+    }]);
+    setBarcodes(prev => [...prev, ...results]);
+    return { status: "success", message: `Tam ${sizeMatch.size_name} — ${label}` };
+  }, [editing, sisplanProducts, barcodes]);
 
   async function handleRemoveBarcode(barcodeId) {
     try {
@@ -694,35 +682,8 @@ export default function OrderProductsConfig() {
                         <BarcodeScanner
                           active={scannerActive}
                           onScan={handleBarcodeScan}
-                          onError={(err) => toast({ status: "error", description: err, duration: 3000 })}
                           continuous
-                          height="220px"
                         />
-                        {lastScanned && (
-                          <Box
-                            mt={2}
-                            p={2}
-                            borderRadius="md"
-                            bg={lastScanned.success ? "green.50" : lastScanned.error ? "red.50" : "blue.50"}
-                            border="1px solid"
-                            borderColor={lastScanned.success ? "green.200" : lastScanned.error ? "red.200" : "blue.200"}
-                          >
-                            <Text fontSize="xs" fontFamily="mono" fontWeight="bold">
-                              {lastScanned.code}
-                            </Text>
-                            {lastScanned.success && (
-                              <Text fontSize="xs" color="green.700">
-                                Vinculado! Tam {lastScanned.size} — {lastScanned.label}
-                              </Text>
-                            )}
-                            {lastScanned.alreadyExists && (
-                              <Text fontSize="xs" color="blue.700">Já vinculado</Text>
-                            )}
-                            {lastScanned.error && (
-                              <Text fontSize="xs" color="red.700">{lastScanned.error}</Text>
-                            )}
-                          </Box>
-                        )}
                       </Box>
                     </Collapse>
 
