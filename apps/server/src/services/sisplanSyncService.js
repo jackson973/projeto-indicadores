@@ -532,11 +532,14 @@ async function startSisplanSyncScheduler() {
     const interval = settings.syncIntervalMinutes || 5;
     const schedule = `*/${interval} * * * *`;
 
+    const { checkDeletedOrders } = require('./sisplanOrderIntegrationService');
+
     currentJob = cron.schedule(schedule, async () => {
       await runSync();
       await runNfSync();
       await runOfSync();
       await runProductSync();
+      await checkDeletedOrders();
     }, {
       scheduled: true,
       timezone: 'America/Sao_Paulo',

@@ -434,7 +434,57 @@ async function loadOrderData(orderId, userId) {
   return { order, items, customer, user };
 }
 
+// ─── Verificação de pedidos deletados no Sisplan ─────────────────────────────
+
+async function checkDeletedOrders() {
+  let fbDb = null;
+
+  try {
+    // Buscar pedidos integrados no PostgreSQL
+    const { rows: integrated } = await db.query(
+      `SELECT id, sisplan_order_id FROM orders WHERE sisplan_order_id IS NOT NULL`
+    );
+    if (integrated.length === 0) return;
+
+    // Conectar ao Firebird
+    const settings = await sisplanRepo.getSettings();
+    if (!settings || !settings.active) return;
+    const fbOptions = getFirebirdOptions(settings);
+
+    fbDb = await firebirdAttach(fbOptions);
+    const transaction = await firebirdTransaction(fbDb);
+
+    // Buscar quais números existem no Sisplan
+    const numeros = integrated.map(o => escapeFirebird(o.sisplan_order_id)).join(',');
+    const rows = await firebirdQuery(
+      transaction,
+      `SELECT NUMERO FROM PEDIDO_001 WHERE NUMERO IN (${numeros})`
+    );
+    await firebirdCommit(transaction);
+
+    const existingSet = new Set(rows.map(r => (r.NUMERO || '').trim()));
+
+    // Identificar pedidos que sumiram do Sisplan
+    const deleted = integrated.filter(o => !existingSet.has(o.sisplan_order_id));
+
+    if (deleted.length > 0) {
+      for (const order of deleted) {
+        await db.query(
+          `UPDATE orders SET sisplan_order_id = NULL, updated_at = NOW() WHERE id = $1`,
+          [order.id]
+        );
+      }
+      console.log(`[Sisplan Integration] ${deleted.length} pedido(s) removido(s) do Sisplan detectado(s): ${deleted.map(o => `#${o.id} (${o.sisplan_order_id})`).join(', ')}`);
+    }
+  } catch (err) {
+    console.error('[Sisplan Integration] Erro ao verificar pedidos deletados:', err.message);
+  } finally {
+    if (fbDb) await firebirdDetach(fbDb);
+  }
+}
+
 module.exports = {
   integrateOrderDryRun,
   integrateOrderExecute,
+  checkDeletedOrders,
 };
