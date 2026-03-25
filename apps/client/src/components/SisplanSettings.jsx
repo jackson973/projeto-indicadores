@@ -118,6 +118,7 @@ const PRODUCT_SYSTEM_FIELDS = [
   { key: "cod_cor",   label: "cod_cor",   description: "Código da cor",         required: false },
   { key: "desc_cor",  label: "desc_cor",  description: "Descrição da cor",      required: false },
   { key: "tamanho",   label: "tamanho",   description: "Tamanho",               required: false },
+  { key: "ean",       label: "ean",       description: "Código de barras (EAN)", required: false },
 ];
 
 const SisplanSettings = () => {

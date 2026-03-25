@@ -135,12 +135,61 @@ router.post('/catalog/:id/photo', requireAdmin, upload.single('photo'), async (r
   }
 });
 
+// ─── Catalog Barcodes ────────────────────────────────────────────────────────
+
+// GET /api/orders/catalog/:id/barcodes
+router.get('/catalog/:id/barcodes', async (req, res) => {
+  try {
+    res.json(await repo.getBarcodesForProduct(req.params.id));
+  } catch (err) {
+    console.error('orders/catalog/barcodes GET error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/orders/catalog/:id/barcodes — bulk add barcodes
+router.post('/catalog/:id/barcodes', requireAdmin, async (req, res) => {
+  try {
+    const { barcodes } = req.body; // [{ size_name, barcode, sisplan_sku?, label? }]
+    if (!Array.isArray(barcodes) || barcodes.length === 0) {
+      return res.status(400).json({ error: 'Envie um array de barcodes' });
+    }
+    const results = await repo.addBarcodesBulk(req.params.id, barcodes);
+    res.json(results);
+  } catch (err) {
+    console.error('orders/catalog/barcodes POST error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /api/orders/catalog/barcodes/:id
+router.delete('/catalog/barcodes/:barcodeId', requireAdmin, async (req, res) => {
+  try {
+    await repo.removeBarcode(req.params.barcodeId);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('orders/catalog/barcodes DELETE error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/orders/scan/:barcode — lookup barcode → product + size
+router.get('/scan/:barcode', async (req, res) => {
+  try {
+    const result = await repo.lookupBarcode(req.params.barcode);
+    res.json(result);
+  } catch (err) {
+    console.error('orders/scan error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/orders/sisplan-products — for catalog config: grouped reference products
 router.get('/sisplan-products', requireAdmin, async (req, res) => {
   try {
     const db = require('../db/connection');
     const { rows } = await db.query(
-      `SELECT id, codigo, descricao, cod_cor, desc_cor, tamanho, sku
+      `SELECT id, codigo, descricao, cod_cor, desc_cor, tamanho, sku, ean
        FROM sisplan_products WHERE active=true
        ORDER BY codigo, tamanho`
     );

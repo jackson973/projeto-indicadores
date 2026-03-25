@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import {
   Badge,
   Box,
   Button,
+  Collapse,
   Flex,
   FormControl,
   FormLabel,
@@ -39,7 +40,11 @@ import {
   deleteOrderCatalogProduct,
   uploadOrderProductPhoto,
   fetchSisplanProductsForOrders,
+  fetchCatalogBarcodes,
+  addCatalogBarcodes,
+  removeCatalogBarcode,
 } from "../api";
+import BarcodeScanner from "./BarcodeScanner";
 
 const SIZE_ORDER = ["RN", "PP", "P", "M", "G", "GG", "XG", "XGG", "EG", "EGG"];
 
@@ -66,6 +71,10 @@ export default function OrderProductsConfig() {
   const [refSearch, setRefSearch]       = useState("");
   const [refOpen, setRefOpen]           = useState(false);
   const refBoxRef                       = useRef();
+  const [barcodes, setBarcodes]         = useState([]);
+  const [barcodesLoading, setBarcodesLoading] = useState(false);
+  const [scannerActive, setScannerActive] = useState(false);
+  const [lastScanned, setLastScanned]   = useState(null);
 
   const { isOpen, onOpen, onClose }                     = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
@@ -117,6 +126,9 @@ export default function OrderProductsConfig() {
     setPhotoPreview(null);
     setRefSearch("");
     setRefOpen(false);
+    setBarcodes([]);
+    setScannerActive(false);
+    setLastScanned(null);
     onOpen();
   }
 
@@ -125,7 +137,19 @@ export default function OrderProductsConfig() {
     setPhotoPreview(p.photo_url || null);
     setRefSearch("");
     setRefOpen(false);
+    setScannerActive(false);
+    setLastScanned(null);
     onOpen();
+    // Load existing barcodes
+    if (p.id) {
+      setBarcodesLoading(true);
+      fetchCatalogBarcodes(p.id)
+        .then(setBarcodes)
+        .catch(() => setBarcodes([]))
+        .finally(() => setBarcodesLoading(false));
+    } else {
+      setBarcodes([]);
+    }
   }
 
   function openDelete(p) {
@@ -157,6 +181,65 @@ export default function OrderProductsConfig() {
 
   function removeSize(idx) {
     setEditing(prev => ({ ...prev, sizes: prev.sizes.filter((_, i) => i !== idx) }));
+  }
+
+  // ─── Barcode scanner handlers ───────────────────────────────────────────────
+
+  const handleBarcodeScan = useCallback(async (code) => {
+    if (!editing?.id) return;
+    // Find this barcode in sisplan_products to get tamanho
+    // EAN field may contain multiple barcodes separated by comma
+    const sp = sisplanProducts.find(p => {
+      if (p.sku === code) return true;
+      if (!p.ean) return false;
+      return p.ean.split(",").map(e => e.trim()).includes(code);
+    });
+    if (!sp) {
+      setLastScanned({ code, error: "Código não encontrado no Sisplan" });
+      toast({ status: "warning", description: `Código ${code} não encontrado no Sisplan.`, duration: 3000 });
+      return;
+    }
+    // Check if size exists in this product
+    const sizeMatch = editing.sizes.find(
+      s => s.size_name?.toUpperCase() === sp.tamanho?.toUpperCase()
+    );
+    if (!sizeMatch) {
+      setLastScanned({ code, error: `Tamanho ${sp.tamanho} não existe neste produto` });
+      toast({ status: "warning", description: `Tamanho "${sp.tamanho}" não está na grade deste produto.`, duration: 3000 });
+      return;
+    }
+    // Check if already added
+    if (barcodes.find(b => b.barcode === code)) {
+      setLastScanned({ code, label: sp.descricao, size: sp.tamanho, alreadyExists: true });
+      toast({ status: "info", description: `Código ${code} já vinculado.`, duration: 2000 });
+      return;
+    }
+    // Add barcode
+    try {
+      const label = [sp.descricao, sp.desc_cor].filter(Boolean).join(" - ");
+      const results = await addCatalogBarcodes(editing.id, [{
+        size_name: sizeMatch.size_name,
+        barcode: code,
+        sisplan_sku: sp.sku,
+        label,
+      }]);
+      setBarcodes(prev => [...prev, ...results]);
+      setLastScanned({ code, label, size: sizeMatch.size_name, success: true });
+      toast({ status: "success", description: `Vinculado! ${sizeMatch.size_name} — ${label}`, duration: 2500 });
+    } catch (err) {
+      setLastScanned({ code, error: err.message });
+      toast({ status: "error", description: err.message, duration: 3000 });
+    }
+  }, [editing, sisplanProducts, barcodes, toast]);
+
+  async function handleRemoveBarcode(barcodeId) {
+    try {
+      await removeCatalogBarcode(barcodeId);
+      setBarcodes(prev => prev.filter(b => b.id !== barcodeId));
+      toast({ status: "success", description: "Código removido.", duration: 2000 });
+    } catch (err) {
+      toast({ status: "error", description: err.message, duration: 3000 });
+    }
   }
 
   async function handleSave() {
@@ -584,6 +667,120 @@ export default function OrderProductsConfig() {
                     color={mutedColor}
                   >
                     <Text fontSize="sm">Selecione o produto Sisplan de referência acima para carregar os tamanhos</Text>
+                  </Box>
+                )}
+
+                {/* ─── Códigos de Barras ──────────────────────── */}
+                {editing.id && (
+                  <Box>
+                    <Flex justify="space-between" align="center" mb={2}>
+                      <FormLabel fontSize="sm" mb={0}>
+                        Códigos de Barras{" "}
+                        <Badge colorScheme="green" fontSize="xs" ml={1}>{barcodes.length}</Badge>
+                      </FormLabel>
+                      <Button
+                        size="xs"
+                        colorScheme={scannerActive ? "red" : "green"}
+                        variant={scannerActive ? "solid" : "outline"}
+                        onClick={() => { setScannerActive(!scannerActive); setLastScanned(null); }}
+                      >
+                        {scannerActive ? "Fechar Scanner" : "Bipar do Estoque"}
+                      </Button>
+                    </Flex>
+
+                    {/* Scanner */}
+                    <Collapse in={scannerActive} animateOpacity>
+                      <Box mb={3}>
+                        <BarcodeScanner
+                          active={scannerActive}
+                          onScan={handleBarcodeScan}
+                          onError={(err) => toast({ status: "error", description: err, duration: 3000 })}
+                          continuous
+                          height="220px"
+                        />
+                        {lastScanned && (
+                          <Box
+                            mt={2}
+                            p={2}
+                            borderRadius="md"
+                            bg={lastScanned.success ? "green.50" : lastScanned.error ? "red.50" : "blue.50"}
+                            border="1px solid"
+                            borderColor={lastScanned.success ? "green.200" : lastScanned.error ? "red.200" : "blue.200"}
+                          >
+                            <Text fontSize="xs" fontFamily="mono" fontWeight="bold">
+                              {lastScanned.code}
+                            </Text>
+                            {lastScanned.success && (
+                              <Text fontSize="xs" color="green.700">
+                                Vinculado! Tam {lastScanned.size} — {lastScanned.label}
+                              </Text>
+                            )}
+                            {lastScanned.alreadyExists && (
+                              <Text fontSize="xs" color="blue.700">Já vinculado</Text>
+                            )}
+                            {lastScanned.error && (
+                              <Text fontSize="xs" color="red.700">{lastScanned.error}</Text>
+                            )}
+                          </Box>
+                        )}
+                      </Box>
+                    </Collapse>
+
+                    {/* Lista de barcodes vinculados */}
+                    {barcodesLoading ? (
+                      <Flex justify="center" py={3}><Spinner size="sm" /></Flex>
+                    ) : barcodes.length === 0 ? (
+                      <Text fontSize="xs" color={mutedColor} textAlign="center" py={3}>
+                        Nenhum código de barras vinculado. Use o botão acima para bipar do estoque.
+                      </Text>
+                    ) : (
+                      <VStack spacing={1} align="stretch" maxH="200px" overflowY="auto">
+                        {barcodes.map(b => (
+                          <Flex
+                            key={b.id}
+                            align="center"
+                            gap={2}
+                            px={2}
+                            py={1.5}
+                            borderRadius="md"
+                            border="1px solid"
+                            borderColor={borderColor}
+                            bg={photoBg}
+                          >
+                            <Flex
+                              w="44px"
+                              h="26px"
+                              align="center"
+                              justify="center"
+                              bg="green.500"
+                              color="white"
+                              borderRadius="md"
+                              fontSize="xs"
+                              fontWeight="bold"
+                              flexShrink={0}
+                            >
+                              {b.size_name}
+                            </Flex>
+                            <Box flex={1} minW={0}>
+                              <Text fontSize="xs" fontFamily="mono" fontWeight="bold" noOfLines={1}>
+                                {b.barcode}
+                              </Text>
+                              {b.label && (
+                                <Text fontSize="10px" color={mutedColor} noOfLines={1}>{b.label}</Text>
+                              )}
+                            </Box>
+                            <IconButton
+                              icon={<DeleteIcon />}
+                              size="xs"
+                              colorScheme="red"
+                              variant="ghost"
+                              aria-label="Remover barcode"
+                              onClick={() => handleRemoveBarcode(b.id)}
+                            />
+                          </Flex>
+                        ))}
+                      </VStack>
+                    )}
                   </Box>
                 )}
               </VStack>

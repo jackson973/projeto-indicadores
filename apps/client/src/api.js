@@ -1169,6 +1169,32 @@ export const uploadOrderProductPhoto = async (id, file) => {
   return handleResponse(r);
 };
 
+// ─── Catalog Barcodes ─────────────────────────────────────────────────────────
+
+export const fetchCatalogBarcodes = async (productId) => {
+  const r = await authFetch(`/api/orders/catalog/${productId}/barcodes`);
+  return handleResponse(r);
+};
+
+export const addCatalogBarcodes = async (productId, barcodes) => {
+  const r = await authFetch(`/api/orders/catalog/${productId}/barcodes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ barcodes }),
+  });
+  return handleResponse(r);
+};
+
+export const removeCatalogBarcode = async (barcodeId) => {
+  const r = await authFetch(`/api/orders/catalog/barcodes/${barcodeId}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
+export const scanBarcode = async (barcode) => {
+  const r = await authFetch(`/api/orders/scan/${encodeURIComponent(barcode)}`);
+  return handleResponse(r);
+};
+
 export const fetchOrderCustomers = async (search = '') => {
   const q = search ? `?search=${encodeURIComponent(search)}` : '';
   const r = await authFetch(`/api/orders/customers${q}`);

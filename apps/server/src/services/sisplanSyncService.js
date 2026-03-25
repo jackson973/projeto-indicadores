@@ -431,6 +431,7 @@ function mapProductRow(row, columnMapping) {
     descCor:  getValue('desc_cor'),
     tamanho,
     sku,
+    ean: getValue('ean') || null,
   };
 }
 
@@ -441,18 +442,19 @@ async function batchUpsertSisplanProducts(products) {
   for (const p of products) {
     if (!p.codigo || !p.sku) continue;
     const { rows } = await db.query(`
-      INSERT INTO sisplan_products (codigo, descricao, cod_cor, desc_cor, tamanho, sku, active, synced_at)
-      VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
+      INSERT INTO sisplan_products (codigo, descricao, cod_cor, desc_cor, tamanho, sku, ean, active, synced_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, true, NOW())
       ON CONFLICT (sku) DO UPDATE SET
         codigo    = EXCLUDED.codigo,
         descricao = EXCLUDED.descricao,
         cod_cor   = EXCLUDED.cod_cor,
         desc_cor  = EXCLUDED.desc_cor,
         tamanho   = EXCLUDED.tamanho,
+        ean       = EXCLUDED.ean,
         active    = true,
         synced_at = NOW()
       RETURNING (xmax = 0) AS is_insert
-    `, [p.codigo, p.descricao || p.codigo, p.codCor || null, p.descCor || null, p.tamanho || null, p.sku]);
+    `, [p.codigo, p.descricao || p.codigo, p.codCor || null, p.descCor || null, p.tamanho || null, p.sku, p.ean || null]);
     if (rows[0]?.is_insert) inserted++; else updated++;
   }
   return { inserted, updated };

@@ -316,6 +316,91 @@ async function _insertOrderItems(client, orderId, items) {
   }
 }
 
+// ─── Catalog Barcodes ─────────────────────────────────────────────────────────
+
+async function getBarcodesForProduct(catalogProductId) {
+  const { rows } = await pool.query(
+    `SELECT * FROM order_catalog_barcodes WHERE catalog_product_id = $1 ORDER BY size_name, barcode`,
+    [catalogProductId]
+  );
+  return rows;
+}
+
+async function addBarcode({ catalog_product_id, size_name, barcode, sisplan_sku, label }) {
+  const { rows } = await pool.query(
+    `INSERT INTO order_catalog_barcodes (catalog_product_id, size_name, barcode, sisplan_sku, label)
+     VALUES ($1,$2,$3,$4,$5)
+     ON CONFLICT (barcode) DO UPDATE SET
+       catalog_product_id = EXCLUDED.catalog_product_id,
+       size_name = EXCLUDED.size_name,
+       sisplan_sku = EXCLUDED.sisplan_sku,
+       label = EXCLUDED.label
+     RETURNING *`,
+    [catalog_product_id, size_name, barcode, sisplan_sku || null, label || null]
+  );
+  return rows[0];
+}
+
+async function addBarcodesBulk(catalogProductId, barcodes) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const results = [];
+    for (const b of barcodes) {
+      const { rows } = await client.query(
+        `INSERT INTO order_catalog_barcodes (catalog_product_id, size_name, barcode, sisplan_sku, label)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (barcode) DO UPDATE SET
+           catalog_product_id = EXCLUDED.catalog_product_id,
+           size_name = EXCLUDED.size_name,
+           sisplan_sku = EXCLUDED.sisplan_sku,
+           label = EXCLUDED.label
+         RETURNING *`,
+        [catalogProductId, b.size_name, b.barcode, b.sisplan_sku || null, b.label || null]
+      );
+      results.push(rows[0]);
+    }
+    await client.query('COMMIT');
+    return results;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function removeBarcode(id) {
+  await pool.query('DELETE FROM order_catalog_barcodes WHERE id = $1', [id]);
+}
+
+async function lookupBarcode(barcode) {
+  // First try order_catalog_barcodes (already mapped)
+  const { rows } = await pool.query(
+    `SELECT b.*, p.name AS product_name, p.photo_url, p.price_pc, p.price_mn
+     FROM order_catalog_barcodes b
+     JOIN order_catalog_products p ON p.id = b.catalog_product_id
+     WHERE b.barcode = $1 AND p.active = true`,
+    [barcode]
+  );
+  if (rows.length > 0) {
+    return { found: true, source: 'catalog', ...rows[0] };
+  }
+  // Fallback: try sisplan_products by EAN (not yet mapped)
+  // EAN field may contain multiple barcodes separated by comma
+  const { rows: spRows } = await pool.query(
+    `SELECT * FROM sisplan_products
+     WHERE active = true AND ean IS NOT NULL
+       AND $1 = ANY(string_to_array(REPLACE(ean, ' ', ''), ','))
+     LIMIT 1`,
+    [barcode]
+  );
+  if (spRows.length > 0) {
+    return { found: true, source: 'sisplan', sisplan_product: spRows[0] };
+  }
+  return { found: false };
+}
+
 module.exports = {
   getPaymentConditions,
   createPaymentCondition,
@@ -327,6 +412,11 @@ module.exports = {
   updateCatalogProduct,
   updateCatalogProductPhoto,
   deleteCatalogProduct,
+  getBarcodesForProduct,
+  addBarcode,
+  addBarcodesBulk,
+  removeBarcode,
+  lookupBarcode,
   getCustomers,
   upsertCustomers,
   getOrders,
