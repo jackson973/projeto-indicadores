@@ -1,6 +1,5 @@
-import { useEffect, useRef, useCallback, useId, useState } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import { createPortal } from "react-dom";
-import { Html5Qrcode } from "html5-qrcode";
 import {
   Box,
   Button,
@@ -16,7 +15,7 @@ import {
 } from "@chakra-ui/react";
 import { CloseIcon, SearchIcon } from "@chakra-ui/icons";
 
-// ─── Audio feedback via Web Audio API (no files needed) ─────────────────────
+// ─── Audio feedback via Web Audio API ───────────────────────────────────────
 
 function playBeep(type = "success") {
   try {
@@ -37,7 +36,6 @@ function playBeep(type = "success") {
       osc.start();
       osc.stop(ctx.currentTime + 0.4);
     } else {
-      // error: two short low beeps
       osc.frequency.value = 350;
       gain.gain.value = 1.0;
       osc.start();
@@ -54,32 +52,78 @@ function playBeep(type = "success") {
   } catch (_) {}
 }
 
+// ─── Native BarcodeDetector scanner (hardware-accelerated) ──────────────────
+
+function startNativeScanner(videoEl, onDetected, signal) {
+  const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8"] });
+  let running = true;
+
+  signal.addEventListener("abort", () => { running = false; });
+
+  async function scan() {
+    if (!running || videoEl.readyState < 2) {
+      if (running) requestAnimationFrame(scan);
+      return;
+    }
+    try {
+      const barcodes = await detector.detect(videoEl);
+      if (barcodes.length > 0) {
+        onDetected(barcodes[0].rawValue);
+      }
+    } catch (_) {}
+    if (running) requestAnimationFrame(scan);
+  }
+  requestAnimationFrame(scan);
+}
+
+// ─── Fallback: html5-qrcode (JS-based, slower) ─────────────────────────────
+
+async function startFallbackScanner(containerId, onDetected, signal) {
+  const { Html5Qrcode } = await import("html5-qrcode");
+  const scanner = new Html5Qrcode(containerId);
+
+  signal.addEventListener("abort", () => {
+    scanner.stop().catch(() => {});
+    try { scanner.clear(); } catch (_) {}
+  });
+
+  await scanner.start(
+    { facingMode: "environment" },
+    {
+      fps: 20,
+      qrbox: (w, h) => ({ width: Math.floor(w * 0.9), height: Math.floor(h * 0.4) }),
+      formatsToSupport: [4, 3],
+      disableFlip: true,
+    },
+    onDetected,
+    () => {}
+  );
+  return scanner;
+}
+
+// ─── Check if native BarcodeDetector is available ───────────────────────────
+
+const hasNativeDetector = typeof window !== "undefined"
+  && "BarcodeDetector" in window;
+
 /**
  * BarcodeScanner — input para leitor/digitação + câmera fullscreen opcional.
- *
- * Props:
- *  - onScan(code) — deve retornar (ou resolver Promise com):
- *      { status: "success", message: "..." }
- *      { status: "duplicate", message: "..." }
- *      { status: "error", message: "..." }
- *    Se não retornar nada, assume sucesso.
- *  - active, continuous
+ * Uses native BarcodeDetector API when available (instant), falls back to html5-qrcode.
  */
 export default function BarcodeScanner({
   onScan,
   active = true,
   continuous = true,
 }) {
-  const uniqueId = useId();
-  const containerId = `barcode-scanner-${uniqueId.replace(/:/g, "")}`;
-  const scannerRef = useRef(null);
+  const videoRef = useRef(null);
   const lastCodeRef = useRef(null);
   const lastTimeRef = useRef(0);
   const inputRef = useRef(null);
   const [manualCode, setManualCode] = useState("");
   const [cameraOn, setCameraOn] = useState(false);
   const [cameraError, setCameraError] = useState(null);
-  const [feedback, setFeedback] = useState(null); // { status, message, code }
+  const [feedback, setFeedback] = useState(null);
+  const [useNative, setUseNative] = useState(hasNativeDetector);
   const mutedColor = useColorModeValue("gray.500", "gray.400");
 
   const handleScan = useCallback(
@@ -114,58 +158,68 @@ export default function BarcodeScanner({
     inputRef.current?.focus();
   }
 
-  // Start/stop camera
+  // ─── Native camera scanner ─────────────────────────────────────────────────
   useEffect(() => {
-    if (!active || !cameraOn) return;
+    if (!active || !cameraOn || !useNative) return;
+
+    const abortController = new AbortController();
+    let stream = null;
+
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+          audio: false,
+        });
+        if (abortController.signal.aborted) { stream.getTracks().forEach(t => t.stop()); return; }
+
+        const video = videoRef.current;
+        if (!video) { stream.getTracks().forEach(t => t.stop()); return; }
+        video.srcObject = stream;
+        await video.play();
+
+        startNativeScanner(video, (code) => {
+          handleScan(code);
+          if (!continuous) setCameraOn(false);
+        }, abortController.signal);
+      } catch (err) {
+        // If native fails, try fallback
+        setUseNative(false);
+        setCameraError(null);
+      }
+    })();
+
+    return () => {
+      abortController.abort();
+      if (stream) stream.getTracks().forEach(t => t.stop());
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+  }, [active, cameraOn, useNative, continuous, handleScan]);
+
+  // ─── Fallback html5-qrcode scanner ────────────────────────────────────────
+  useEffect(() => {
+    if (!active || !cameraOn || useNative) return;
+
+    const abortController = new AbortController();
+    const containerId = "barcode-fallback-container";
 
     const timeout = setTimeout(() => {
       const el = document.getElementById(containerId);
       if (!el) return;
-
-      const scanner = new Html5Qrcode(containerId);
-      scannerRef.current = scanner;
-
-      scanner
-        .start(
-          { facingMode: "environment" },
-          {
-            fps: 30,
-            qrbox: (viewfinderWidth, viewfinderHeight) => {
-              const w = Math.floor(viewfinderWidth * 0.9);
-              const h = Math.floor(viewfinderHeight * 0.4);
-              return { width: Math.max(w, 250), height: Math.max(h, 150) };
-            },
-            formatsToSupport: [4, 3],  // EAN-13 and EAN-8 only — faster detection
-            disableFlip: true,
-          },
-          (decodedText) => {
-            handleScan(decodedText);
-            if (!continuous) {
-              scanner.stop().catch(() => {});
-              setCameraOn(false);
-            }
-          },
-          () => {}
-        )
-        .catch((err) => {
-          setCameraError(typeof err === "string" ? err : "Câmera indisponível");
-          setCameraOn(false);
-        });
+      startFallbackScanner(containerId, (code) => {
+        handleScan(code);
+        if (!continuous) setCameraOn(false);
+      }, abortController.signal).catch((err) => {
+        setCameraError("Câmera indisponível");
+        setCameraOn(false);
+      });
     }, 100);
 
     return () => {
       clearTimeout(timeout);
-      if (scannerRef.current) {
-        scannerRef.current
-          .stop()
-          .catch(() => {})
-          .finally(() => {
-            try { scannerRef.current?.clear(); } catch (_) {}
-            scannerRef.current = null;
-          });
-      }
+      abortController.abort();
     };
-  }, [active, cameraOn, continuous, handleScan, containerId]);
+  }, [active, cameraOn, useNative, continuous, handleScan]);
 
   useEffect(() => {
     if (!active) setCameraOn(false);
@@ -180,7 +234,6 @@ export default function BarcodeScanner({
   return (
     <>
       <VStack spacing={2} w="full">
-        {/* Input — sempre visível */}
         <form onSubmit={handleManualSubmit} style={{ width: "100%" }}>
           <HStack spacing={2}>
             <InputGroup size="sm" flex={1}>
@@ -218,7 +271,6 @@ export default function BarcodeScanner({
           </Button>
         )}
 
-        {/* Feedback inline (for gun/manual input) */}
         {feedback && !cameraOn && (
           <Box
             w="full" px={3} py={2} borderRadius="md"
@@ -264,21 +316,47 @@ export default function BarcodeScanner({
             />
           </Flex>
 
-          {/* Camera */}
-          <Box
-            id={containerId}
-            flex={1}
-            sx={{
-              "& video": {
-                width: "100% !important",
-                height: "100% !important",
+          {/* Camera view */}
+          {useNative ? (
+            <video
+              ref={videoRef}
+              playsInline
+              muted
+              style={{
+                flex: 1,
+                width: "100%",
+                height: "100%",
                 objectFit: "cover",
-              },
-              "& #qr-shaded-region": {
-                borderColor: "rgba(66, 153, 225, 0.8) !important",
-              },
-            }}
-          />
+              }}
+            />
+          ) : (
+            <Box
+              id="barcode-fallback-container"
+              flex={1}
+              sx={{
+                "& video": {
+                  width: "100% !important",
+                  height: "100% !important",
+                  objectFit: "cover",
+                },
+              }}
+            />
+          )}
+
+          {/* Scan area overlay (native mode) */}
+          {useNative && (
+            <Box
+              position="absolute"
+              top="50%" left="50%"
+              transform="translate(-50%, -50%)"
+              w="85%" h="25%"
+              border="3px solid"
+              borderColor="rgba(66, 153, 225, 0.7)"
+              borderRadius="xl"
+              pointerEvents="none"
+              zIndex={1}
+            />
+          )}
 
           {/* Bottom feedback bar */}
           <Box
