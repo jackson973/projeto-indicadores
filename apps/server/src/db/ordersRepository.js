@@ -415,21 +415,31 @@ async function associateBarcodesByGroup(catalogProductId, groupId) {
     .filter(gi => gi.ad_name.startsWith('Fabrica|||'))
     .map(gi => gi.ad_name.split('|||')[1]);
 
+  console.log(`[Scan] Group #${groupId}: ${sisplanDescricoes.length} Sisplan descriptions found:`, sisplanDescricoes.slice(0, 5));
+
   if (sisplanDescricoes.length === 0) {
     return { added: 0, skipped: 0, message: 'Nenhum produto Sisplan encontrado neste grupo' };
   }
 
-  // 3. Find all sisplan_products matching those descricoes that have EAN
-  const { rows: sisplanProducts } = await pool.query(
+  // 3. Find all sisplan_products matching those descricoes — including those without EAN for logging
+  const { rows: allSisplanProducts } = await pool.query(
     `SELECT codigo, descricao, cod_cor, desc_cor, tamanho, sku, ean
      FROM sisplan_products
-     WHERE active = true AND ean IS NOT NULL AND ean != ''
-       AND descricao = ANY($1)`,
+     WHERE active = true AND descricao = ANY($1)`,
     [sisplanDescricoes]
   );
 
+  const sisplanProducts = allSisplanProducts.filter(sp => sp.ean && sp.ean.trim());
+  const withoutEan = allSisplanProducts.length - sisplanProducts.length;
+
+  console.log(`[Scan] Found ${allSisplanProducts.length} sisplan products (${sisplanProducts.length} with EAN, ${withoutEan} without EAN)`);
+  if (withoutEan > 0) {
+    const sample = allSisplanProducts.filter(sp => !sp.ean || !sp.ean.trim()).slice(0, 3);
+    console.log(`[Scan] Sample without EAN:`, sample.map(s => `${s.sku} ${s.descricao}`));
+  }
+
   if (sisplanProducts.length === 0) {
-    return { added: 0, skipped: 0, message: 'Nenhum produto com código de barras encontrado' };
+    return { added: 0, skipped: 0, message: `Nenhum produto com código de barras encontrado (${withoutEan} sem EAN)` };
   }
 
   // 4. Build barcode entries, matching tamanho to catalog sizes
@@ -445,7 +455,10 @@ async function associateBarcodesByGroup(catalogProductId, groupId) {
     await client.query('BEGIN');
     for (const sp of sisplanProducts) {
       const sizeName = sizeMap[String(sp.tamanho).toUpperCase()];
-      if (!sizeName) { skipped++; continue; }
+      if (!sizeName) {
+        console.log(`[Scan] Skipping ${sp.sku} — tamanho "${sp.tamanho}" not in product sizes [${Object.keys(sizeMap).join(',')}]`);
+        skipped++; continue;
+      }
 
       // EAN can be comma-separated
       const eans = sp.ean.split(',').map(e => e.trim()).filter(Boolean);
