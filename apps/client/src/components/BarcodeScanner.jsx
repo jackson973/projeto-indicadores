@@ -57,23 +57,33 @@ function playBeep(type = "success") {
 function startNativeScanner(videoEl, onDetected, signal) {
   const detector = new window.BarcodeDetector({ formats: ["ean_13", "ean_8"] });
   let running = true;
+  let scanning = false;
 
   signal.addEventListener("abort", () => { running = false; });
 
   async function scan() {
-    if (!running || videoEl.readyState < 2) {
-      if (running) requestAnimationFrame(scan);
+    if (!running) return;
+    if (scanning || videoEl.readyState < 2) {
+      requestAnimationFrame(scan);
       return;
     }
+    scanning = true;
     try {
       const barcodes = await detector.detect(videoEl);
-      if (barcodes.length > 0) {
+      if (barcodes.length > 0 && running) {
         onDetected(barcodes[0].rawValue);
       }
     } catch (_) {}
+    scanning = false;
     if (running) requestAnimationFrame(scan);
   }
-  requestAnimationFrame(scan);
+
+  // Wait for video to be actually ready before starting scan loop
+  if (videoEl.readyState >= 2) {
+    requestAnimationFrame(scan);
+  } else {
+    videoEl.addEventListener("loadeddata", () => requestAnimationFrame(scan), { once: true });
+  }
 }
 
 // ─── Fallback: html5-qrcode (JS-based, slower) ─────────────────────────────
@@ -168,7 +178,7 @@ export default function BarcodeScanner({
     (async () => {
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+          video: { facingMode: "environment", width: { ideal: 640 }, height: { ideal: 480 } },
           audio: false,
         });
         if (abortController.signal.aborted) { stream.getTracks().forEach(t => t.stop()); return; }
