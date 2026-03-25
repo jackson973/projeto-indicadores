@@ -475,7 +475,7 @@ async function checkDeletedOrders() {
           orphanIds
         );
         salesDeleted = rowCount;
-        console.log(`[Sisplan Order Check] ${rowCount} venda(s) Fabrica removida(s): ${orphanIds.join(', ')}`);
+        console.log(`[Sisplan Order Check] ${orphanIds.length} pedido(s) Fabrica removido(s) (${rowCount} linhas): ${orphanIds.join(', ')}`);
       }
     }
 
