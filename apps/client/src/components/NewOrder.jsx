@@ -223,15 +223,18 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
       return { status: "error", message: "Código não cadastrado" };
     }
     if (result.source === "catalog") {
-      const product = catalog.find(p => p.id === Number(result.catalog_product_id));
+      // Compare as strings to avoid bigint/number mismatch
+      const productId = String(result.catalog_product_id);
+      const product = catalog.find(p => String(p.id) === productId);
       if (!product) {
-        return { status: "error", message: "Produto não encontrado no catálogo" };
+        return { status: "error", message: `Produto #${productId} não encontrado no catálogo` };
       }
+      const sizeName = String(result.size_name || "").toUpperCase();
       const size = product.sizes.find(
-        s => (s.size_name || s.name)?.toUpperCase() === result.size_name?.toUpperCase()
+        s => String(s.size_name || s.name || "").toUpperCase() === sizeName
       );
       if (!size) {
-        return { status: "error", message: `Tamanho ${result.size_name} não encontrado` };
+        return { status: "error", message: `Tamanho ${result.size_name} não encontrado em ${product.name}` };
       }
       const k = cartKey(product.id, size.id);
       const currentQty = cart[k]?.qty || 0;
@@ -450,7 +453,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
             size="xs"
             colorScheme={scannerOpen ? "red" : "green"}
             variant={scannerOpen ? "solid" : "outline"}
-            onClick={() => { setScannerOpen(!scannerOpen); setLastScanResult(null); }}
+            onClick={() => setScannerOpen(!scannerOpen)}
           >
             {scannerOpen ? "Fechar Scanner" : "Bipar Produto"}
           </Button>
