@@ -26,7 +26,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
-import { fetchOrders, fetchOrderById, updateOrderStatus, getOrderPdfUrl } from "../api";
+import { fetchOrders, fetchOrderById, updateOrderStatus, getOrderPdfUrl, integrateOrderSisplan } from "../api";
 import NewOrder from "./NewOrder";
 
 const TYPE_LABELS = {
@@ -66,6 +66,7 @@ export default function OrdersList() {
   const [selected, setSelected]     = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [editingOrder, setEditingOrder] = useState(null);
+  const [integrating, setIntegrating] = useState(false);
 
   const { isOpen, onOpen, onClose } = useDisclosure();
   const toast = useToast();
@@ -120,6 +121,26 @@ export default function OrdersList() {
     }
   }
 
+  async function handleIntegrate() {
+    if (!selected) return;
+    if (!window.confirm("Confirma a integração deste pedido no Sisplan?")) return;
+    setIntegrating(true);
+    try {
+      const result = await integrateOrderSisplan(selected.id);
+      if (result.success) {
+        toast({ status: "success", description: `Pedido integrado no Sisplan (${result.numero})`, duration: 5000 });
+        setSelected({ ...selected, sisplan_order_id: result.numero });
+        setOrders(prev => prev.map(o => o.id === selected.id ? { ...o, sisplan_order_id: result.numero } : o));
+      } else {
+        toast({ status: "error", description: result.errors?.join(", ") || "Erro na integração", duration: 5000 });
+      }
+    } catch (err) {
+      toast({ status: "error", description: err.message, duration: 5000 });
+    } finally {
+      setIntegrating(false);
+    }
+  }
+
   const customer = (order) => order.customer_snapshot || {};
 
   return (
@@ -168,8 +189,14 @@ export default function OrdersList() {
       ) : (
         <VStack spacing={3} align="stretch">
           {orders.map(order => {
-            const typeInfo   = TYPE_LABELS[order.type]   || { label: order.type,   color: "gray" };
-            const statusInfo = STATUS_LABELS[order.status] || { label: order.status, color: "gray" };
+            // Se tem sisplan_order_id, é PEDIDO independente do type original
+            const isIntegrated = !!order.sisplan_order_id;
+            const typeInfo   = isIntegrated
+              ? { label: "Pedido", color: "blue" }
+              : (TYPE_LABELS[order.type] || { label: order.type, color: "gray" });
+            const statusInfo = isIntegrated
+              ? { label: "Integrado", color: "green" }
+              : (STATUS_LABELS[order.status] || { label: order.status, color: "gray" });
             const c = customer(order);
             return (
               <Box
@@ -202,8 +229,10 @@ export default function OrdersList() {
                     )}
                     <HStack mt={1} spacing={2} flexWrap="wrap">
                       <Text fontSize="xs" color={mutedColor}>{formatDate(order.created_at)}</Text>
-                      {order.sisplan_order_id && (
-                        <Badge colorScheme="green" fontSize="xs">{order.sisplan_order_id}</Badge>
+                      {isIntegrated && (
+                        <Badge colorScheme="green" fontSize="xs" fontFamily="mono">
+                          ERP: {order.sisplan_order_id}
+                        </Badge>
                       )}
                     </HStack>
                     {order.created_by_name && (
@@ -261,15 +290,26 @@ export default function OrdersList() {
           {selected && (
             <>
               <ModalHeader pb={2}>
-                <HStack spacing={2} flexWrap="wrap">
-                  <Text fontSize="md">{selected.type === "pedido" ? "Pedido" : "Orçamento"} #{selected.id}</Text>
-                  <Badge colorScheme={(STATUS_LABELS[selected.status] || {}).color}>
-                    {(STATUS_LABELS[selected.status] || {}).label || selected.status}
-                  </Badge>
-                  {selected.sisplan_order_id && (
-                    <Badge colorScheme="green">{selected.sisplan_order_id}</Badge>
-                  )}
-                </HStack>
+                {(() => {
+                  const integrated = !!selected.sisplan_order_id;
+                  const typeLabel = integrated ? "Pedido" : (selected.type === "pedido" ? "Pedido" : "Orçamento");
+                  const stLabel = integrated
+                    ? { label: "Integrado", color: "green" }
+                    : (STATUS_LABELS[selected.status] || { label: selected.status, color: "gray" });
+                  return (
+                    <VStack align="start" spacing={1}>
+                      <HStack spacing={2} flexWrap="wrap">
+                        <Text fontSize="md">{typeLabel} #{selected.id}</Text>
+                        <Badge colorScheme={stLabel.color}>{stLabel.label}</Badge>
+                      </HStack>
+                      {integrated && (
+                        <Text fontSize="sm" color="green.600" fontWeight="semibold">
+                          Pedido no ERP: {selected.sisplan_order_id}
+                        </Text>
+                      )}
+                    </VStack>
+                  );
+                })()}
               </ModalHeader>
               <ModalCloseButton />
               <ModalBody px={4} pt={0}>
@@ -379,6 +419,16 @@ export default function OrdersList() {
                 {selected.status === "rascunho" && selected.type === "orcamento" && (
                   <Button w="full" colorScheme="blue" size="md" borderRadius="xl" onClick={handleConvertToOrder}>
                     Converter para Pedido
+                  </Button>
+                )}
+                {(selected.status === "enviado" || selected.status === "concluido") && !selected.sisplan_order_id && (
+                  <Button
+                    w="full" colorScheme="green" size="md" borderRadius="xl"
+                    onClick={handleIntegrate}
+                    isLoading={integrating}
+                    loadingText="Integrando..."
+                  >
+                    Integrar Sisplan
                   </Button>
                 )}
                 <SimpleGrid columns={3} gap={2} w="full">

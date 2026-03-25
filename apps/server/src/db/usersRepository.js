@@ -12,7 +12,7 @@ async function findByEmail(email) {
 
 async function findById(id) {
   const result = await db.query(
-    `SELECT id, name, email, role, active, whatsapp,
+    `SELECT id, name, email, role, active, whatsapp, rep_code AS "repCode",
             created_at AS "createdAt", updated_at AS "updatedAt"
      FROM users WHERE id = $1`,
     [id]
@@ -22,7 +22,7 @@ async function findById(id) {
 
 async function findAll() {
   const result = await db.query(
-    `SELECT id, name, email, role, active, whatsapp,
+    `SELECT id, name, email, role, active, whatsapp, rep_code AS "repCode",
             created_at AS "createdAt", updated_at AS "updatedAt"
      FROM users ORDER BY name`
   );
@@ -61,24 +61,24 @@ async function findByWhatsapp(phone) {
   return result.rows[0] || null;
 }
 
-async function create({ name, email, passwordHash, role = 'user', whatsapp }) {
+async function create({ name, email, passwordHash, role = 'user', whatsapp, repCode }) {
   const result = await db.query(
-    `INSERT INTO users (name, email, password_hash, role, whatsapp)
-     VALUES ($1, $2, $3, $4, $5)
-     RETURNING id, name, email, role, active, whatsapp,
+    `INSERT INTO users (name, email, password_hash, role, whatsapp, rep_code)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, name, email, role, active, whatsapp, rep_code AS "repCode",
                created_at AS "createdAt", updated_at AS "updatedAt"`,
-    [name, email, passwordHash, role, whatsapp || null]
+    [name, email, passwordHash, role, whatsapp || null, repCode || null]
   );
   return result.rows[0];
 }
 
-async function update(id, { name, email, role, active, whatsapp }) {
+async function update(id, { name, email, role, active, whatsapp, repCode }) {
   const result = await db.query(
-    `UPDATE users SET name = $1, email = $2, role = $3, active = $4, whatsapp = $5
-     WHERE id = $6
-     RETURNING id, name, email, role, active, whatsapp,
+    `UPDATE users SET name = $1, email = $2, role = $3, active = $4, whatsapp = $5, rep_code = $6
+     WHERE id = $7
+     RETURNING id, name, email, role, active, whatsapp, rep_code AS "repCode",
                created_at AS "createdAt", updated_at AS "updatedAt"`,
-    [name, email, role, active, whatsapp || null, id]
+    [name, email, role, active, whatsapp || null, repCode || null, id]
   );
   return result.rows[0] || null;
 }

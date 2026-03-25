@@ -8,6 +8,7 @@ const { authenticate, requireAdmin } = require('../middleware/auth');
 const repo = require('../db/ordersRepository');
 const sisplanRepo = require('../db/sisplanRepository');
 const { queryFirebird, getFirebirdOptions } = require('../services/sisplanSyncService');
+const sisplanOrderIntegration = require('../services/sisplanOrderIntegrationService');
 
 const router = express.Router();
 
@@ -235,6 +236,23 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const order = await repo.createOrder({ ...req.body, created_by: req.user.id });
+
+    // Integração automática no Sisplan quando é pedido (status enviado)
+    if (order.type === 'pedido' && order.status === 'enviado') {
+      try {
+        const result = await sisplanOrderIntegration.integrateOrderExecute(order.id, req.user.id);
+        if (result.success) {
+          // Recarrega o pedido com sisplan_order_id atualizado
+          const updated = await repo.getOrderById(order.id);
+          return res.json(updated);
+        }
+        console.error('[Sisplan Integration] Falha na integração automática:', result.errors);
+      } catch (intErr) {
+        console.error('[Sisplan Integration] Erro na integração automática:', intErr.message);
+        // Não falha a criação do pedido, apenas loga o erro
+      }
+    }
+
     res.json(order);
   } catch (err) {
     console.error('orders POST error:', err);
@@ -512,6 +530,36 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
   } catch (err) {
     console.error('orders/:id/pdf error:', err);
     if (!res.headersSent) res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Sisplan Integration ────────────────────────────────────────────────────
+
+// Dry-run: gera SQLs sem executar
+router.post('/:id/integrate/dry-run', requireAdmin, async (req, res) => {
+  try {
+    const result = await sisplanOrderIntegration.integrateOrderDryRun(
+      Number(req.params.id),
+      req.user.id
+    );
+    res.json(result);
+  } catch (err) {
+    console.error('orders/:id/integrate/dry-run error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Execução real: grava no Firebird com transaction
+router.post('/:id/integrate', requireAdmin, async (req, res) => {
+  try {
+    const result = await sisplanOrderIntegration.integrateOrderExecute(
+      Number(req.params.id),
+      req.user.id
+    );
+    res.json(result);
+  } catch (err) {
+    console.error('orders/:id/integrate error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

@@ -1216,6 +1216,16 @@ export const updateOrderStatus = async (id, data) => {
   return handleResponse(r);
 };
 
+export const integrateOrderSisplanDryRun = async (orderId) => {
+  const r = await authFetch(`/api/orders/${orderId}/integrate/dry-run`, { method: 'POST' });
+  return handleResponse(r);
+};
+
+export const integrateOrderSisplan = async (orderId) => {
+  const r = await authFetch(`/api/orders/${orderId}/integrate`, { method: 'POST' });
+  return handleResponse(r);
+};
+
 export const getOrderPdfUrl = (order) => {
   const token = getToken();
   const d = new Date(order.created_at);

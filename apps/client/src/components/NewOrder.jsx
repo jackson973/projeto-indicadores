@@ -86,6 +86,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   const [productSearch, setProductSearch]           = useState("");
   const [submitting, setSubmitting]                 = useState(false);
   const [cart, setCart]                             = useState({});
+  const [openProduct, setOpenProduct]               = useState(null);
 
   const customerDrawer  = useDisclosure();
   const cartDrawer      = useDisclosure();
@@ -425,22 +426,36 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
           </Box>
         ) : (
           <SimpleGrid columns={{ base: 2, md: 3 }} gap={3}>
-            {filteredCatalog.map(product => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                priceTable={priceTable}
-                getQty={getQty}
-                setQty={setQty}
-                clearProduct={clearProduct}
-                cardBg={cardBg}
-                borderColor={borderColor}
-                mutedColor={mutedColor}
-                photoBg={photoBg}
-              />
-            ))}
+            {filteredCatalog.map(product => {
+              const totalInCart = product.sizes.reduce((sum, s) => sum + getQty(product.id, s.id), 0);
+              return (
+                <ProductThumb
+                  key={product.id}
+                  product={product}
+                  totalInCart={totalInCart}
+                  priceTable={priceTable}
+                  cardBg={cardBg}
+                  borderColor={borderColor}
+                  mutedColor={mutedColor}
+                  photoBg={photoBg}
+                  onOpen={() => setOpenProduct(product)}
+                  onClear={() => clearProduct(product.id)}
+                />
+              );
+            })}
           </SimpleGrid>
         )}
+
+        {/* ---- Product detail drawer ---- */}
+        <ProductDetailDrawer
+          product={openProduct}
+          isOpen={!!openProduct}
+          onClose={() => setOpenProduct(null)}
+          priceTable={priceTable}
+          getQty={getQty}
+          setQty={setQty}
+          clearProduct={clearProduct}
+        />
       </Box>
 
       {/* ---- Floating cart button ---- */}
@@ -700,33 +715,116 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   );
 }
 
-// ---- Product Card ----
-function ProductCard({ product, priceTable, getQty, setQty, clearProduct, cardBg, borderColor, mutedColor, photoBg }) {
-  const [selectedSizes, setSelectedSizes] = useState(() => new Set(product.sizes.map(s => s.id)));
+// ---- Product Thumbnail (compact card for grid) ----
+function ProductThumb({ product, totalInCart, priceTable, cardBg, borderColor, mutedColor, photoBg, onOpen, onClear }) {
+  const blueBorder = useColorModeValue("blue.400", "blue.300");
+  const basePrice = priceTable === "MN"
+    ? parseFloat(product.price_mn ?? product.price_pc ?? 0)
+    : parseFloat(product.price_pc ?? 0);
+
+  return (
+    <Box
+      bg={cardBg}
+      borderRadius="xl"
+      border="2px solid"
+      borderColor={totalInCart > 0 ? blueBorder : borderColor}
+      overflow="hidden"
+      boxShadow={totalInCart > 0 ? "0 0 0 2px var(--chakra-colors-blue-100)" : "sm"}
+      transition="all 0.15s"
+      position="relative"
+      cursor="pointer"
+      onClick={onOpen}
+    >
+      {totalInCart > 0 && (
+        <>
+          <Badge
+            position="absolute" top={2} right={2} zIndex={1}
+            colorScheme="blue" borderRadius="full" fontSize="xs" px={2}
+          >
+            {totalInCart} pcs
+          </Badge>
+          <IconButton
+            position="absolute" top={1} left={1} zIndex={1}
+            icon={<CloseIcon boxSize={2} />}
+            size="xs" colorScheme="red" variant="solid" borderRadius="full"
+            aria-label="Remover produto"
+            onClick={e => { e.stopPropagation(); onClear(); }}
+          />
+        </>
+      )}
+
+      <Box bg={photoBg} h={{ base: "100px", md: "120px" }} display="flex" alignItems="center" justifyContent="center">
+        {product.photo_url ? (
+          <Image src={product.photo_url} alt={product.name} objectFit="contain" w="full" h="full" />
+        ) : (
+          <Text fontSize={{ base: "2xl", md: "3xl" }}>{getEmoji(product.name)}</Text>
+        )}
+      </Box>
+
+      <Box p={2}>
+        <Text fontSize="xs" fontWeight="semibold" noOfLines={2} mb={1} lineHeight="tight">
+          {product.name}
+        </Text>
+        <Flex justify="space-between" align="center">
+          <Text fontSize="sm" fontWeight="bold" color="blue.500">
+            R$ {basePrice.toFixed(2).replace(".", ",")}
+          </Text>
+          {totalInCart > 0 && (
+            <Text fontSize="xs" fontWeight="bold" color="green.500">
+              R$ {(basePrice * totalInCart).toFixed(2).replace(".", ",")}
+            </Text>
+          )}
+        </Flex>
+      </Box>
+    </Box>
+  );
+}
+
+// ---- Product Detail Drawer (full screen) ----
+function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, setQty, clearProduct }) {
+  const [selectedSizes, setSelectedSizes] = useState(new Set());
   const [addQty, setAddQty] = useState(1);
+  const [mode, setMode] = useState("grade");
+  const [totalInput, setTotalInput] = useState("");
 
-  const basePrice = (table) => {
-    if (table === "MN") return parseFloat(product.price_mn ?? product.price_pc ?? 0);
-    return parseFloat(product.price_pc ?? 0);
-  };
+  const mutedColor  = useColorModeValue("gray.500", "gray.400");
+  const borderColor = useColorModeValue("gray.200", "gray.600");
+  const photoBg     = useColorModeValue("gray.100", "gray.700");
+  const blueActiveBg = useColorModeValue("blue.500", "blue.400");
+  const stepperBg    = useColorModeValue("gray.100", "gray.700");
 
-  const [priceInput, setPriceInput] = useState(() => basePrice(priceTable).toFixed(2));
-  const [priceEditing, setPriceEditing] = useState(false);
+  const [priceInput, setPriceInput] = useState("0.00");
 
+  function basePrice(table, p) {
+    const prod = p || product;
+    if (!prod) return 0;
+    if (table === "MN") return parseFloat(prod.price_mn ?? prod.price_pc ?? 0);
+    return parseFloat(prod.price_pc ?? 0);
+  }
+
+  // Reset state when product changes
   useEffect(() => {
-    setPriceInput(basePrice(priceTable).toFixed(2));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [priceTable]);
+    if (product) {
+      setSelectedSizes(new Set(product.sizes.map(s => s.id)));
+      setAddQty(1);
+      setMode("grade");
+      setTotalInput("");
+      setPriceInput(basePrice(priceTable, product).toFixed(2));
+    }
+  }, [product, priceTable]);
+
+  function handlePriceBlur() {
+    const v = parseFloat(priceInput);
+    if (isNaN(v) || v <= 0) setPriceInput(basePrice(priceTable).toFixed(2));
+    else setPriceInput(v.toFixed(2));
+  }
 
   const price = parseFloat(priceInput) || basePrice(priceTable);
 
-  const totalInCart   = product.sizes.reduce((sum, s) => sum + getQty(product.id, s.id), 0);
-  const selectedCount = selectedSizes.size;
+  if (!product) return null;
 
-  const blueBorder   = useColorModeValue("blue.400", "blue.300");
-  const blueActiveBg = useColorModeValue("blue.500", "blue.400");
-  const stepperBg    = useColorModeValue("gray.100", "gray.700");
-  const priceEditBg  = useColorModeValue("blue.50", "blue.900");
+  const totalInCart = product.sizes.reduce((sum, s) => sum + getQty(product.id, s.id), 0);
+  const selectedCount = selectedSizes.size;
 
   function toggleSize(sizeId) {
     setSelectedSizes(prev => {
@@ -739,212 +837,235 @@ function ProductCard({ product, priceTable, getQty, setQty, clearProduct, cardBg
 
   function handleAdd() {
     const sizesToAdd = product.sizes.filter(s => selectedSizes.has(s.id));
-    sizesToAdd.forEach(s => {
-      const current = getQty(product.id, s.id);
-      setQty(product.id, s, current + addQty, price);
-    });
+    if (mode === "total") {
+      const total = parseInt(totalInput, 10);
+      if (!total || total <= 0 || sizesToAdd.length === 0) return;
+      const base = Math.floor(total / sizesToAdd.length);
+      const remainder = total % sizesToAdd.length;
+      sizesToAdd.forEach((s, idx) => {
+        const qty = base + (idx < remainder ? 1 : 0);
+        if (qty > 0) setQty(product.id, s, qty, price);
+      });
+      setTotalInput("");
+    } else {
+      sizesToAdd.forEach(s => {
+        const current = getQty(product.id, s.id);
+        setQty(product.id, s, current + addQty, price);
+      });
+    }
   }
 
-  function changeAddQty(delta) {
-    setAddQty(prev => Math.max(1, prev + delta));
-  }
-
-  function handlePriceBlur() {
-    setPriceEditing(false);
-    const v = parseFloat(priceInput);
-    if (isNaN(v) || v <= 0) setPriceInput(basePrice(priceTable).toFixed(2));
-    else setPriceInput(v.toFixed(2));
+  function handleClear() {
+    clearProduct(product.id);
   }
 
   return (
-    <Box
-      bg={cardBg}
-      borderRadius="xl"
-      border="2px solid"
-      borderColor={totalInCart > 0 ? blueBorder : borderColor}
-      overflow="hidden"
-      boxShadow={totalInCart > 0 ? "0 0 0 2px var(--chakra-colors-blue-100)" : "sm"}
-      transition="all 0.15s"
-      position="relative"
-    >
-      {totalInCart > 0 && (
-        <>
-          <Badge
-            position="absolute" top={2} right={2} zIndex={1}
-            colorScheme="blue" borderRadius="full" fontSize="xs" px={2}
-          >
-            {totalInCart}
-          </Badge>
-          <IconButton
-            position="absolute" top={1} left={1} zIndex={1}
-            icon={<CloseIcon boxSize={2} />}
-            size="xs" colorScheme="red" variant="solid" borderRadius="full"
-            aria-label="Remover produto"
-            onClick={() => clearProduct(product.id)}
-          />
-        </>
-      )}
-
-      {/* Photo */}
-      <Box bg={photoBg} h={{ base: "90px", md: "110px" }} display="flex" alignItems="center" justifyContent="center">
-        {product.photo_url ? (
-          <Image src={product.photo_url} alt={product.name} objectFit="contain" w="full" h="full" />
-        ) : (
-          <Text fontSize={{ base: "2xl", md: "3xl" }}>{getEmoji(product.name)}</Text>
-        )}
-      </Box>
-
-      <Box p={2}>
-        <Text fontSize="xs" fontWeight="semibold" noOfLines={2} mb={0.5} lineHeight="tight">
-          {product.name}
-        </Text>
-
-        {/* Price editável + subtotal */}
-        <Flex justify="space-between" align="center" mb={2}>
-          <Flex
-            align="center"
-            gap={0.5}
-            bg={priceEditing ? priceEditBg : "transparent"}
-            borderRadius="md"
-            px={priceEditing ? 1.5 : 0}
-            py={priceEditing ? 0.5 : 0}
-            border={priceEditing ? "1.5px solid" : "1.5px solid transparent"}
-            borderColor={priceEditing ? "blue.400" : "transparent"}
-            cursor="text"
-            transition="all 0.15s"
-            onClick={() => !priceEditing && setPriceEditing(true)}
-          >
-            <Text fontSize="xs" fontWeight="bold" color="blue.500" lineHeight={1}>R$</Text>
-            <Input
-              value={priceInput}
-              onChange={e => setPriceInput(e.target.value)}
-              onBlur={handlePriceBlur}
-              tabIndex={-1}
-              size="xs"
-              w={`${Math.max(38, priceInput.length * 8)}px`}
-              variant="unstyled"
-              fontWeight="bold"
-              color="blue.500"
-              fontSize="sm"
-              type="number"
-              step="0.01"
-              min="0"
-              textAlign="left"
-              px={0}
-              lineHeight={1}
-            />
-          </Flex>
-          {totalInCart > 0 && (
-            <Text fontSize="xs" fontWeight="bold" color="green.500">
-              = R$ {(price * totalInCart).toFixed(2).replace(".", ",")}
-            </Text>
-          )}
-        </Flex>
-
-        {/* Size selector */}
-        <Flex wrap="wrap" gap={1} mb={2}>
-          {product.sizes.map(s => {
-            const isSelected = selectedSizes.has(s.id);
-            const inCart     = getQty(product.id, s.id);
-            return (
-              <Box
-                key={s.id}
-                as="button"
-                px={1.5}
-                py={0.5}
-                fontSize="xs"
-                borderRadius="md"
-                border="1.5px solid"
-                borderColor={isSelected ? "blue.400" : borderColor}
-                bg={isSelected ? blueActiveBg : "transparent"}
-                color={isSelected ? "white" : mutedColor}
-                onClick={() => toggleSize(s.id)}
-                fontWeight={isSelected ? "bold" : "normal"}
-                transition="all 0.1s"
-                position="relative"
-                _dark={{
-                  bg: isSelected ? blueActiveBg : "transparent",
-                  color: isSelected ? "white" : mutedColor,
-                }}
-              >
-                {s.name}
-                {inCart > 0 && (
-                  <Box
-                    as="span"
-                    position="absolute"
-                    top="-5px"
-                    right="-5px"
-                    w="14px"
-                    h="14px"
-                    bg="green.400"
-                    borderRadius="full"
-                    fontSize="8px"
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                    color="white"
-                    fontWeight="black"
-                    lineHeight={1}
-                  >
-                    {inCart}
-                  </Box>
-                )}
+    <Drawer isOpen={isOpen} onClose={onClose} placement="bottom" size="full">
+      <DrawerOverlay />
+      <DrawerContent>
+        <DrawerCloseButton zIndex={2} />
+        <DrawerBody px={0} pt={0} overflowY="auto">
+          {/* Photo */}
+          {product.photo_url && (
+            <Box bg="white" w="full" position="relative" _dark={{ bg: "gray.900" }}>
+              <Box w="full" pb="100%" position="relative">
+                <Image
+                  src={product.photo_url}
+                  alt={product.name}
+                  position="absolute"
+                  top={0} left={0} w="full" h="full"
+                  objectFit="contain"
+                  p={4}
+                />
               </Box>
-            );
-          })}
-        </Flex>
+            </Box>
+          )}
 
-        {/* Qty stepper + Add button */}
-        <Flex gap={1} align="center">
-          <Flex
-            align="center"
-            bg={stepperBg}
-            borderRadius="lg"
-            overflow="hidden"
-            flexShrink={0}
-            h="28px"
-          >
-            <Box
-              as="button"
-              px={2} h="full"
-              display="flex" alignItems="center" justifyContent="center"
-              fontSize="md" fontWeight="bold" color={mutedColor}
-              onClick={() => changeAddQty(-1)}
-              _hover={{ bg: "gray.200", _dark: { bg: "gray.600" } }}
-              cursor={addQty <= 1 ? "not-allowed" : "pointer"}
-              opacity={addQty <= 1 ? 0.4 : 1}
-            >
-              −
-            </Box>
-            <Text fontSize="sm" fontWeight="bold" px={2} minW="22px" textAlign="center" userSelect="none">
-              {addQty}
-            </Text>
-            <Box
-              as="button"
-              px={2} h="full"
-              display="flex" alignItems="center" justifyContent="center"
-              fontSize="sm" fontWeight="bold" color={mutedColor}
-              onClick={() => changeAddQty(1)}
-              _hover={{ bg: "gray.200", _dark: { bg: "gray.600" } }}
-            >
-              +
-            </Box>
+          <Box px={4} pt={3}>
+            <Text fontSize="lg" fontWeight="bold" mb={1}>{product.name}</Text>
+
+          {/* Price */}
+          <Flex align="center" justify="space-between" mb={4}>
+            <Flex align="center" gap={1}>
+              <Text fontSize="sm" fontWeight="bold" color="blue.500">R$</Text>
+              <Input
+                value={priceInput}
+                onChange={e => setPriceInput(e.target.value)}
+                onBlur={handlePriceBlur}
+                onFocus={e => e.target.select()}
+                size="sm" w="80px"
+                variant="flushed"
+                fontWeight="bold" color="blue.500" fontSize="lg"
+                type="number" step="0.01" min="0"
+              />
+            </Flex>
+            {totalInCart > 0 && (
+              <VStack spacing={0} align="end">
+                <Text fontSize="sm" fontWeight="bold" color="green.600">
+                  = R$ {(price * totalInCart).toFixed(2).replace(".", ",")}
+                </Text>
+                <Text fontSize="xs" color={mutedColor}>{totalInCart} peças no carrinho</Text>
+              </VStack>
+            )}
           </Flex>
 
-          <Button
-            size="xs" flex={1} colorScheme="blue" variant="outline"
-            borderRadius="lg" h="28px"
-            onClick={handleAdd}
-            isDisabled={selectedCount === 0}
-            fontSize="xs" px={1}
+          {/* Size selector */}
+          <Text fontSize="sm" fontWeight="bold" mb={2} color={mutedColor}>Tamanhos</Text>
+          <Flex wrap="wrap" gap={2} mb={4}>
+            {product.sizes.map(s => {
+              const isSelected = selectedSizes.has(s.id);
+              const inCart = getQty(product.id, s.id);
+              return (
+                <Box
+                  key={s.id}
+                  as="button"
+                  px={3} py={2}
+                  fontSize="sm"
+                  borderRadius="lg"
+                  border="2px solid"
+                  borderColor={isSelected ? "blue.400" : borderColor}
+                  bg={isSelected ? blueActiveBg : "transparent"}
+                  color={isSelected ? "white" : mutedColor}
+                  onClick={() => toggleSize(s.id)}
+                  fontWeight={isSelected ? "bold" : "normal"}
+                  transition="all 0.1s"
+                  position="relative"
+                  minW="44px"
+                  textAlign="center"
+                  _dark={{
+                    bg: isSelected ? blueActiveBg : "transparent",
+                    color: isSelected ? "white" : mutedColor,
+                  }}
+                >
+                  {s.name}
+                  {inCart > 0 && (
+                    <Box
+                      as="span"
+                      position="absolute" top="-8px" right="-8px"
+                      w="20px" h="20px"
+                      bg="green.400" borderRadius="full"
+                      fontSize="10px"
+                      display="flex" alignItems="center" justifyContent="center"
+                      color="white" fontWeight="black" lineHeight={1}
+                    >
+                      {inCart}
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
+          </Flex>
+
+          {/* Qty mode */}
+          <Text fontSize="sm" fontWeight="bold" mb={2} color={mutedColor}>
+            {mode === "grade" ? "Quantidade por tamanho" : "Total de peças"}
+          </Text>
+
+          {mode === "grade" ? (
+            <Flex gap={2} align="center" mb={2}>
+              <Flex align="center" bg={stepperBg} borderRadius="xl" overflow="hidden" h="40px" flexShrink={0}>
+                <Box
+                  as="button" px={4} h="full"
+                  display="flex" alignItems="center" justifyContent="center"
+                  fontSize="lg" fontWeight="bold" color={mutedColor}
+                  onClick={() => setAddQty(prev => Math.max(1, prev - 1))}
+                  cursor={addQty <= 1 ? "not-allowed" : "pointer"}
+                  opacity={addQty <= 1 ? 0.4 : 1}
+                >−</Box>
+                <Text fontSize="md" fontWeight="bold" px={3} minW="30px" textAlign="center" userSelect="none">
+                  {addQty}
+                </Text>
+                <Box
+                  as="button" px={4} h="full"
+                  display="flex" alignItems="center" justifyContent="center"
+                  fontSize="lg" fontWeight="bold" color={mutedColor}
+                  onClick={() => setAddQty(prev => prev + 1)}
+                >+</Box>
+              </Flex>
+              <Button
+                flex={1} colorScheme="blue" size="md" borderRadius="xl" h="40px"
+                onClick={handleAdd}
+                isDisabled={selectedCount === 0}
+              >
+                {totalInCart > 0
+                  ? `+ ${addQty} x ${selectedCount} tam.`
+                  : `Adicionar ${addQty} x ${selectedCount} tam.`
+                }
+              </Button>
+            </Flex>
+          ) : (
+            <Flex gap={2} align="center" mb={2}>
+              <Input
+                size="md" h="40px" w="80px"
+                borderRadius="xl"
+                textAlign="center"
+                fontWeight="bold"
+                fontSize="md"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                placeholder="Total"
+                value={totalInput}
+                onChange={e => setTotalInput(e.target.value.replace(/\D/g, ""))}
+                onFocus={e => e.target.select()}
+                flexShrink={0}
+              />
+              <Button
+                flex={1} colorScheme="purple" size="md" borderRadius="xl" h="40px"
+                onClick={handleAdd}
+                isDisabled={selectedCount === 0 || !totalInput || parseInt(totalInput, 10) <= 0}
+              >
+                Distribuir {totalInput || 0} peças
+              </Button>
+            </Flex>
+          )}
+
+          <Text
+            as="button" fontSize="xs"
+            color={mode === "grade" ? "purple.500" : "blue.500"}
+            onClick={() => setMode(prev => prev === "grade" ? "total" : "grade")}
+            _hover={{ textDecoration: "underline" }}
+            mb={4}
           >
-            {totalInCart > 0
-              ? `+${addQty} em ${selectedCount} tam.`
-              : `+ Adicionar${selectedCount < product.sizes.length ? ` (${selectedCount})` : " tudo"}`
-            }
+            {mode === "grade" ? "ou distribuir total de peças" : "voltar para grade x N"}
+          </Text>
+
+          {/* Cart summary for this product */}
+          {totalInCart > 0 && (
+            <Box bg={photoBg} borderRadius="xl" p={3} mb={4}>
+              <Flex justify="space-between" align="center" mb={2}>
+                <Text fontSize="sm" fontWeight="bold">No carrinho</Text>
+                <Button size="xs" colorScheme="red" variant="ghost" onClick={handleClear}>
+                  Limpar
+                </Button>
+              </Flex>
+              <Flex wrap="wrap" gap={2}>
+                {product.sizes.map(s => {
+                  const qty = getQty(product.id, s.id);
+                  if (qty === 0) return null;
+                  return (
+                    <VStack key={s.id} spacing={0} align="center" minW="36px">
+                      <Badge colorScheme="blue" fontSize="xs" px={2}>{s.name}</Badge>
+                      <Text fontSize="sm" fontWeight="bold">{qty}</Text>
+                    </VStack>
+                  );
+                })}
+              </Flex>
+              <Flex justify="flex-end" mt={2}>
+                <Text fontSize="sm" fontWeight="bold" color="green.600">
+                  {totalInCart} pcs = R$ {(price * totalInCart).toFixed(2).replace(".", ",")}
+                </Text>
+              </Flex>
+            </Box>
+          )}
+          </Box>
+        </DrawerBody>
+
+        <DrawerFooter borderTop="1px solid" borderColor={borderColor} pb={{ base: 8, md: 4 }}>
+          <Button w="full" variant="outline" size="md" borderRadius="xl" onClick={onClose}>
+            Fechar
           </Button>
-        </Flex>
-      </Box>
-    </Box>
+        </DrawerFooter>
+      </DrawerContent>
+    </Drawer>
   );
 }

@@ -70,7 +70,7 @@ const UsersManagement = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingUser, setEditingUser] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user", active: true, whatsapp: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user", active: true, whatsapp: "", isRep: false, repCode: "" });
   const [saving, setSaving] = useState(false);
   const modal = useDisclosure();
   const toast = useToast();
@@ -95,13 +95,13 @@ const UsersManagement = () => {
 
   const openCreate = () => {
     setEditingUser(null);
-    setForm({ name: "", email: "", password: "", role: "user", active: true, whatsapp: "" });
+    setForm({ name: "", email: "", password: "", role: "user", active: true, whatsapp: "", isRep: false, repCode: "" });
     modal.onOpen();
   };
 
   const openEdit = (user) => {
     setEditingUser(user);
-    setForm({ name: user.name, email: user.email, password: "", role: user.role, active: user.active, whatsapp: user.whatsapp || "" });
+    setForm({ name: user.name, email: user.email, password: "", role: user.role, active: user.active, whatsapp: user.whatsapp || "", isRep: !!user.repCode, repCode: user.repCode || "" });
     modal.onOpen();
   };
 
@@ -114,7 +114,8 @@ const UsersManagement = () => {
           email: form.email,
           role: form.role,
           active: form.active,
-          whatsapp: form.whatsapp
+          whatsapp: form.whatsapp,
+          repCode: form.isRep ? form.repCode : null
         });
         if (form.password) {
           await updateUserPassword(editingUser.id, form.password);
@@ -126,7 +127,8 @@ const UsersManagement = () => {
           email: form.email,
           password: form.password,
           role: form.role,
-          whatsapp: form.whatsapp
+          whatsapp: form.whatsapp,
+          repCode: form.isRep ? form.repCode : null
         });
         toast({ title: "Usuário criado.", status: "success", duration: 3000 });
       }
@@ -275,6 +277,23 @@ const UsersManagement = () => {
                   <option value="admin">Administrador</option>
                 </Select>
               </FormControl>
+              <FormControl display="flex" alignItems="center">
+                <FormLabel mb={0}>Representante</FormLabel>
+                <Switch
+                  isChecked={form.isRep}
+                  onChange={(e) => setForm({ ...form, isRep: e.target.checked, repCode: e.target.checked ? form.repCode : "" })}
+                />
+              </FormControl>
+              {form.isRep && (
+                <FormControl isRequired>
+                  <FormLabel>Cod. Representante (Sisplan)</FormLabel>
+                  <Input
+                    value={form.repCode}
+                    onChange={(e) => setForm({ ...form, repCode: e.target.value })}
+                    placeholder="Ex: 001"
+                  />
+                </FormControl>
+              )}
               {editingUser && (
                 <FormControl display="flex" alignItems="center">
                   <FormLabel mb={0}>Ativo</FormLabel>
