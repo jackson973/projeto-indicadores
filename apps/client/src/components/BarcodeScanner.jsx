@@ -27,29 +27,29 @@ function playBeep(type = "success") {
     gain.connect(ctx.destination);
 
     if (type === "success") {
-      osc.frequency.value = 1200;
-      gain.gain.value = 0.3;
+      osc.frequency.value = 1400;
+      gain.gain.value = 1.0;
       osc.start();
-      osc.stop(ctx.currentTime + 0.12);
+      osc.stop(ctx.currentTime + 0.2);
     } else if (type === "duplicate") {
-      osc.frequency.value = 600;
-      gain.gain.value = 0.2;
+      osc.frequency.value = 700;
+      gain.gain.value = 1.0;
       osc.start();
-      osc.stop(ctx.currentTime + 0.3);
+      osc.stop(ctx.currentTime + 0.4);
     } else {
       // error: two short low beeps
-      osc.frequency.value = 300;
-      gain.gain.value = 0.3;
+      osc.frequency.value = 350;
+      gain.gain.value = 1.0;
       osc.start();
-      osc.stop(ctx.currentTime + 0.1);
+      osc.stop(ctx.currentTime + 0.2);
       const osc2 = ctx.createOscillator();
       const gain2 = ctx.createGain();
       osc2.connect(gain2);
       gain2.connect(ctx.destination);
-      osc2.frequency.value = 300;
-      gain2.gain.value = 0.3;
-      osc2.start(ctx.currentTime + 0.15);
-      osc2.stop(ctx.currentTime + 0.25);
+      osc2.frequency.value = 350;
+      gain2.gain.value = 1.0;
+      osc2.start(ctx.currentTime + 0.3);
+      osc2.stop(ctx.currentTime + 0.5);
     }
   } catch (_) {}
 }
@@ -130,7 +130,11 @@ export default function BarcodeScanner({
           { facingMode: "environment" },
           {
             fps: 10,
-            qrbox: { width: 320, height: 160 },
+            qrbox: (viewfinderWidth, viewfinderHeight) => {
+              const w = Math.floor(viewfinderWidth * 0.85);
+              const h = Math.floor(viewfinderHeight * 0.35);
+              return { width: Math.max(w, 250), height: Math.max(h, 150) };
+            },
             formatsToSupport: [0, 4, 3, 2, 7, 11],
           },
           (decodedText) => {
