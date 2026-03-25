@@ -557,11 +557,11 @@ const SisplanSettings = () => {
           </AccordionPanel>
         </AccordionItem>
 
-        {/* 2. Query SQL */}
+        {/* 2. Vendas */}
         <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
           <AccordionButton py={3} _expanded={{ bg: refBg }}>
             <Box flex="1" textAlign="left">
-              <Text fontWeight="semibold">Query SQL</Text>
+              <Text fontWeight="semibold">Vendas</Text>
             </Box>
             <AccordionIcon />
           </AccordionButton>

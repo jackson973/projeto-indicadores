@@ -474,7 +474,9 @@ async function checkDeletedOrders() {
           [order.id]
         );
       }
-      console.log(`[Sisplan Integration] ${deleted.length} pedido(s) removido(s) do Sisplan detectado(s): ${deleted.map(o => `#${o.id} (${o.sisplan_order_id})`).join(', ')}`);
+      console.log(`[Sisplan Order Check] ${deleted.length} pedido(s) removido(s) do Sisplan: ${deleted.map(o => `#${o.id} (${o.sisplan_order_id})`).join(', ')}`);
+    } else {
+      console.log(`[Sisplan Order Check] ${integrated.length} pedido(s) verificado(s), todos ok.`);
     }
   } catch (err) {
     console.error('[Sisplan Integration] Erro ao verificar pedidos deletados:', err.message);
