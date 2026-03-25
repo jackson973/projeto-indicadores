@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useId, useState } from "react";
 import { Html5Qrcode } from "html5-qrcode";
 import {
   Box,
+  Button,
   Flex,
   HStack,
   IconButton,
@@ -15,14 +16,10 @@ import {
 import { SearchIcon } from "@chakra-ui/icons";
 
 /**
- * BarcodeScanner — leitura de código de barras via câmera + input manual (fallback).
+ * BarcodeScanner — input para leitor/digitação + câmera opcional.
  *
- * Props:
- *  - onScan(code: string)  — chamado quando um código é lido
- *  - onError(err: string)  — chamado quando há erro (opcional)
- *  - active (bool)         — controla se o scanner está ativo
- *  - continuous (bool)     — se true, continua escaneando após cada leitura (default: true)
- *  - height (string)       — altura do visor da câmera (default: "220px")
+ * A câmera NÃO abre automaticamente. O usuário clica em "Abrir Câmera" se quiser.
+ * O input de texto funciona imediatamente com pistola bluetooth/USB ou digitação.
  */
 export default function BarcodeScanner({
   onScan,
@@ -39,7 +36,8 @@ export default function BarcodeScanner({
   const lastTimeRef = useRef(0);
   const inputRef = useRef(null);
   const [manualCode, setManualCode] = useState("");
-  const [cameraAvailable, setCameraAvailable] = useState(true);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [cameraError, setCameraError] = useState(null);
   const bg = useColorModeValue("gray.100", "gray.700");
   const mutedColor = useColorModeValue("gray.500", "gray.400");
 
@@ -47,7 +45,6 @@ export default function BarcodeScanner({
     (decodedText) => {
       const code = decodedText.trim();
       if (!code) return;
-      // Debounce: ignore same code within 2s
       const now = Date.now();
       if (code === lastCodeRef.current && now - lastTimeRef.current < 2000) return;
       lastCodeRef.current = code;
@@ -66,8 +63,9 @@ export default function BarcodeScanner({
     inputRef.current?.focus();
   }
 
+  // Start/stop camera only when cameraOn changes
   useEffect(() => {
-    if (!active || !containerRef.current) return;
+    if (!active || !cameraOn || !containerRef.current) return;
 
     const scanner = new Html5Qrcode(containerId);
     scannerRef.current = scanner;
@@ -78,25 +76,20 @@ export default function BarcodeScanner({
         {
           fps: 10,
           qrbox: { width: 250, height: 100 },
-          formatsToSupport: [
-            0,  // QR_CODE
-            4,  // EAN_13
-            3,  // EAN_8
-            2,  // CODE_128
-            7,  // CODE_39
-            11, // UPC_A
-          ],
+          formatsToSupport: [0, 4, 3, 2, 7, 11],
         },
         (decodedText) => {
           handleScan(decodedText);
           if (!continuous) {
             scanner.stop().catch(() => {});
+            setCameraOn(false);
           }
         },
         () => {}
       )
-      .catch(() => {
-        setCameraAvailable(false);
+      .catch((err) => {
+        setCameraError(typeof err === "string" ? err : "Câmera indisponível");
+        setCameraOn(false);
       });
 
     return () => {
@@ -108,13 +101,18 @@ export default function BarcodeScanner({
           scannerRef.current = null;
         });
     };
-  }, [active, continuous, handleScan, containerId]);
+  }, [active, cameraOn, continuous, handleScan, containerId]);
+
+  // Turn off camera when component deactivates
+  useEffect(() => {
+    if (!active) setCameraOn(false);
+  }, [active]);
 
   if (!active) return null;
 
   return (
     <VStack spacing={2} w="full">
-      {/* Input manual — sempre visível, funciona com pistola bluetooth também */}
+      {/* Input — sempre visível, funciona com pistola bluetooth/USB */}
       <form onSubmit={handleManualSubmit} style={{ width: "100%" }}>
         <HStack spacing={2}>
           <InputGroup size="sm" flex={1}>
@@ -123,12 +121,11 @@ export default function BarcodeScanner({
             </InputLeftElement>
             <Input
               ref={inputRef}
-              placeholder="Digitar ou bipar código..."
+              placeholder="Bipar com leitor ou digitar código..."
               value={manualCode}
               onChange={e => setManualCode(e.target.value)}
               borderRadius="lg"
               autoFocus
-              inputMode="numeric"
             />
           </InputGroup>
           <IconButton
@@ -142,8 +139,20 @@ export default function BarcodeScanner({
         </HStack>
       </form>
 
-      {/* Câmera */}
-      {cameraAvailable ? (
+      {/* Botão para ativar câmera (não abre automaticamente) */}
+      {!cameraOn && (
+        <Button
+          size="xs"
+          variant="ghost"
+          color={mutedColor}
+          onClick={() => { setCameraError(null); setCameraOn(true); }}
+        >
+          Abrir câmera
+        </Button>
+      )}
+
+      {/* Câmera (só quando ativada pelo usuário) */}
+      {cameraOn && (
         <>
           <Box
             id={containerId}
@@ -159,22 +168,19 @@ export default function BarcodeScanner({
               "& #qr-shaded-region": { borderColor: "blue.400 !important" },
             }}
           />
-          <Text fontSize="xs" color={mutedColor} textAlign="center">
-            Aponte a câmera ou use o campo acima
-          </Text>
+          <Button
+            size="xs"
+            variant="ghost"
+            colorScheme="red"
+            onClick={() => setCameraOn(false)}
+          >
+            Fechar câmera
+          </Button>
         </>
-      ) : (
-        <Flex
-          w="full"
-          py={4}
-          justify="center"
-          bg={bg}
-          borderRadius="xl"
-        >
-          <Text fontSize="xs" color={mutedColor} textAlign="center">
-            Câmera indisponível — use o campo acima para digitar ou bipar com pistola
-          </Text>
-        </Flex>
+      )}
+
+      {cameraError && (
+        <Text fontSize="xs" color="red.500" textAlign="center">{cameraError}</Text>
       )}
     </VStack>
   );
