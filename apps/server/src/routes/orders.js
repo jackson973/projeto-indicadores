@@ -192,6 +192,19 @@ router.post('/catalog/:id/associate-group', requireAdmin, async (req, res) => {
   }
 });
 
+// PUT /api/orders/catalog/:id/link-group — link/unlink catalog product to product group
+router.put('/catalog/:id/link-group', requireAdmin, async (req, res) => {
+  try {
+    const { groupId } = req.body;
+    await repo.linkCatalogProductGroup(req.params.id, groupId || null);
+    console.log(`[Catalog] Product #${req.params.id} linked to group ${groupId || 'NONE'}`);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[Catalog] link-group error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/orders/scan/:barcode — lookup barcode → product + size
 router.get('/scan/:barcode', async (req, res) => {
   const t0 = Date.now();

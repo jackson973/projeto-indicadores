@@ -375,7 +375,7 @@ async function removeBarcode(id) {
 }
 
 async function lookupBarcode(barcode) {
-  // First try order_catalog_barcodes (already mapped)
+  // 1. Try order_catalog_barcodes (manually mapped)
   const { rows } = await pool.query(
     `SELECT b.*, p.name AS product_name, p.photo_url, p.price_pc, p.price_mn
      FROM order_catalog_barcodes b
@@ -386,8 +386,38 @@ async function lookupBarcode(barcode) {
   if (rows.length > 0) {
     return { found: true, source: 'catalog', ...rows[0] };
   }
-  // Fallback: try sisplan_products by EAN (not yet mapped)
-  // EAN field may contain multiple barcodes separated by comma
+
+  // 2. Dynamic resolution: EAN → sisplan_products.codigo → group → catalog product
+  const { rows: dynRows } = await pool.query(
+    `SELECT
+       sp.codigo, sp.descricao, sp.desc_cor, sp.tamanho, sp.sku,
+       p.id AS catalog_product_id, p.name AS product_name, p.photo_url, p.price_pc, p.price_mn
+     FROM sisplan_products sp
+     JOIN product_group_items gi ON gi.product_sku = sp.codigo
+     JOIN order_catalog_products p ON p.group_id = gi.group_id AND p.active = true
+     WHERE sp.active = true AND sp.ean IS NOT NULL
+       AND $1 = ANY(string_to_array(REPLACE(sp.ean, ' ', ''), ','))
+     LIMIT 1`,
+    [barcode]
+  );
+  if (dynRows.length > 0) {
+    const sp = dynRows[0];
+    return {
+      found: true,
+      source: 'catalog',
+      catalog_product_id: sp.catalog_product_id,
+      product_name: sp.product_name,
+      photo_url: sp.photo_url,
+      price_pc: sp.price_pc,
+      price_mn: sp.price_mn,
+      size_name: String(sp.tamanho || '').toUpperCase(),
+      barcode,
+      sisplan_sku: sp.sku,
+      label: [sp.descricao, sp.desc_cor].filter(Boolean).join(' - ')
+    };
+  }
+
+  // 3. Found in sisplan but no group/catalog link
   const { rows: spRows } = await pool.query(
     `SELECT * FROM sisplan_products
      WHERE active = true AND ean IS NOT NULL
@@ -495,6 +525,13 @@ async function associateBarcodesByGroup(catalogProductId, groupId) {
   return { added, skipped, message: `${added} códigos vinculados, ${skipped} ignorados (já existentes ou sem tamanho)` };
 }
 
+async function linkCatalogProductGroup(catalogProductId, groupId) {
+  await pool.query(
+    'UPDATE order_catalog_products SET group_id = $1 WHERE id = $2',
+    [groupId, catalogProductId]
+  );
+}
+
 module.exports = {
   getPaymentConditions,
   createPaymentCondition,
@@ -512,6 +549,7 @@ module.exports = {
   removeBarcode,
   lookupBarcode,
   associateBarcodesByGroup,
+  linkCatalogProductGroup,
   getCustomers,
   upsertCustomers,
   getOrders,

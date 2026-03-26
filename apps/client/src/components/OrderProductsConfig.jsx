@@ -45,8 +45,10 @@ import {
   removeCatalogBarcode,
   fetchProductGroups,
   associateBarcodesByGroup,
+  linkCatalogProductGroup,
 } from "../api";
 import BarcodeScanner from "./BarcodeScanner";
+import SearchableSelect from "./SearchableSelect";
 
 const SIZE_ORDER = ["RN", "PP", "P", "M", "G", "GG", "XG", "XGG", "EG", "EGG"];
 
@@ -250,6 +252,19 @@ export default function OrderProductsConfig() {
     } finally {
       setAssociating(false);
       setGroupSelectOpen(false);
+    }
+  }
+
+  async function handleLinkGroup(groupId) {
+    if (!editing?.id) return;
+    try {
+      await linkCatalogProductGroup(editing.id, groupId || null);
+      setEditing(prev => ({ ...prev, group_id: groupId ? Number(groupId) : null }));
+      // Update in products list too
+      setProducts(prev => prev.map(p => p.id === editing.id ? { ...p, group_id: groupId ? Number(groupId) : null } : p));
+      toast({ status: "success", description: groupId ? "Grupo vinculado! Barcodes serão resolvidos automaticamente." : "Grupo desvinculado.", duration: 3000 });
+    } catch (err) {
+      toast({ status: "error", description: err.message, duration: 3000 });
     }
   }
 
@@ -691,64 +706,42 @@ export default function OrderProductsConfig() {
                       </FormLabel>
                     </Flex>
 
-                    {/* Action buttons — stacked on mobile */}
-                    <SimpleGrid columns={2} gap={2} mb={3}>
-                      <Button
-                        size="md"
-                        colorScheme={scannerActive ? "red" : "green"}
-                        variant={scannerActive ? "solid" : "outline"}
-                        onClick={() => { setScannerActive(!scannerActive); setLastScanned(null); setGroupSelectOpen(false); }}
-                        w="full"
-                      >
-                        {scannerActive ? "Fechar Scanner" : "Bipar"}
-                      </Button>
-                      <Button
-                        size="md"
-                        colorScheme={groupSelectOpen ? "red" : "blue"}
-                        variant={groupSelectOpen ? "solid" : "outline"}
-                        onClick={() => { setGroupSelectOpen(!groupSelectOpen); setScannerActive(false); }}
-                        isLoading={associating}
-                        loadingText="Associando..."
-                        w="full"
-                      >
-                        {groupSelectOpen ? "Cancelar" : "Por Grupo"}
-                      </Button>
-                    </SimpleGrid>
-
-                    {/* Seleção de grupo para associação automática */}
-                    <Collapse in={groupSelectOpen} animateOpacity>
-                      <Box mb={3} p={3} bg={photoBg} borderRadius="lg" border="1px solid" borderColor={borderColor}>
-                        <Text fontSize="sm" fontWeight="bold" mb={3}>
-                          Selecione o grupo:
+                    {/* Grupo vinculado — resolução dinâmica de barcodes */}
+                    <Box mb={3} position="relative" zIndex={10}>
+                      <Text fontSize="xs" fontWeight="bold" mb={1} color={mutedColor}>Grupo de Produtos</Text>
+                      <Flex gap={2}>
+                        <Box flex={1}>
+                          <SearchableSelect
+                            size="sm"
+                            placeholder="Selecionar grupo..."
+                            value={editing.group_id ? String(editing.group_id) : ""}
+                            onChange={handleLinkGroup}
+                            options={groups.map(g => ({ value: String(g.id), label: g.name }))}
+                          />
+                        </Box>
+                        {editing.group_id && (
+                          <IconButton size="sm" icon={<DeleteIcon />} colorScheme="red" variant="ghost"
+                            aria-label="Desvincular grupo" onClick={() => handleLinkGroup(null)} />
+                        )}
+                      </Flex>
+                      {editing.group_id && (
+                        <Text fontSize="xs" color="green.500" mt={1}>
+                          Barcodes do grupo serão resolvidos automaticamente ao bipar.
                         </Text>
-                        <VStack spacing={2} align="stretch" maxH="280px" overflowY="auto">
-                          {groups.map(g => (
-                            <Button
-                              key={g.id}
-                              size="lg"
-                              variant="outline"
-                              justifyContent="flex-start"
-                              isLoading={associating}
-                              onClick={() => handleAssociateGroup(g.id)}
-                              py={4}
-                              h="auto"
-                              whiteSpace="normal"
-                              textAlign="left"
-                            >
-                              <Box>
-                                <Text fontSize="sm">{g.name}</Text>
-                                {g.product_count != null && (
-                                  <Text fontSize="xs" color={mutedColor}>{g.product_count} produtos</Text>
-                                )}
-                              </Box>
-                            </Button>
-                          ))}
-                          {groups.length === 0 && (
-                            <Text fontSize="sm" color={mutedColor} textAlign="center" py={4}>Nenhum grupo cadastrado.</Text>
-                          )}
-                        </VStack>
-                      </Box>
-                    </Collapse>
+                      )}
+                    </Box>
+
+                    {/* Action button for manual scanning */}
+                    <Button
+                      size="md"
+                      colorScheme={scannerActive ? "red" : "green"}
+                      variant={scannerActive ? "solid" : "outline"}
+                      onClick={() => { setScannerActive(!scannerActive); setLastScanned(null); }}
+                      w="full"
+                      mb={3}
+                    >
+                      {scannerActive ? "Fechar Scanner" : "Bipar"}
+                    </Button>
 
                     {/* Scanner */}
                     <Collapse in={scannerActive} animateOpacity>

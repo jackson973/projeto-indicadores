@@ -1199,6 +1199,15 @@ export const associateBarcodesByGroup = async (productId, groupId) => {
   return handleResponse(r);
 };
 
+export const linkCatalogProductGroup = async (productId, groupId) => {
+  const r = await authFetch(`/api/orders/catalog/${productId}/link-group`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groupId }),
+  });
+  return handleResponse(r);
+};
+
 export const scanBarcode = async (barcode) => {
   const r = await authFetch(`/api/orders/scan/${encodeURIComponent(barcode)}`);
   return handleResponse(r);
