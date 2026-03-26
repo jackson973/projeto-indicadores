@@ -354,7 +354,7 @@ async function deleteProductGroup(id) {
 
 async function getGroupItems(groupId) {
   const result = await db.query(
-    'SELECT id, group_id, ad_name, variation_filter, created_at FROM product_group_items WHERE group_id = $1 ORDER BY ad_name, variation_filter',
+    'SELECT id, group_id, ad_name, variation_filter, product_sku, created_at FROM product_group_items WHERE group_id = $1 ORDER BY ad_name, variation_filter',
     [groupId]
   );
   return result.rows;

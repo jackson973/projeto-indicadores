@@ -768,8 +768,11 @@ const ProductGroups = () => {
                             <ExternalLinkIcon boxSize={3} color="gray.400" />
                           </Link>
                         )}
+                        {i.product_sku && (
+                          <Tag size="sm" fontSize="10px" variant="solid" colorScheme="green" ml={1} flexShrink={0}>{i.product_sku}</Tag>
+                        )}
                         {getAdLoja(i.ad_name) && (
-                          <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={2} flexShrink={0}>{getAdLoja(i.ad_name)}</Tag>
+                          <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={1} flexShrink={0}>{getAdLoja(i.ad_name)}</Tag>
                         )}
                         <IconButton icon={<CloseIcon />} size="xs" variant="ghost" colorScheme="red"
                           aria-label="Remover" ml={2} flexShrink={0} onClick={() => handleRemoveItem(i.ad_name, i.variation_filter)} />
