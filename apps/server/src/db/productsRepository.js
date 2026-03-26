@@ -410,18 +410,31 @@ async function removeItemsFromGroupBatch(groupId, items) {
  * Agrupa por cod_store|||ad_name.
  */
 async function getAllAdsWithGroup() {
-  const saKeyExpr = `COALESCE(sa.cod_store::text, sa.store) || '|||' || TRIM(sa.ad_name)`;
   const result = await db.query(`
+    WITH sale_thumbs AS (
+      SELECT
+        COALESCE(sa.cod_store::text, sa.store) || '|||' || TRIM(sa.ad_name) AS svk,
+        MAX(CASE WHEN sa.image IS NOT NULL AND TRIM(sa.image) != '' THEN sa.image END) AS thumbnail,
+        MAX(CASE WHEN sa.sku IS NOT NULL AND TRIM(sa.sku) != '' THEN sa.sku END) AS sku,
+        MAX(sa.product_url) AS product_url
+      FROM sales sa
+      GROUP BY COALESCE(sa.cod_store::text, sa.store) || '|||' || TRIM(sa.ad_name)
+    ),
+    sisplan_var_counts AS (
+      SELECT descricao, COUNT(DISTINCT cod_cor) FILTER (WHERE cod_cor IS NOT NULL AND TRIM(cod_cor) != '')::int AS variation_count
+      FROM sisplan_products WHERE active = true
+      GROUP BY descricao
+    )
     SELECT
       s.store_variation_key,
       s.ad_name,
       s.loja,
-      sale.thumbnail,
+      st.thumbnail,
       s.platform,
-      sale.sku,
+      st.sku,
       s.sisplan_codigo,
       s.variation_count,
-      COALESCE(sale.product_url, uc.product_url) AS product_url,
+      COALESCE(st.product_url, uc.product_url) AS product_url,
       gi.group_id,
       g.name AS group_name,
       gi.variation_filter
@@ -450,23 +463,12 @@ async function getAllAdsWithGroup() {
         'Fabrica' AS loja,
         'Sisplan' AS platform,
         sp.codigo AS sisplan_codigo,
-        (SELECT COUNT(DISTINCT sp2.cod_cor)
-         FROM sisplan_products sp2
-         WHERE sp2.descricao = sp.descricao AND sp2.active = true
-           AND sp2.cod_cor IS NOT NULL AND TRIM(sp2.cod_cor) != ''
-        )::int AS variation_count
+        svc.variation_count
       FROM sisplan_products sp
+      LEFT JOIN sisplan_var_counts svc ON svc.descricao = sp.descricao
       WHERE sp.active = true
     ) s
-    -- Enriquece com thumbnail/sku/product_url das vendas
-    LEFT JOIN LATERAL (
-      SELECT
-        MAX(CASE WHEN sa.image IS NOT NULL AND TRIM(sa.image) != '' THEN sa.image END) AS thumbnail,
-        MAX(CASE WHEN sa.sku IS NOT NULL AND TRIM(sa.sku) != '' THEN sa.sku END) AS sku,
-        MAX(sa.product_url) AS product_url
-      FROM sales sa
-      WHERE COALESCE(sa.cod_store::text, sa.store) || '|||' || TRIM(sa.ad_name) = s.store_variation_key
-    ) sale ON true
+    LEFT JOIN sale_thumbs st ON st.svk = s.store_variation_key
     LEFT JOIN product_url_cache uc ON uc.store_variation_key = s.store_variation_key
     LEFT JOIN product_group_items gi ON gi.ad_name = s.store_variation_key
     LEFT JOIN product_groups g ON g.id = gi.group_id
