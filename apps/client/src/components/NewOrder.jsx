@@ -664,7 +664,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                   <Box flex={1} mr={2}>
                     <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>{item.product.name}</Text>
                     <HStack spacing={1} mt={0.5}>
-                      <Badge colorScheme="gray" fontSize="xs">{item.size.name}</Badge>
+                      <Badge colorScheme="gray" fontSize="xs">Tam {item.size.name}</Badge>
                       <Text fontSize="xs" color={mutedColor}>
                         R$ {(item.unitPrice ?? 0).toFixed(2).replace(".", ",")} un
                       </Text>
