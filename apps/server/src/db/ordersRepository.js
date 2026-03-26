@@ -406,27 +406,37 @@ async function associateBarcodesByGroup(catalogProductId, groupId) {
   const product = await getCatalogProductById(catalogProductId);
   if (!product) throw new Error('Produto do catálogo não encontrado');
 
-  // 2. Get group items that are from Sisplan (Fabrica|||descricao)
+  // 2. Get group items that are from Sisplan — prefer product_sku (codigo), fallback to descricao
   const { rows: groupItems } = await pool.query(
-    `SELECT ad_name, variation_filter FROM product_group_items WHERE group_id = $1`,
+    `SELECT ad_name, variation_filter, product_sku FROM product_group_items WHERE group_id = $1`,
     [groupId]
   );
-  const sisplanDescricoes = groupItems
-    .filter(gi => gi.ad_name.startsWith('Fabrica|||'))
-    .map(gi => gi.ad_name.split('|||')[1]);
+  const fabricaItems = groupItems.filter(gi => gi.ad_name.startsWith('Fabrica|||'));
+  const sisplanCodigos = fabricaItems.map(gi => gi.product_sku).filter(Boolean);
+  const sisplanDescricoes = fabricaItems.filter(gi => !gi.product_sku).map(gi => gi.ad_name.split('|||')[1]);
 
-  console.log(`[Scan] Group #${groupId}: ${sisplanDescricoes.length} Sisplan descriptions found:`, sisplanDescricoes.slice(0, 5));
+  console.log(`[Scan] Group #${groupId}: ${sisplanCodigos.length} by codigo, ${sisplanDescricoes.length} by descricao`);
 
-  if (sisplanDescricoes.length === 0) {
+  if (sisplanCodigos.length === 0 && sisplanDescricoes.length === 0) {
     return { added: 0, skipped: 0, message: 'Nenhum produto Sisplan encontrado neste grupo' };
   }
 
-  // 3. Find all sisplan_products matching those descricoes — including those without EAN for logging
+  // 3. Find all sisplan_products matching by codigo (strong key) or descricao (fallback)
+  const conditions = [];
+  const params = [];
+  if (sisplanCodigos.length > 0) {
+    params.push(sisplanCodigos);
+    conditions.push(`codigo = ANY($${params.length})`);
+  }
+  if (sisplanDescricoes.length > 0) {
+    params.push(sisplanDescricoes);
+    conditions.push(`descricao = ANY($${params.length})`);
+  }
   const { rows: allSisplanProducts } = await pool.query(
     `SELECT codigo, descricao, cod_cor, desc_cor, tamanho, sku, ean
      FROM sisplan_products
-     WHERE active = true AND descricao = ANY($1)`,
-    [sisplanDescricoes]
+     WHERE active = true AND (${conditions.join(' OR ')})`,
+    params
   );
 
   const sisplanProducts = allSisplanProducts.filter(sp => sp.ean && sp.ean.trim());

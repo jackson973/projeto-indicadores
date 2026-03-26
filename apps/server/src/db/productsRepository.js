@@ -360,15 +360,15 @@ async function getGroupItems(groupId) {
   return result.rows;
 }
 
-async function addItemToGroup(groupId, adName, variationFilter = null) {
+async function addItemToGroup(groupId, adName, variationFilter = null, productSku = null) {
   // Remove existing entry for same ad+variation combo
   await db.query(
     `DELETE FROM product_group_items WHERE ad_name = $1 AND COALESCE(variation_filter, '') = COALESCE($2, '')`,
     [adName, variationFilter]
   );
   const result = await db.query(
-    'INSERT INTO product_group_items (group_id, ad_name, variation_filter) VALUES ($1, $2, $3) RETURNING *',
-    [groupId, adName, variationFilter || null]
+    'INSERT INTO product_group_items (group_id, ad_name, variation_filter, product_sku) VALUES ($1, $2, $3, $4) RETURNING *',
+    [groupId, adName, variationFilter || null, productSku]
   );
   return result.rows[0];
 }
@@ -384,10 +384,11 @@ async function removeItemFromGroup(groupId, adName, variationFilter = null) {
 async function addItemsToGroupBatch(groupId, items) {
   const results = [];
   for (const item of items) {
-    // Support both string (legacy) and object { ad_name, variation_filter }
+    // Support both string (legacy) and object { ad_name, variation_filter, product_sku }
     const adName = typeof item === 'string' ? item : item.ad_name;
     const variationFilter = typeof item === 'string' ? null : (item.variation_filter || null);
-    const row = await addItemToGroup(groupId, adName, variationFilter);
+    const productSku = typeof item === 'string' ? null : (item.product_sku || null);
+    const row = await addItemToGroup(groupId, adName, variationFilter, productSku);
     results.push(row);
   }
   return results;
@@ -418,6 +419,7 @@ async function getAllAdsWithGroup() {
       sale.thumbnail,
       s.platform,
       sale.sku,
+      s.sisplan_codigo,
       s.variation_count,
       COALESCE(sale.product_url, uc.product_url) AS product_url,
       gi.group_id,
@@ -430,6 +432,7 @@ async function getAllAdsWithGroup() {
         up.ad_name,
         up.shop_name AS loja,
         up.platform,
+        NULL::varchar AS sisplan_codigo,
         (SELECT COUNT(DISTINCT upv.variation_option)
          FROM upseller_product_variations upv
          WHERE upv.product_id = up.id
@@ -446,6 +449,7 @@ async function getAllAdsWithGroup() {
         sp.descricao AS ad_name,
         'Fabrica' AS loja,
         'Sisplan' AS platform,
+        sp.codigo AS sisplan_codigo,
         (SELECT COUNT(DISTINCT sp2.cod_cor)
          FROM sisplan_products sp2
          WHERE sp2.descricao = sp.descricao AND sp2.active = true

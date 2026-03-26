@@ -316,7 +316,7 @@ const ProductGroups = () => {
         }
       }
       // No variations or single variation — add directly
-      await addProductGroupItem(targetGroupId, ad.store_variation_key, null);
+      await addProductGroupItem(targetGroupId, ad.store_variation_key, null, ad.sisplan_codigo || null);
       await loadGroupItems(selectedGroupId || targetGroupId); await loadGroups(); await loadAllAds();
     } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
     finally { setAddingAd(null); }
@@ -348,7 +348,7 @@ const ProductGroups = () => {
     if (!variationAd || !variationTargetGroupId) return;
     setLoadingVariations(true);
     try {
-      await addProductGroupItem(variationTargetGroupId, variationAd.store_variation_key, selectedVariation);
+      await addProductGroupItem(variationTargetGroupId, variationAd.store_variation_key, selectedVariation, variationAd.sisplan_codigo || null);
       setBatchAddedCount((c) => c + 1);
       variationModal.onClose();
       // Process next in queue
@@ -382,7 +382,7 @@ const ProductGroups = () => {
           }
         } catch { /* ignore — treat as no variations */ }
       }
-      directItems.push(ad.store_variation_key);
+      directItems.push({ ad_name: ad.store_variation_key, product_sku: ad.sisplan_codigo || null });
     }
 
     // Add direct items in batch

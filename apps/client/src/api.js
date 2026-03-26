@@ -1066,11 +1066,11 @@ export const fetchProductGroupItems = async (groupId) => {
   return handleResponse(response);
 };
 
-export const addProductGroupItem = async (groupId, adName, variationFilter = null) => {
+export const addProductGroupItem = async (groupId, adName, variationFilter = null, productSku = null) => {
   const response = await authFetch(`/api/products/groups/${groupId}/items`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ad_name: adName, variation_filter: variationFilter }),
+    body: JSON.stringify({ ad_name: adName, variation_filter: variationFilter, product_sku: productSku }),
   });
   return handleResponse(response);
 };

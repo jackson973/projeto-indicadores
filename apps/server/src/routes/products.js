@@ -159,9 +159,9 @@ router.get('/groups/:id/items', async (req, res) => {
 // ── POST /api/products/groups/:id/items ──────────────────────────────────────
 router.post('/groups/:id/items', async (req, res) => {
   try {
-    const { ad_name, variation_filter } = req.body;
+    const { ad_name, variation_filter, product_sku } = req.body;
     if (!ad_name) return res.status(400).json({ message: 'ad_name é obrigatório.' });
-    const item = await productsRepo.addItemToGroup(req.params.id, ad_name, variation_filter || null);
+    const item = await productsRepo.addItemToGroup(req.params.id, ad_name, variation_filter || null, product_sku || null);
     res.status(201).json(item);
   } catch (err) {
     console.error('[Products] add item error:', err);
