@@ -236,7 +236,6 @@ const ProductGroups = () => {
 
   const allGroupedAds = useMemo(() => {
     return uniqueAds.filter((a) => {
-      if (!a._associations || a._associations.length === 0) return false;
       if (!allSearch.trim()) return true;
       return matchesSearch(a.ad_name, allSearch) || matchesSearch(a.loja, allSearch) || (a.sisplan_codigo && matchesSearch(a.sisplan_codigo, allSearch));
     });
@@ -566,7 +565,7 @@ const ProductGroups = () => {
           maxH={isMobile ? undefined : "calc(100vh - 120px)"} display="flex" flexDirection="column">
           <Flex justify="space-between" align="center" p={4} borderBottomWidth="1px" borderColor={borderColor} flexShrink={0}>
             <Heading size="sm" isTruncated>
-              {showAll ? "Todos os anúncios em grupos" : showUngrouped ? "Anúncios sem grupo" : selectedGroup ? `Anúncios — ${selectedGroup.name}` : "Anúncios"}
+              {showAll ? "Todos os anúncios" : showUngrouped ? "Anúncios sem grupo" : selectedGroup ? `Anúncios — ${selectedGroup.name}` : "Anúncios"}
             </Heading>
             {showAll ? (
               <Badge colorScheme="gray" fontSize="xs" ml={2} flexShrink={0}>{allGroupedAds.length} anúncio{allGroupedAds.length !== 1 ? "s" : ""}</Badge>
