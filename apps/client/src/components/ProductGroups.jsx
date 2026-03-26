@@ -629,7 +629,7 @@ const ProductGroups = () => {
                   onChange={(e) => { setUngroupedSearch(e.target.value); setSelectedUngrouped(new Set()); }} />
               </InputGroup>
 
-              <Box mb={3}>
+              <Box mb={3} position="relative" zIndex={10}>
                 <SearchableSelect size="sm" placeholder="Selecionar grupo para atribuir" value={assignTargetGroupId}
                   onChange={(val) => setAssignTargetGroupId(val)}
                   options={groups.map((g) => ({ value: String(g.id), label: g.name }))} />
