@@ -238,7 +238,7 @@ const ProductGroups = () => {
     return uniqueAds.filter((a) => {
       if (!a._associations || a._associations.length === 0) return false;
       if (!allSearch.trim()) return true;
-      return matchesSearch(a.ad_name, allSearch) || matchesSearch(a.loja, allSearch);
+      return matchesSearch(a.ad_name, allSearch) || matchesSearch(a.loja, allSearch) || (a.sisplan_codigo && matchesSearch(a.sisplan_codigo, allSearch));
     });
   }, [uniqueAds, allSearch]);
 
@@ -246,7 +246,7 @@ const ProductGroups = () => {
     return uniqueAds.filter((a) => {
       if (isFullyGrouped(a)) return false;
       if (!ungroupedSearch.trim()) return true;
-      return matchesSearch(a.ad_name, ungroupedSearch) || matchesSearch(a.loja, ungroupedSearch);
+      return matchesSearch(a.ad_name, ungroupedSearch) || matchesSearch(a.loja, ungroupedSearch) || (a.sisplan_codigo && matchesSearch(a.sisplan_codigo, ungroupedSearch));
     });
   }, [uniqueAds, ungroupedSearch]);
 
@@ -254,7 +254,7 @@ const ProductGroups = () => {
     if (!productSearch.trim()) return [];
     return uniqueAds
       .filter((a) => !groupKeys.has(a.store_variation_key) &&
-        (matchesSearch(a.ad_name, productSearch) || matchesSearch(a.loja, productSearch)))
+        (matchesSearch(a.ad_name, productSearch) || matchesSearch(a.loja, productSearch) || (a.sisplan_codigo && matchesSearch(a.sisplan_codigo, productSearch))))
       .slice(0, 50);
   }, [productSearch, uniqueAds, groupKeys]);
 
@@ -603,7 +603,7 @@ const ProductGroups = () => {
                         {a.thumbnail && (
                           <Image src={a.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
                         )}
-                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.ad_name}</Text>
+                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.sisplan_codigo ? `${a.sisplan_codigo} — ${a.ad_name}` : a.ad_name}</Text>
                         {a._associations?.map((x, idx) => (
                           <Tag key={idx} size="sm" fontSize="9px" variant="solid"
                             colorScheme={x.variation_filter ? "purple" : "blue"} ml={1} flexShrink={0}>
@@ -673,7 +673,7 @@ const ProductGroups = () => {
                         {a.thumbnail && (
                           <Image src={a.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
                         )}
-                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.ad_name}</Text>
+                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.sisplan_codigo ? `${a.sisplan_codigo} — ${a.ad_name}` : a.ad_name}</Text>
                         {a._associations?.filter((x) => x.variation_filter).map((x) => (
                           <Tag key={x.variation_filter} size="sm" fontSize="9px" variant="solid" colorScheme="green" ml={1} flexShrink={0}>
                             {x.variation_filter} → {x.group_name}
@@ -848,7 +848,7 @@ const ProductGroups = () => {
                         {ad.thumbnail && (
                           <Image src={ad.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
                         )}
-                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{ad.ad_name}</Text>
+                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{ad.sisplan_codigo ? `${ad.sisplan_codigo} — ${ad.ad_name}` : ad.ad_name}</Text>
                         {url && (
                           <Link href={url} isExternal onClick={(e) => e.stopPropagation()} ml={1} flexShrink={0}>
                             <ExternalLinkIcon boxSize={3} color="gray.400" />
@@ -892,7 +892,7 @@ const ProductGroups = () => {
               Este anúncio possui múltiplas variações. Selecione qual variação associar ao grupo:
             </Text>
             {variationAd && (
-              <Text fontSize="sm" fontWeight="semibold" mb={3} isTruncated>{variationAd.ad_name}</Text>
+              <Text fontSize="sm" fontWeight="semibold" mb={3} isTruncated>{variationAd.sisplan_codigo ? `${variationAd.sisplan_codigo} — ${variationAd.ad_name}` : variationAd.ad_name}</Text>
             )}
             <VStack spacing={2} align="stretch">
               <Box p={2} borderRadius="md" cursor="pointer" border="2px solid"
