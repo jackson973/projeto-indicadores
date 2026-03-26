@@ -198,7 +198,7 @@ const ProductGroups = () => {
 
   const filteredGroupItems = useMemo(() => {
     if (!groupFilter.trim()) return groupItems;
-    return groupItems.filter((i) => matchesSearch(getAdDisplay(i.ad_name), groupFilter));
+    return groupItems.filter((i) => matchesSearch(getAdDisplay(i.ad_name), groupFilter) || (i.product_sku && matchesSearch(i.product_sku, groupFilter)));
   }, [groupItems, groupFilter, adsMap]);
 
   // Deduplicate allAds by store_variation_key (backend returns multiple rows per ad if multiple associations)
@@ -759,7 +759,9 @@ const ProductGroups = () => {
                         {thumb && (
                           <Image src={thumb} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
                         )}
-                        <Text fontSize="sm" flex={1} minW={0} isTruncated>{getAdDisplay(i.ad_name)}</Text>
+                        <Text fontSize="sm" flex={1} minW={0} isTruncated>
+                          {i.product_sku ? `${i.product_sku} — ${getAdDisplay(i.ad_name)}` : getAdDisplay(i.ad_name)}
+                        </Text>
                         {i.variation_filter && (
                           <Tag size="sm" fontSize="10px" variant="solid" colorScheme="purple" ml={2} flexShrink={0}>{i.variation_filter}</Tag>
                         )}
@@ -767,9 +769,6 @@ const ProductGroups = () => {
                           <Link href={url} isExternal onClick={(e) => e.stopPropagation()} ml={1} flexShrink={0}>
                             <ExternalLinkIcon boxSize={3} color="gray.400" />
                           </Link>
-                        )}
-                        {i.product_sku && (
-                          <Tag size="sm" fontSize="10px" variant="solid" colorScheme="green" ml={1} flexShrink={0}>{i.product_sku}</Tag>
                         )}
                         {getAdLoja(i.ad_name) && (
                           <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" ml={1} flexShrink={0}>{getAdLoja(i.ad_name)}</Tag>
