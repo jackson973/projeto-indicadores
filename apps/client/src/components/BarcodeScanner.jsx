@@ -15,38 +15,62 @@ import {
 } from "@chakra-ui/react";
 import { CloseIcon, SearchIcon } from "@chakra-ui/icons";
 
-// ─── Audio feedback via custom sound files ──────────────────────────────────
-// Place your .m4a/.mp3/.wav files in apps/client/public/sounds/
+// ─── Audio feedback via Web Audio API (volume máximo) ────────────────────────
 
-const SOUND_FILES = {
-  success:   "/sounds/beep-success.m4a",
-  duplicate: "/sounds/beep-duplicate.m4a",
-  error:     "/sounds/beep-error.m4a",
-};
-
-const audioCache = {};
-let audioUnlocked = false;
+let _audioCtx = null;
+function getAudioCtx() {
+  if (!_audioCtx) _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (_audioCtx.state === "suspended") _audioCtx.resume();
+  return _audioCtx;
+}
 
 function unlockAudio() {
-  if (audioUnlocked) return;
-  audioUnlocked = true;
-  for (const src of Object.values(SOUND_FILES)) {
-    if (!audioCache[src]) {
-      const a = new Audio(src);
-      a.volume = 0;
-      a.play().then(() => { a.pause(); a.volume = 1; a.currentTime = 0; }).catch(() => {});
-      audioCache[src] = a;
-    }
-  }
+  const ctx = getAudioCtx();
+  if (ctx.state === "suspended") ctx.resume();
 }
 
 function playBeep(type = "success") {
   try {
-    const src = SOUND_FILES[type] || SOUND_FILES.error;
-    if (!audioCache[src]) audioCache[src] = new Audio(src);
-    const audio = audioCache[src];
-    audio.currentTime = 0;
-    audio.play().catch(() => {});
+    const ctx = getAudioCtx();
+
+    if (type === "success") {
+      // Bip agudo curto — confirmação
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "square";
+      osc.frequency.value = 1800;
+      gain.gain.value = 1.0;
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+    } else if (type === "duplicate") {
+      // Dois bips médios — atenção, duplicado
+      for (let i = 0; i < 2; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.value = 900;
+        gain.gain.value = 1.0;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.2);
+        osc.stop(ctx.currentTime + i * 0.2 + 0.12);
+      }
+    } else {
+      // Três bips graves rápidos — erro
+      for (let i = 0; i < 3; i++) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "square";
+        osc.frequency.value = 400;
+        gain.gain.value = 1.0;
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(ctx.currentTime + i * 0.18);
+        osc.stop(ctx.currentTime + i * 0.18 + 0.1);
+      }
+    }
   } catch (_) {}
 }
 
