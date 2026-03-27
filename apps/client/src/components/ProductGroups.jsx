@@ -645,7 +645,8 @@ const ProductGroups = () => {
               )}
             </Box>
           ) : showUngrouped ? (
-            <Box p={4} overflowY="auto" flex={1}>
+            <>
+            <Box px={4} pt={4} pb={2} flexShrink={0} borderBottomWidth="1px" borderColor={borderColor}>
               <InputGroup size="sm" mb={3}>
                 <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
                 <Input placeholder="Filtrar por nome ou loja..." value={ungroupedSearch}
@@ -659,7 +660,7 @@ const ProductGroups = () => {
               </Box>
 
               {ungroupedAds.length > 0 && (
-                <Flex align="center" gap={2} mb={3}>
+                <Flex align="center" gap={2}>
                   <Checkbox size="sm"
                     isChecked={selectedUngrouped.size === ungroupedAds.length && ungroupedAds.length > 0}
                     isIndeterminate={selectedUngrouped.size > 0 && selectedUngrouped.size < ungroupedAds.length}
@@ -674,7 +675,9 @@ const ProductGroups = () => {
                   )}
                 </Flex>
               )}
+            </Box>
 
+            <Box p={4} overflowY="auto" flex={1}>
               {loadingAllAds ? (
                 <Center p={6}><Spinner /></Center>
               ) : ungroupedAds.length === 0 ? (
@@ -725,6 +728,7 @@ const ProductGroups = () => {
                 </VStack>
               )}
             </Box>
+            </>
           ) : !selectedGroupId ? (
             <Center p={10}>
               <Text fontSize="sm" color="gray.500">Selecione um grupo para gerenciar os anúncios.</Text>
