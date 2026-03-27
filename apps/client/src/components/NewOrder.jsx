@@ -180,7 +180,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   const cartItems = useMemo(() => Object.values(cart), [cart]);
   const cartTotal = useMemo(() => cartItems.reduce((s, i) => s + (i.unitPrice ?? 0) * i.qty, 0), [cartItems]);
   const cartCount = useMemo(() => cartItems.reduce((s, i) => s + i.qty, 0), [cartItems]);
-  const [expandedCartProduct, setExpandedCartProduct] = useState(null);
+  const [collapsedCartProducts, setCollapsedCartProducts] = useState(new Set());
 
   const groupedCartItems = useMemo(() => {
     const groups = {};
@@ -500,11 +500,18 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
           <SimpleGrid columns={{ base: 2, md: 3 }} gap={3}>
             {filteredCatalog.map(product => {
               const totalInCart = product.sizes.reduce((sum, s) => sum + getQty(product.id, s.id), 0);
+              // Get actual cart total using cart prices (may differ from catalog price)
+              const cartTotalForProduct = product.sizes.reduce((sum, s) => {
+                const k = cartKey(product.id, s.id);
+                const item = cart[k];
+                return item ? sum + (item.unitPrice ?? 0) * item.qty : sum;
+              }, 0);
               return (
                 <ProductThumb
                   key={product.id}
                   product={product}
                   totalInCart={totalInCart}
+                  cartTotal={cartTotalForProduct}
                   priceTable={priceTable}
                   cardBg={cardBg}
                   borderColor={borderColor}
@@ -666,7 +673,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
             {/* Items (grouped by product) */}
             <VStack spacing={2} align="stretch" mb={4}>
               {groupedCartItems.map(group => {
-                const isExpanded = expandedCartProduct === group.product.id;
+                const isCollapsed = collapsedCartProducts.has(group.product.id);
                 return (
                   <Box
                     key={group.product.id}
@@ -676,13 +683,18 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                     bg={cardBg}
                     overflow="hidden"
                   >
-                    {/* Product header - clickable to expand */}
+                    {/* Product header - clickable to collapse/expand */}
                     <Flex
                       align="center"
                       justify="space-between"
                       p={3}
                       cursor="pointer"
-                      onClick={() => setExpandedCartProduct(isExpanded ? null : group.product.id)}
+                      onClick={() => setCollapsedCartProducts(prev => {
+                        const next = new Set(prev);
+                        if (next.has(group.product.id)) next.delete(group.product.id);
+                        else next.add(group.product.id);
+                        return next;
+                      })}
                       _hover={{ bg: photoBg }}
                       transition="background 0.1s"
                     >
@@ -703,12 +715,12 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                           </Text>
                           <Text fontSize="xs" color={mutedColor}>{group.totalQty} pcs</Text>
                         </VStack>
-                        {isExpanded ? <ChevronUpIcon boxSize={5} color={mutedColor} /> : <ChevronDownIcon boxSize={5} color={mutedColor} />}
+                        {isCollapsed ? <ChevronDownIcon boxSize={5} color={mutedColor} /> : <ChevronUpIcon boxSize={5} color={mutedColor} />}
                       </HStack>
                     </Flex>
 
-                    {/* Expanded: individual size rows for editing */}
-                    <Collapse in={isExpanded} animateOpacity>
+                    {/* Size rows for editing (expanded by default) */}
+                    <Collapse in={!isCollapsed} animateOpacity>
                       <VStack spacing={0} align="stretch" borderTop="1px solid" borderColor={borderColor}>
                         {group.items.map(item => (
                           <Flex
@@ -834,7 +846,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
 }
 
 // ---- Product Thumbnail (compact card for grid) ----
-function ProductThumb({ product, totalInCart, priceTable, cardBg, borderColor, mutedColor, photoBg, onOpen, onClear }) {
+function ProductThumb({ product, totalInCart, cartTotal, priceTable, cardBg, borderColor, mutedColor, photoBg, onOpen, onClear }) {
   const blueBorder = useColorModeValue("blue.400", "blue.300");
   const basePrice = priceTable === "MN"
     ? parseFloat(product.price_mn ?? product.price_pc ?? 0)
@@ -895,7 +907,7 @@ function ProductThumb({ product, totalInCart, priceTable, cardBg, borderColor, m
           </Text>
           {totalInCart > 0 && (
             <Text fontSize="xs" fontWeight="bold" color="green.500">
-              R$ {(basePrice * totalInCart).toFixed(2).replace(".", ",")}
+              R$ {(cartTotal || basePrice * totalInCart).toFixed(2).replace(".", ",")}
             </Text>
           )}
         </Flex>
