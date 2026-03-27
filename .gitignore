@@ -9,8 +9,9 @@ postgres_data/
 *.sql.backup
 *.log
 logs/
-backups/*
-!backups/.gitkeep
+backups/
+files/
+sample-data/
 .pm2/
 apps/server/.whatsapp-auth/
 apps/server/uploads/
