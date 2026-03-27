@@ -407,7 +407,7 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const _filename = encodeURIComponent(`${_fileType} ${_fileDateStr} - ${_clientName}.pdf`);
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${_filename}"; filename*=UTF-8''${_filename}`);
+    res.setHeader('Content-Disposition', `attachment; filename="${_filename}"; filename*=UTF-8''${_filename}`);
     doc.pipe(res);
 
     // ── Palette ──────────────────────────────────────────────────────────────

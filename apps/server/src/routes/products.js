@@ -1,8 +1,39 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { authenticate, requireAdmin } = require('../middleware/auth');
 const productsRepo = require('../db/productsRepository');
 
 const router = express.Router();
+
+// ── GET /api/products/sisplan-photo/:codigo — serve foto do produto ──────────
+// Rota pública (sem auth) pois é carregada diretamente por <img> no browser.
+// Prioridade: 1) uploads/product-photos/ (importado), 2) SISPLAN_FOTOS_PATH (mount)
+const LOCAL_PHOTOS_DIR = path.join(__dirname, '../../uploads/product-photos');
+router.get('/sisplan-photo/:codigo', (req, res) => {
+  const codigo = req.params.codigo.replace(/[^a-zA-Z0-9_\-]/g, '');
+  if (!codigo) return res.status(400).end();
+
+  const padded = codigo.padStart(5, '0');
+  const mountDir = process.env.SISPLAN_FOTOS_PATH || '/mnt/sisplan/fotos';
+  const candidates = [
+    path.join(LOCAL_PHOTOS_DIR, `${codigo}.jpg`),
+    path.join(LOCAL_PHOTOS_DIR, `${padded}.jpg`),
+    path.join(mountDir, `${codigo}.jpg`),
+    path.join(mountDir, `${padded}.jpg`),
+  ];
+
+  for (const filePath of candidates) {
+    if (fs.existsSync(filePath)) {
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return fs.createReadStream(filePath).pipe(res);
+    }
+  }
+
+  res.status(404).end();
+});
+
 router.use(authenticate, requireAdmin);
 
 // ── GET /api/products/dashboard — product dashboard with kit_qty ─────────────

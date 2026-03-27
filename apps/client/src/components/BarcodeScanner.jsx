@@ -15,40 +15,24 @@ import {
 } from "@chakra-ui/react";
 import { CloseIcon, SearchIcon } from "@chakra-ui/icons";
 
-// ─── Audio feedback via Web Audio API ───────────────────────────────────────
+// ─── Audio feedback via custom sound files ──────────────────────────────────
+// Place your .mp3/.wav files in apps/client/public/sounds/
+
+const SOUND_FILES = {
+  success:   "/sounds/beep-success.m4a",
+  duplicate: "/sounds/beep-duplicate.m4a",
+  error:     "/sounds/beep-error.m4a",
+};
+
+const audioCache = {};
 
 function playBeep(type = "success") {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
-    if (type === "success") {
-      osc.frequency.value = 1400;
-      gain.gain.value = 1.0;
-      osc.start();
-      osc.stop(ctx.currentTime + 0.2);
-    } else if (type === "duplicate") {
-      osc.frequency.value = 700;
-      gain.gain.value = 1.0;
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-    } else {
-      osc.frequency.value = 350;
-      gain.gain.value = 1.0;
-      osc.start();
-      osc.stop(ctx.currentTime + 0.2);
-      const osc2 = ctx.createOscillator();
-      const gain2 = ctx.createGain();
-      osc2.connect(gain2);
-      gain2.connect(ctx.destination);
-      osc2.frequency.value = 350;
-      gain2.gain.value = 1.0;
-      osc2.start(ctx.currentTime + 0.3);
-      osc2.stop(ctx.currentTime + 0.5);
-    }
+    const src = SOUND_FILES[type] || SOUND_FILES.error;
+    if (!audioCache[src]) audioCache[src] = new Audio(src);
+    const audio = audioCache[src];
+    audio.currentTime = 0;
+    audio.play();
   } catch (_) {}
 }
 

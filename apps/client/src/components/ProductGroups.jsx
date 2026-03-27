@@ -599,9 +599,16 @@ const ProductGroups = () => {
                     return (
                       <Flex key={a.store_variation_key} align="center" px={3} py={2}
                         borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }} _hover={{ bg: hoverBg }}>
-                        {a.thumbnail && (
+                        {a.sisplan_codigo ? (
+                          <img
+                            src={`/api/products/sisplan-photo/${a.sisplan_codigo}`}
+                            alt={a.sisplan_codigo}
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                            style={{ width: 140, height: 140, objectFit: 'contain', borderRadius: 4, marginRight: 8, flexShrink: 0, border: '1px solid #e2e8f0' }}
+                          />
+                        ) : a.thumbnail ? (
                           <Image src={a.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
-                        )}
+                        ) : null}
                         <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.sisplan_codigo ? `${a.sisplan_codigo} — ${a.ad_name}` : a.ad_name}</Text>
                         {a._associations?.map((x, idx) => (
                           <Tag key={idx} size="sm" fontSize="9px" variant="solid"
@@ -669,9 +676,16 @@ const ProductGroups = () => {
                         borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }} _hover={{ bg: hoverBg }}>
                         <Checkbox size="sm" mr={2} isChecked={selectedUngrouped.has(a.store_variation_key)}
                           onChange={() => toggleItem(a.store_variation_key, selectedUngrouped, setSelectedUngrouped)} />
-                        {a.thumbnail && (
+                        {a.sisplan_codigo ? (
+                          <img
+                            src={`/api/products/sisplan-photo/${a.sisplan_codigo}`}
+                            alt={a.sisplan_codigo}
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                            style={{ width: 140, height: 140, objectFit: 'contain', borderRadius: 4, marginRight: 8, flexShrink: 0, border: '1px solid #e2e8f0' }}
+                          />
+                        ) : a.thumbnail ? (
                           <Image src={a.thumbnail} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
-                        )}
+                        ) : null}
                         <Text fontSize="sm" flex={1} minW={0} isTruncated>{a.sisplan_codigo ? `${a.sisplan_codigo} — ${a.ad_name}` : a.ad_name}</Text>
                         {a._associations?.filter((x) => x.variation_filter).map((x) => (
                           <Tag key={x.variation_filter} size="sm" fontSize="9px" variant="solid" colorScheme="green" ml={1} flexShrink={0}>
@@ -755,9 +769,16 @@ const ProductGroups = () => {
                         borderBottomWidth="1px" borderColor={borderColor} _last={{ borderBottomWidth: 0 }} _hover={{ bg: hoverBg }}>
                         <Checkbox size="sm" mr={2} isChecked={selectedItems.has(ik)}
                           onChange={() => toggleItem(ik, selectedItems, setSelectedItems)} />
-                        {thumb && (
+                        {i.product_sku ? (
+                          <img
+                            src={`/api/products/sisplan-photo/${i.product_sku}`}
+                            alt={i.product_sku}
+                            onError={(e) => { e.target.style.display = 'none'; }}
+                            style={{ width: 140, height: 140, objectFit: 'contain', borderRadius: 4, marginRight: 8, flexShrink: 0, border: '1px solid #e2e8f0' }}
+                          />
+                        ) : thumb ? (
                           <Image src={thumb} alt="" boxSize="28px" borderRadius="4px" objectFit="contain" mr={2} flexShrink={0} />
-                        )}
+                        ) : null}
                         <Text fontSize="sm" flex={1} minW={0} isTruncated>
                           {i.product_sku ? `${i.product_sku} — ${getAdDisplay(i.ad_name)}` : getAdDisplay(i.ad_name)}
                         </Text>
