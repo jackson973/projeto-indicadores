@@ -79,6 +79,8 @@ const ProductGroups = () => {
   const [removingBatch, setRemovingBatch] = useState(false);
   const [selectedSearchResults, setSelectedSearchResults] = useState(new Set());
 
+  const [groupListSearch, setGroupListSearch] = useState("");
+
   const [showAll, setShowAll] = useState(false);
   const [allSearch, setAllSearch] = useState("");
 
@@ -112,6 +114,11 @@ const ProductGroups = () => {
     const lower = (text || "").toLowerCase();
     return words.every((w) => lower.includes(w));
   };
+
+  const filteredGroups = useMemo(() => {
+    if (!groupListSearch.trim()) return groups;
+    return groups.filter((g) => matchesSearch(g.name, groupListSearch));
+  }, [groups, groupListSearch]);
 
   const cardBg = useColorModeValue("white", "gray.800");
   const headerBg = useColorModeValue("gray.50", "gray.700");
@@ -492,10 +499,19 @@ const ProductGroups = () => {
         <Box bg={cardBg} borderRadius="lg" boxShadow="sm" border="1px solid" borderColor={borderColor}
           w={isMobile ? "100%" : "340px"} flexShrink={0}
           maxH={isMobile ? undefined : "calc(100vh - 120px)"} display="flex" flexDirection="column">
-          <Flex justify="space-between" align="center" p={4} borderBottomWidth="1px" borderColor={borderColor} flexShrink={0}>
-            <Heading size="sm">Grupos de Produtos</Heading>
-            <Button leftIcon={<AddIcon />} size="xs" colorScheme="blue" onClick={createModal.onOpen}>Novo Grupo</Button>
-          </Flex>
+          <Box flexShrink={0} borderBottomWidth="1px" borderColor={borderColor}>
+            <Flex justify="space-between" align="center" p={4}>
+              <Heading size="sm">Grupos de Produtos</Heading>
+              <Button leftIcon={<AddIcon />} size="xs" colorScheme="blue" onClick={createModal.onOpen}>Novo Grupo</Button>
+            </Flex>
+            <Box px={4} pb={3}>
+              <InputGroup size="sm">
+                <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
+                <Input placeholder="Buscar grupo..." value={groupListSearch}
+                  onChange={(e) => setGroupListSearch(e.target.value)} />
+              </InputGroup>
+            </Box>
+          </Box>
 
           {loadingGroups ? (
             <Center p={8}><Spinner /></Center>
@@ -524,7 +540,7 @@ const ProductGroups = () => {
                 </Badge>
               </Flex>
 
-              {groups.map((group) => (
+              {filteredGroups.map((group) => (
                 <Flex key={group.id} align="center" px={4} py={2.5} cursor="pointer"
                   bg={selectedGroupId === group.id ? selectedBg : undefined}
                   _hover={{ bg: selectedGroupId === group.id ? selectedBg : hoverBg }}
