@@ -105,13 +105,40 @@ fi
 print_step "Fazendo backup do banco de dados..."
 bash scripts/backup-db.sh || print_warning "Backup falhou (continuando deploy...)"
 
-# 8. Migrations rodam automaticamente ao iniciar o servidor
+# 8. Garantir que sw.js e index.html não sejam cacheados pelo Nginx
+#    Verifica se as regras já existem na config (tuckkids já tem, basicomaiscriativo não)
+#    Se não existir, insere antes da regra de cache de assets estáticos
+#    NUNCA sobrescreve o arquivo — apenas injeta as linhas faltantes (preserva SSL/Certbot)
+NGINX_SITE="/etc/nginx/sites-available/indicadores"
+if grep -q 'location = /sw.js' "$NGINX_SITE" 2>/dev/null; then
+    print_step "Regras de no-cache para PWA já configuradas no Nginx."
+else
+    print_step "Adicionando regras de no-cache para PWA no Nginx..."
+    # Insere as regras de no-cache ANTES da linha "Static assets with caching"
+    sudo sed -i '/# Static assets/i\
+    # Service worker e index.html - sem cache (precisa atualizar sempre)\
+    location = /sw.js {\
+        expires off;\
+        add_header Cache-Control "no-cache, no-store, must-revalidate";\
+    }\
+\
+    # index.html - sem cache (precisa atualizar sempre)\
+    location = /index.html {\
+        expires off;\
+        add_header Cache-Control "no-cache, no-store, must-revalidate";\
+    }\
+' "$NGINX_SITE"
+    print_step "Regras de no-cache adicionadas ao Nginx."
+fi
+sudo nginx -t && sudo systemctl reload nginx || print_warning "Falha ao recarregar Nginx"
 
-# 9. Restart PM2
+# 9. Migrations rodam automaticamente ao iniciar o servidor
+
+# 10. Restart PM2
 print_step "Reiniciando servidor API..."
 pm2 restart api
 
-# 10. Verificar status
+# 11. Verificar status
 print_step "Verificando status..."
 pm2 status
 

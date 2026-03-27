@@ -35,7 +35,7 @@ import {
   DrawerFooter,
   DrawerCloseButton,
 } from "@chakra-ui/react";
-import { AddIcon, CloseIcon, SearchIcon } from "@chakra-ui/icons";
+import { AddIcon, ChevronDownIcon, ChevronUpIcon, CloseIcon, SearchIcon } from "@chakra-ui/icons";
 import {
   fetchOrderCatalog,
   fetchOrderCustomers,
@@ -180,6 +180,21 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   const cartItems = useMemo(() => Object.values(cart), [cart]);
   const cartTotal = useMemo(() => cartItems.reduce((s, i) => s + (i.unitPrice ?? 0) * i.qty, 0), [cartItems]);
   const cartCount = useMemo(() => cartItems.reduce((s, i) => s + i.qty, 0), [cartItems]);
+  const [expandedCartProduct, setExpandedCartProduct] = useState(null);
+
+  const groupedCartItems = useMemo(() => {
+    const groups = {};
+    cartItems.forEach(item => {
+      const pid = item.product.id;
+      if (!groups[pid]) {
+        groups[pid] = { product: item.product, items: [], totalQty: 0, totalPrice: 0 };
+      }
+      groups[pid].items.push(item);
+      groups[pid].totalQty += item.qty;
+      groups[pid].totalPrice += (item.unitPrice ?? 0) * item.qty;
+    });
+    return Object.values(groups);
+  }, [cartItems]);
 
   function setQty(productId, size, qty, unitPrice) {
     const k = cartKey(productId, size.id);
@@ -648,58 +663,104 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
               </Box>
             )}
 
-            {/* Items */}
+            {/* Items (grouped by product) */}
             <VStack spacing={2} align="stretch" mb={4}>
-              {cartItems.map(item => (
-                <Flex
-                  key={cartKey(item.product.id, item.size.id)}
-                  align="center"
-                  justify="space-between"
-                  p={3}
-                  borderRadius="lg"
-                  border="1px solid"
-                  borderColor={borderColor}
-                  bg={cardBg}
-                >
-                  <Box flex={1} mr={2}>
-                    <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>{item.product.name}</Text>
-                    <HStack spacing={1} mt={0.5}>
-                      <Badge colorScheme="gray" fontSize="xs">Tam {item.size.name}</Badge>
-                      <Text fontSize="xs" color={mutedColor}>
-                        R$ {(item.unitPrice ?? 0).toFixed(2).replace(".", ",")} un
-                      </Text>
-                    </HStack>
+              {groupedCartItems.map(group => {
+                const isExpanded = expandedCartProduct === group.product.id;
+                return (
+                  <Box
+                    key={group.product.id}
+                    borderRadius="lg"
+                    border="1px solid"
+                    borderColor={borderColor}
+                    bg={cardBg}
+                    overflow="hidden"
+                  >
+                    {/* Product header - clickable to expand */}
+                    <Flex
+                      align="center"
+                      justify="space-between"
+                      p={3}
+                      cursor="pointer"
+                      onClick={() => setExpandedCartProduct(isExpanded ? null : group.product.id)}
+                      _hover={{ bg: photoBg }}
+                      transition="background 0.1s"
+                    >
+                      <Box flex={1} mr={2}>
+                        <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>{group.product.name}</Text>
+                        <Flex wrap="wrap" gap={1} mt={1}>
+                          {group.items.map(item => (
+                            <Badge key={item.size.id} colorScheme="blue" fontSize="xs" variant="subtle">
+                              {item.size.name}:{item.qty}
+                            </Badge>
+                          ))}
+                        </Flex>
+                      </Box>
+                      <HStack spacing={2}>
+                        <VStack spacing={0} align="end">
+                          <Text fontSize="sm" fontWeight="bold" color="blue.500">
+                            R$ {group.totalPrice.toFixed(2).replace(".", ",")}
+                          </Text>
+                          <Text fontSize="xs" color={mutedColor}>{group.totalQty} pcs</Text>
+                        </VStack>
+                        {isExpanded ? <ChevronUpIcon boxSize={5} color={mutedColor} /> : <ChevronDownIcon boxSize={5} color={mutedColor} />}
+                      </HStack>
+                    </Flex>
+
+                    {/* Expanded: individual size rows for editing */}
+                    <Collapse in={isExpanded} animateOpacity>
+                      <VStack spacing={0} align="stretch" borderTop="1px solid" borderColor={borderColor}>
+                        {group.items.map(item => (
+                          <Flex
+                            key={item.size.id}
+                            align="center"
+                            justify="space-between"
+                            px={3} py={2}
+                            borderBottom="1px solid"
+                            borderColor={borderColor}
+                            _last={{ borderBottom: "none" }}
+                          >
+                            <HStack spacing={2} flex={1}>
+                              <Badge colorScheme="gray" fontSize="xs">Tam {item.size.name}</Badge>
+                              <Text fontSize="xs" color={mutedColor}>
+                                R$ {(item.unitPrice ?? 0).toFixed(2).replace(".", ",")} un
+                              </Text>
+                            </HStack>
+
+                            <HStack spacing={1}>
+                              <IconButton
+                                icon={<Text fontSize="md" lineHeight={1}>−</Text>}
+                                size="xs" variant="outline" colorScheme="blue" borderRadius="full"
+                                aria-label="Diminuir"
+                                onClick={() => setQty(item.product.id, item.size, item.qty - 1)}
+                              />
+                              <Text fontSize="sm" fontWeight="bold" minW="24px" textAlign="center">{item.qty}</Text>
+                              <IconButton
+                                icon={<AddIcon boxSize={2.5} />}
+                                size="xs" colorScheme="blue" borderRadius="full"
+                                aria-label="Aumentar"
+                                onClick={() => setQty(item.product.id, item.size, item.qty + 1)}
+                              />
+                            </HStack>
+
+                            <HStack spacing={1} ml={1}>
+                              <Text fontSize="sm" fontWeight="bold" color="blue.500" minW="55px" textAlign="right">
+                                R$ {((item.unitPrice ?? 0) * item.qty).toFixed(2).replace(".", ",")}
+                              </Text>
+                              <IconButton
+                                icon={<CloseIcon boxSize={2} />}
+                                size="xs" variant="ghost" colorScheme="red" borderRadius="full"
+                                aria-label="Remover"
+                                onClick={() => setQty(item.product.id, item.size, 0)}
+                              />
+                            </HStack>
+                          </Flex>
+                        ))}
+                      </VStack>
+                    </Collapse>
                   </Box>
-
-                  <HStack spacing={1}>
-                    <IconButton
-                      icon={<Text fontSize="md" lineHeight={1}>−</Text>}
-                      size="xs" variant="outline" colorScheme="blue" borderRadius="full"
-                      aria-label="Diminuir"
-                      onClick={() => setQty(item.product.id, item.size, item.qty - 1)}
-                    />
-                    <Text fontSize="sm" fontWeight="bold" minW="24px" textAlign="center">{item.qty}</Text>
-                    <IconButton
-                      icon={<AddIcon boxSize={2.5} />}
-                      size="xs" colorScheme="blue" borderRadius="full"
-                      aria-label="Aumentar"
-                      onClick={() => setQty(item.product.id, item.size, item.qty + 1)}
-                    />
-                  </HStack>
-
-                  <HStack spacing={1} ml={1}>
-                    <Text fontSize="sm" fontWeight="bold" color="blue.500" minW="60px" textAlign="right">
-                      R$ {((item.unitPrice ?? 0) * item.qty).toFixed(2).replace(".", ",")}
-                    </Text>
-                    <IconButton
-                      icon={<CloseIcon boxSize={2} />}
-                      size="xs" variant="ghost" colorScheme="red" borderRadius="full"
-                      aria-label="Remover"
-                      onClick={() => setQty(item.product.id, item.size, 0)}
-                    />
-                  </HStack>
-                </Flex>
-              ))}
+                );
+              })}
             </VStack>
 
             <FormControl mb={4}>
@@ -725,7 +786,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                   Salvar Alterações
                 </Button>
                 <Button variant="outline" colorScheme="gray" size="md" borderRadius="xl" onClick={cartDrawer.onClose}>
-                  Fechar
+                  Voltar
                 </Button>
               </SimpleGrid>
             ) : (
@@ -740,7 +801,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                     Salvar Orçamento
                   </Button>
                   <Button variant="outline" colorScheme="gray" size="md" borderRadius="xl" onClick={cartDrawer.onClose}>
-                    Fechar
+                    Voltar
                   </Button>
                 </SimpleGrid>
               </>
@@ -876,10 +937,32 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
     }
   }, [product, priceTable]);
 
+  function applyPriceToCart(newPrice) {
+    if (!product) return;
+    product.sizes.forEach(s => {
+      const qty = getQty(product.id, s.id);
+      if (qty > 0) {
+        setQty(product.id, s, qty, newPrice);
+      }
+    });
+  }
+
   function handlePriceBlur() {
     const v = parseFloat(priceInput);
-    if (isNaN(v) || v <= 0) setPriceInput(basePrice(priceTable).toFixed(2));
-    else setPriceInput(v.toFixed(2));
+    if (isNaN(v) || v <= 0) {
+      setPriceInput(basePrice(priceTable).toFixed(2));
+      return;
+    }
+    setPriceInput(v.toFixed(2));
+    applyPriceToCart(v);
+  }
+
+  function handleClose() {
+    const v = parseFloat(priceInput);
+    if (!isNaN(v) && v > 0) {
+      applyPriceToCart(v);
+    }
+    onClose();
   }
 
   const price = parseFloat(priceInput) || basePrice(priceTable);
@@ -923,7 +1006,7 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
   }
 
   return (
-    <Drawer isOpen={isOpen} onClose={onClose} placement="bottom" size="full">
+    <Drawer isOpen={isOpen} onClose={handleClose} placement="bottom" size="full">
       <DrawerOverlay />
       <DrawerContent>
         <DrawerCloseButton zIndex={2} />
@@ -1124,7 +1207,7 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
         </DrawerBody>
 
         <DrawerFooter borderTop="1px solid" borderColor={borderColor} pb={{ base: 8, md: 4 }}>
-          <Button w="full" variant="outline" size="md" borderRadius="xl" onClick={onClose}>
+          <Button w="full" variant="outline" size="md" borderRadius="xl" onClick={handleClose}>
             Fechar
           </Button>
         </DrawerFooter>
