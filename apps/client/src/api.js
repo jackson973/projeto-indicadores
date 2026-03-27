@@ -1297,21 +1297,29 @@ export const downloadOrderPdf = async (order) => {
   const blob = await response.blob();
 
   // Mobile: usar share sheet nativa se disponível
-  if (navigator.share && navigator.canShare) {
-    const file = new File([blob], filename, { type: 'application/pdf' });
-    if (navigator.canShare({ files: [file] })) {
-      await navigator.share({ files: [file], title: filename });
-      return;
+  try {
+    if (navigator.share) {
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: filename });
+        return;
+      }
     }
+  } catch (e) {
+    // Share cancelado ou não suportado — segue para download
+    if (e.name === 'AbortError') return; // usuário cancelou, não faz nada
   }
 
-  // Fallback: download direto
+  // Fallback: download na mesma aba (sem abrir nova)
   const blobUrl = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = blobUrl;
   link.download = filename;
+  link.style.display = 'none';
   document.body.appendChild(link);
   link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(blobUrl);
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  }, 100);
 };
