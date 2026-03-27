@@ -71,6 +71,7 @@ const getEmoji = (name) => {
 };
 
 const cartKey = (productId, sizeId) => `${productId}:${sizeId}`;
+const fmtBRL = (v) => (v ?? 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function NewOrder({ initialOrder = null, onSaved = null }) {
   const isEditing = !!initialOrder;
@@ -564,7 +565,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                 </Badge>
                 <Text fontWeight="semibold">Ver Carrinho</Text>
               </HStack>
-              <Text fontWeight="bold">R$ {cartTotal.toFixed(2).replace(".", ",")}</Text>
+              <Text fontWeight="bold">R$ {fmtBRL(cartTotal)}</Text>
             </Flex>
           </Button>
         </Box>
@@ -711,7 +712,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                       <HStack spacing={2}>
                         <VStack spacing={0} align="end">
                           <Text fontSize="sm" fontWeight="bold" color="blue.500">
-                            R$ {group.totalPrice.toFixed(2).replace(".", ",")}
+                            R$ {fmtBRL(group.totalPrice)}
                           </Text>
                           <Text fontSize="xs" color={mutedColor}>{group.totalQty} pcs</Text>
                         </VStack>
@@ -735,7 +736,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                             <HStack spacing={2} flex={1}>
                               <Badge colorScheme="gray" fontSize="xs">Tam {item.size.name}</Badge>
                               <Text fontSize="xs" color={mutedColor}>
-                                R$ {(item.unitPrice ?? 0).toFixed(2).replace(".", ",")} un
+                                R$ {fmtBRL(item.unitPrice)} un
                               </Text>
                             </HStack>
 
@@ -757,7 +758,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
 
                             <HStack spacing={1} ml={1}>
                               <Text fontSize="sm" fontWeight="bold" color="blue.500" minW="55px" textAlign="right">
-                                R$ {((item.unitPrice ?? 0) * item.qty).toFixed(2).replace(".", ",")}
+                                R$ {fmtBRL((item.unitPrice ?? 0) * item.qty)}
                               </Text>
                               <IconButton
                                 icon={<CloseIcon boxSize={2} />}
@@ -785,7 +786,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
             <Flex justify="space-between" align="center" p={4} bg={photoBg} borderRadius="xl" mb={4}>
               <Text fontWeight="bold">Total</Text>
               <Text fontSize="xl" fontWeight="bold" color="blue.500">
-                R$ {cartTotal.toFixed(2).replace(".", ",")}
+                R$ {fmtBRL(cartTotal)}
               </Text>
             </Flex>
           </DrawerBody>
@@ -903,11 +904,11 @@ function ProductThumb({ product, totalInCart, cartTotal, priceTable, cardBg, bor
         </Text>
         <Flex justify="space-between" align="center">
           <Text fontSize="sm" fontWeight="bold" color="blue.500">
-            R$ {basePrice.toFixed(2).replace(".", ",")}
+            R$ {fmtBRL(basePrice)}
           </Text>
           {totalInCart > 0 && (
             <Text fontSize="xs" fontWeight="bold" color="green.500">
-              R$ {(cartTotal || basePrice * totalInCart).toFixed(2).replace(".", ",")}
+              R$ {fmtBRL(cartTotal || basePrice * totalInCart)}
             </Text>
           )}
         </Flex>
@@ -1060,7 +1061,7 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
             {totalInCart > 0 && (
               <VStack spacing={0} align="end">
                 <Text fontSize="sm" fontWeight="bold" color="green.600">
-                  = R$ {(price * totalInCart).toFixed(2).replace(".", ",")}
+                  = R$ {fmtBRL(price * totalInCart)}
                 </Text>
                 <Text fontSize="xs" color={mutedColor}>{totalInCart} peças no carrinho</Text>
               </VStack>
@@ -1210,7 +1211,7 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
               </Flex>
               <Flex justify="flex-end" mt={2}>
                 <Text fontSize="sm" fontWeight="bold" color="green.600">
-                  {totalInCart} pcs = R$ {(price * totalInCart).toFixed(2).replace(".", ",")}
+                  {totalInCart} pcs = R$ {fmtBRL(price * totalInCart)}
                 </Text>
               </Flex>
             </Box>
