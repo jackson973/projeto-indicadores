@@ -29,6 +29,8 @@ import { SearchIcon } from "@chakra-ui/icons";
 import { fetchOrders, fetchOrderById, updateOrderStatus, downloadOrderPdf, integrateOrderSisplan } from "../api";
 import NewOrder from "./NewOrder";
 
+const fmtBRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 const TYPE_LABELS = {
   pedido:    { label: "Pedido",    color: "blue"   },
   orcamento: { label: "Orçamento", color: "purple" },
@@ -250,7 +252,7 @@ export default function OrdersList() {
                       <Badge colorScheme={statusInfo.color} fontSize="xs">{statusInfo.label}</Badge>
                     </HStack>
                     <Text fontWeight="bold" color="blue.500" fontSize="sm">
-                      R$ {Number(order.total).toFixed(2).replace(".", ",")}
+                      R$ {fmtBRL(order.total)}
                     </Text>
                     <Text fontSize="xs" color={mutedColor}>
                       {order.item_count} item{order.item_count != 1 ? "s" : ""}
@@ -381,7 +383,7 @@ export default function OrdersList() {
                                 <Text fontSize="sm" fontWeight="semibold" noOfLines={2}>{productName}</Text>
                               </HStack>
                               <Text fontSize="sm" fontWeight="bold" color="blue.500" flexShrink={0}>
-                                R$ {productTotal.toFixed(2).replace(".", ",")}
+                                R$ {fmtBRL(productTotal)}
                               </Text>
                             </Flex>
 
@@ -391,7 +393,7 @@ export default function OrdersList() {
                                   <Badge colorScheme="blue" fontSize="xs" px={2}>{item.size_name}</Badge>
                                   <Text fontSize="sm" fontWeight="bold">×{item.qty}</Text>
                                   <Text fontSize="xs" color={mutedColor}>
-                                    R$ {(Number(item.unit_price) * item.qty).toFixed(2).replace(".", ",")}
+                                    R$ {fmtBRL(Number(item.unit_price) * item.qty)}
                                   </Text>
                                 </VStack>
                               ))}
@@ -412,7 +414,7 @@ export default function OrdersList() {
                     <Flex justify="space-between" align="center" p={3} bg={rowBg} borderRadius="lg">
                       <Text fontWeight="bold">Total</Text>
                       <Text fontSize="xl" fontWeight="bold" color="blue.500">
-                        R$ {Number(selected.total).toFixed(2).replace(".", ",")}
+                        R$ {fmtBRL(selected.total)}
                       </Text>
                     </Flex>
                   </>

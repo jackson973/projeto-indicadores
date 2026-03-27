@@ -51,6 +51,7 @@ import BarcodeScanner from "./BarcodeScanner";
 import SearchableSelect from "./SearchableSelect";
 
 const SIZE_ORDER = ["RN", "PP", "P", "M", "G", "GG", "XG", "XGG", "EG", "EGG"];
+const fmtBRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 function sortSize(s) {
   const upper = String(s).toUpperCase().trim();
@@ -413,13 +414,13 @@ export default function OrderProductsConfig() {
                   <Box>
                     <Text fontSize="9px" fontWeight="bold" color={mutedColor} textTransform="uppercase" letterSpacing="wide">PC</Text>
                     <Text fontSize="sm" fontWeight="bold" color="blue.500">
-                      R$ {parseFloat(product.price_pc || 0).toFixed(2).replace(".", ",")}
+                      R$ {fmtBRL(product.price_pc)}
                     </Text>
                   </Box>
                   <Box>
                     <Text fontSize="9px" fontWeight="bold" color={mutedColor} textTransform="uppercase" letterSpacing="wide">MN</Text>
                     <Text fontSize="sm" fontWeight="bold" color="purple.500">
-                      R$ {parseFloat(product.price_mn || 0).toFixed(2).replace(".", ",")}
+                      R$ {fmtBRL(product.price_mn)}
                     </Text>
                   </Box>
                 </HStack>
