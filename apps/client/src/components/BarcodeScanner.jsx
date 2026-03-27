@@ -16,7 +16,7 @@ import {
 import { CloseIcon, SearchIcon } from "@chakra-ui/icons";
 
 // ─── Audio feedback via custom sound files ──────────────────────────────────
-// Place your .mp3/.wav files in apps/client/public/sounds/
+// Place your .m4a/.mp3/.wav files in apps/client/public/sounds/
 
 const SOUND_FILES = {
   success:   "/sounds/beep-success.m4a",
@@ -25,6 +25,20 @@ const SOUND_FILES = {
 };
 
 const audioCache = {};
+let audioUnlocked = false;
+
+function unlockAudio() {
+  if (audioUnlocked) return;
+  audioUnlocked = true;
+  for (const src of Object.values(SOUND_FILES)) {
+    if (!audioCache[src]) {
+      const a = new Audio(src);
+      a.volume = 0;
+      a.play().then(() => { a.pause(); a.volume = 1; a.currentTime = 0; }).catch(() => {});
+      audioCache[src] = a;
+    }
+  }
+}
 
 function playBeep(type = "success") {
   try {
@@ -32,7 +46,7 @@ function playBeep(type = "success") {
     if (!audioCache[src]) audioCache[src] = new Audio(src);
     const audio = audioCache[src];
     audio.currentTime = 0;
-    audio.play();
+    audio.play().catch(() => {});
   } catch (_) {}
 }
 
@@ -160,6 +174,7 @@ export default function BarcodeScanner({
 
   function handleManualSubmit(e) {
     e.preventDefault();
+    unlockAudio();
     const code = manualCode.trim();
     if (!code) return;
     handleScan(code);
@@ -287,7 +302,7 @@ export default function BarcodeScanner({
             size="xs"
             variant="ghost"
             color={mutedColor}
-            onClick={() => { setCameraError(null); setFeedback(null); setCameraOn(true); }}
+            onClick={() => { unlockAudio(); setCameraError(null); setFeedback(null); setCameraOn(true); }}
           >
             Abrir câmera
           </Button>
