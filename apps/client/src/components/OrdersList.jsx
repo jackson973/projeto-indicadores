@@ -26,7 +26,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
-import { fetchOrders, fetchOrderById, updateOrderStatus, getOrderPdfUrl, integrateOrderSisplan } from "../api";
+import { fetchOrders, fetchOrderById, updateOrderStatus, downloadOrderPdf, integrateOrderSisplan } from "../api";
 import NewOrder from "./NewOrder";
 
 const TYPE_LABELS = {
@@ -104,9 +104,13 @@ export default function OrdersList() {
     }
   }
 
-  function handleOpenPdf() {
+  async function handleOpenPdf() {
     if (!selected) return;
-    window.open(getOrderPdfUrl(selected), "_blank");
+    try {
+      await downloadOrderPdf(selected);
+    } catch {
+      toast({ status: "error", description: "Erro ao gerar PDF.", duration: 3000 });
+    }
   }
 
   async function handleConvertToOrder() {

@@ -1281,3 +1281,37 @@ export const getOrderPdfUrl = (order) => {
   const filename = encodeURIComponent(`${fileType} ${dd}_${mm}_${yy} - ${clientName}.pdf`);
   return `/api/orders/${order.id}/pdf/${filename}?token=${token}`;
 };
+
+export const downloadOrderPdf = async (order) => {
+  const url = getOrderPdfUrl(order);
+  const d = new Date(order.created_at);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear()).slice(2);
+  const clientName = (order.customer_snapshot?.fantasy_name || order.customer_snapshot?.company_name || '').replace(/[^a-zA-Z0-9À-ÿ\s]/g, '').trim();
+  const fileType = order.type === 'pedido' ? 'Pedido' : 'Orçamento';
+  const filename = `${fileType} ${dd}_${mm}_${yy} - ${clientName}.pdf`;
+
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Erro ao gerar PDF');
+  const blob = await response.blob();
+
+  // Mobile: usar share sheet nativa se disponível
+  if (navigator.share && navigator.canShare) {
+    const file = new File([blob], filename, { type: 'application/pdf' });
+    if (navigator.canShare({ files: [file] })) {
+      await navigator.share({ files: [file], title: filename });
+      return;
+    }
+  }
+
+  // Fallback: download direto
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(blobUrl);
+};

@@ -43,7 +43,7 @@ import {
   syncOrderCustomers,
   createOrder as apiCreateOrder,
   updateOrderStatus as apiUpdateOrder,
-  getOrderPdfUrl,
+  downloadOrderPdf,
   scanBarcode,
 } from "../api";
 import BarcodeScanner from "./BarcodeScanner";
@@ -323,7 +323,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         setPriceTable("");
         setSelectedCondition(null);
         setNotes("");
-        window.open(getOrderPdfUrl(order), "_blank");
+        downloadOrderPdf(order).catch(() => {});
       }
     } catch (err) {
       toast({ status: "error", description: err.message, duration: 3000 });
