@@ -33,6 +33,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { AddIcon, DeleteIcon, EditIcon, SearchIcon } from "@chakra-ui/icons";
+import { FiPrinter } from "react-icons/fi";
 import {
   fetchOrderCatalog,
   createOrderCatalogProduct,
@@ -336,6 +337,58 @@ export default function OrderProductsConfig() {
     setDeleting(null);
   }
 
+  function handlePrint() {
+    const items = filtered.length > 0 ? filtered : products;
+    const cards = items.map(p => {
+      const sizes = (p.sizes || []).map(s => s.size_name).join("&nbsp;&nbsp;");
+      const photo = p.photo_url
+        ? `<img src="${p.photo_url}" style="width:100%;height:140px;object-fit:contain;" />`
+        : `<div style="display:flex;align-items:center;justify-content:center;height:140px;color:#999;font-size:14px;">Sem foto</div>`;
+      return `
+        <div style="border:1px solid #ddd;border-radius:10px;overflow:hidden;break-inside:avoid;">
+          <div style="background:#f5f5f5;height:140px;display:flex;align-items:center;justify-content:center;">${photo}</div>
+          <div style="padding:8px 10px;">
+            <div style="font-weight:600;font-size:13px;margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</div>
+            ${p.reference_codigo ? `<div style="font-size:11px;color:#888;margin-bottom:4px;">Ref: ${p.reference_codigo}</div>` : ""}
+            <div style="display:flex;gap:16px;margin-bottom:6px;">
+              <div>
+                <div style="font-size:9px;font-weight:700;color:#888;text-transform:uppercase;">PC</div>
+                <div style="font-size:13px;font-weight:700;color:#3182ce;">R$ ${fmtBRL(p.price_pc)}</div>
+              </div>
+              <div>
+                <div style="font-size:9px;font-weight:700;color:#888;text-transform:uppercase;">MN</div>
+                <div style="font-size:13px;font-weight:700;color:#805ad5;">R$ ${fmtBRL(p.price_mn)}</div>
+              </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+              ${sizes ? sizes.split("&nbsp;&nbsp;").map(s => `<span style="background:#edf2f7;border-radius:10px;padding:1px 8px;font-size:11px;">${s}</span>`).join("") : '<span style="font-size:11px;color:#999;">Sem tamanhos</span>'}
+            </div>
+          </div>
+        </div>`;
+    }).join("");
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Catálogo de Produtos</title>
+      <style>
+        @page { margin: 12mm; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
+        h1 { font-size: 18px; margin: 0 0 4px; }
+        .sub { font-size: 12px; color: #888; margin-bottom: 16px; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      </style>
+    </head><body>
+      <h1>Catálogo de Produtos</h1>
+      <div class="sub">${items.length} produto${items.length !== 1 ? "s" : ""}</div>
+      <div class="grid">${cards}</div>
+      <script>window.onload=function(){window.print();}<\/script>
+    </body></html>`;
+
+    const w = window.open("", "_blank");
+    if (w) {
+      w.document.write(html);
+      w.document.close();
+    }
+  }
+
   if (loading) {
     return (
       <Flex justify="center" align="center" h="200px">
@@ -352,9 +405,19 @@ export default function OrderProductsConfig() {
           <Text fontSize={{ base: "lg", md: "xl" }} fontWeight="bold">Catálogo de Produtos</Text>
           <Text fontSize="xs" color={mutedColor}>Produtos para exibição nos pedidos</Text>
         </Box>
-        <Button leftIcon={<AddIcon />} colorScheme="blue" size={{ base: "sm", md: "md" }} onClick={openCreate}>
-          Novo
-        </Button>
+        <HStack spacing={2}>
+          <IconButton
+            icon={<FiPrinter />}
+            aria-label="Imprimir catálogo"
+            variant="outline"
+            size={{ base: "sm", md: "md" }}
+            onClick={handlePrint}
+            title="Imprimir catálogo"
+          />
+          <Button leftIcon={<AddIcon />} colorScheme="blue" size={{ base: "sm", md: "md" }} onClick={openCreate}>
+            Novo
+          </Button>
+        </HStack>
       </Flex>
 
       {/* Search */}
