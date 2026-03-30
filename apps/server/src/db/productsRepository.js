@@ -467,6 +467,30 @@ async function getAllAdsWithGroup() {
       FROM sisplan_products sp
       LEFT JOIN sisplan_var_counts svc ON svc.descricao = sp.descricao
       WHERE sp.active = true
+
+      UNION ALL
+
+      -- Itens órfãos: existem em product_group_items mas não em nenhum catálogo
+      SELECT
+        pgi.ad_name AS store_variation_key,
+        CASE WHEN pgi.ad_name LIKE '%|||%'
+             THEN SUBSTRING(pgi.ad_name FROM POSITION('|||' IN pgi.ad_name) + 3)
+             ELSE pgi.ad_name END AS ad_name,
+        CASE WHEN pgi.ad_name LIKE '%|||%'
+             THEN SUBSTRING(pgi.ad_name FROM 1 FOR POSITION('|||' IN pgi.ad_name) - 1)
+             ELSE NULL END AS loja,
+        NULL AS platform,
+        NULL::varchar AS sisplan_codigo,
+        0 AS variation_count
+      FROM product_group_items pgi
+      WHERE NOT EXISTS (
+        SELECT 1 FROM upseller_products up
+        WHERE up.active = true AND up.shop_name || '|||' || up.ad_name = pgi.ad_name
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM sisplan_products sp
+        WHERE sp.active = true AND 'Fabrica|||' || sp.descricao = pgi.ad_name
+      )
     ) s
     LEFT JOIN sale_thumbs st ON st.svk = s.store_variation_key
     LEFT JOIN product_url_cache uc ON uc.store_variation_key = s.store_variation_key
