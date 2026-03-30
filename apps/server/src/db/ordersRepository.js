@@ -525,6 +525,14 @@ async function associateBarcodesByGroup(catalogProductId, groupId) {
   return { added, skipped, message: `${added} códigos vinculados, ${skipped} ignorados (já existentes ou sem tamanho)` };
 }
 
+async function deleteOrder(id) {
+  const { rows } = await pool.query(
+    `DELETE FROM orders WHERE id = $1 AND status = 'rascunho' RETURNING id`,
+    [id]
+  );
+  return rows[0] || null;
+}
+
 async function linkCatalogProductGroup(catalogProductId, groupId) {
   await pool.query(
     'UPDATE order_catalog_products SET group_id = $1 WHERE id = $2',
@@ -557,4 +565,5 @@ module.exports = {
   createOrder,
   updateOrder,
   updateOrderFull,
+  deleteOrder,
 };

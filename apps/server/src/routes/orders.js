@@ -382,6 +382,18 @@ function formatPhone(raw) {
   return raw; // fallback: return as-is
 }
 
+// DELETE /api/orders/:id  (only rascunho orders)
+router.delete('/:id', async (req, res) => {
+  try {
+    const deleted = await repo.deleteOrder(req.params.id);
+    if (!deleted) return res.status(400).json({ error: 'Apenas orçamentos/pedidos em rascunho podem ser excluídos.' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('DELETE /orders/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /api/orders/:id/pdf/:filename?  (filename in path for iOS Safari naming)
 router.get('/:id/pdf/:filename?', async (req, res) => {
   try {

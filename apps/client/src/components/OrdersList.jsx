@@ -26,7 +26,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
-import { fetchOrders, fetchOrderById, updateOrderStatus, downloadOrderPdf, integrateOrderSisplan } from "../api";
+import { fetchOrders, fetchOrderById, updateOrderStatus, downloadOrderPdf, deleteOrder as apiDeleteOrder, integrateOrderSisplan } from "../api";
 import NewOrder from "./NewOrder";
 
 const fmtBRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -122,6 +122,19 @@ export default function OrdersList() {
       setSelected(updated);
       setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
       toast({ status: "success", description: "Convertido para pedido.", duration: 2000 });
+    } catch (err) {
+      toast({ status: "error", description: err.message, duration: 3000 });
+    }
+  }
+
+  async function handleDelete() {
+    if (!selected) return;
+    if (!window.confirm("Tem certeza que deseja excluir este orçamento?")) return;
+    try {
+      await apiDeleteOrder(selected.id);
+      setOrders(prev => prev.filter(o => o.id !== selected.id));
+      setSelected(null);
+      toast({ status: "success", description: "Orçamento excluído.", duration: 2000 });
     } catch (err) {
       toast({ status: "error", description: err.message, duration: 3000 });
     }
@@ -437,7 +450,7 @@ export default function OrdersList() {
                     Integrar Sisplan
                   </Button>
                 )}
-                <SimpleGrid columns={3} gap={2} w="full">
+                <SimpleGrid columns={selected.status === "rascunho" ? 4 : 2} gap={2} w="full">
                   <Button
                     variant="outline" colorScheme="gray" size="md" borderRadius="xl"
                     onClick={handleOpenPdf}
@@ -453,8 +466,13 @@ export default function OrdersList() {
                       ✏️ Editar
                     </Button>
                   )}
-                  {selected.status !== "rascunho" && (
-                    <Box />
+                  {selected.status === "rascunho" && (
+                    <Button
+                      variant="outline" colorScheme="red" size="md" borderRadius="xl"
+                      onClick={handleDelete}
+                    >
+                      🗑 Excluir
+                    </Button>
                   )}
                   <Button variant="ghost" size="md" borderRadius="xl" onClick={onClose}>Fechar</Button>
                 </SimpleGrid>

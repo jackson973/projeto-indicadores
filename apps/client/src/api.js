@@ -1260,6 +1260,11 @@ export const updateOrderStatus = async (id, data) => {
   return handleResponse(r);
 };
 
+export const deleteOrder = async (id) => {
+  const r = await authFetch(`/api/orders/${id}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
 export const integrateOrderSisplanDryRun = async (orderId) => {
   const r = await authFetch(`/api/orders/${orderId}/integrate/dry-run`, { method: 'POST' });
   return handleResponse(r);
