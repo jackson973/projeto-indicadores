@@ -470,26 +470,22 @@ async function getAllAdsWithGroup() {
 
       UNION ALL
 
-      -- Itens órfãos: existem em product_group_items mas não em nenhum catálogo
+      -- Anúncios de vendas que não estão em nenhum catálogo ativo
       SELECT
-        pgi.ad_name AS store_variation_key,
-        CASE WHEN pgi.ad_name LIKE '%|||%'
-             THEN SUBSTRING(pgi.ad_name FROM POSITION('|||' IN pgi.ad_name) + 3)
-             ELSE pgi.ad_name END AS ad_name,
-        CASE WHEN pgi.ad_name LIKE '%|||%'
-             THEN SUBSTRING(pgi.ad_name FROM 1 FOR POSITION('|||' IN pgi.ad_name) - 1)
-             ELSE NULL END AS loja,
+        st2.svk AS store_variation_key,
+        SUBSTRING(st2.svk FROM POSITION('|||' IN st2.svk) + 3) AS ad_name,
+        SUBSTRING(st2.svk FROM 1 FOR POSITION('|||' IN st2.svk) - 1) AS loja,
         NULL AS platform,
         NULL::varchar AS sisplan_codigo,
         0 AS variation_count
-      FROM product_group_items pgi
+      FROM sale_thumbs st2
       WHERE NOT EXISTS (
         SELECT 1 FROM upseller_products up
-        WHERE up.active = true AND up.shop_name || '|||' || up.ad_name = pgi.ad_name
+        WHERE up.active = true AND up.shop_name || '|||' || up.ad_name = st2.svk
       )
       AND NOT EXISTS (
         SELECT 1 FROM sisplan_products sp
-        WHERE sp.active = true AND 'Fabrica|||' || sp.descricao = pgi.ad_name
+        WHERE sp.active = true AND 'Fabrica|||' || sp.descricao = st2.svk
       )
     ) s
     LEFT JOIN sale_thumbs st ON st.svk = s.store_variation_key
