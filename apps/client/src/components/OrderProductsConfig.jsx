@@ -340,6 +340,7 @@ export default function OrderProductsConfig() {
   function handlePrint() {
     const items = filtered.length > 0 ? filtered : products;
     const groupMap = Object.fromEntries(groups.map(g => [g.id, g.name]));
+    const refMap = Object.fromEntries(referenceProducts.map(r => [r.codigo, r.descricao]));
 
     const rows = items.map(p => {
       const photo = p.photo_url
@@ -352,7 +353,7 @@ export default function OrderProductsConfig() {
       return `<tr>
         <td style="text-align:center;">${photo}</td>
         <td style="font-weight:600;">${p.name}</td>
-        <td>${p.reference_codigo || "—"}</td>
+        <td>${p.reference_codigo ? `${p.reference_codigo} - ${refMap[p.reference_codigo] || ""}` : "—"}</td>
         <td>${groupName}</td>
         <td style="white-space:nowrap;color:#3182ce;font-weight:600;">R$ ${fmtBRL(p.price_pc)}</td>
         <td style="white-space:nowrap;color:#805ad5;font-weight:600;">R$ ${fmtBRL(p.price_mn)}</td>
