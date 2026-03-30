@@ -141,16 +141,13 @@ async function getCustomers(search) {
   let query = 'SELECT * FROM order_customers WHERE active=true';
   const params = [];
   if (search && search.trim()) {
-    params.push(`%${search.toLowerCase()}%`);
+    params.push(`%${search.trim()}%`);
     query += ` AND (
-      LOWER(fantasy_name)          LIKE $1 OR
-      LOWER(company_name)          LIKE $1 OR
-      LOWER(sisplan_id)            LIKE $1 OR
-      LOWER(cnpj)                  LIKE $1 OR
-      LOWER(COALESCE(cidade, ''))  LIKE $1
-    )`;
+      COALESCE(fantasy_name, '') || ' ' || COALESCE(company_name, '') || ' ' ||
+      COALESCE(sisplan_id, '') || ' ' || COALESCE(cnpj, '') || ' ' || COALESCE(cidade, '')
+    ) ILIKE $1`;
   }
-  query += ' ORDER BY COALESCE(NULLIF(fantasy_name,\'\'), company_name) LIMIT 100';
+  query += ' ORDER BY COALESCE(NULLIF(fantasy_name,\'\'), company_name) LIMIT 50';
   const { rows } = await pool.query(query, params);
   return rows;
 }

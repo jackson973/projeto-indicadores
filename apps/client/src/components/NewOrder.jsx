@@ -168,7 +168,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
 
   useEffect(() => {
     if (!customerDrawer.isOpen) return;
-    const t = setTimeout(() => loadCustomers(customerSearch), 250);
+    const t = setTimeout(() => loadCustomers(customerSearch), 400);
     return () => clearTimeout(t);
   }, [customerSearch, customerDrawer.isOpen, loadCustomers]);
 
