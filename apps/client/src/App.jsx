@@ -93,7 +93,9 @@ import {
   fetchSisplanActive,
   refreshSisplanData,
   refreshUpsellerTodayAnalytics,
-  fetchSystemSettings
+  fetchSystemSettings,
+  webauthnRegisterOptions,
+  webauthnRegisterVerify,
 } from "./api";
 
 const SIDEBAR_EXPANDED = "220px";
@@ -309,6 +311,29 @@ const App = () => {
     setUser(result.user);
   };
 
+  const handleBiometricLogin = (result) => {
+    setToken(result.token);
+    setUser(result.user);
+  };
+
+  const handleRegisterBiometric = async () => {
+    try {
+      const { startRegistration, browserSupportsWebAuthn } = await import("@simplewebauthn/browser");
+      if (!browserSupportsWebAuthn()) {
+        toast({ status: "warning", description: "Seu navegador não suporta biometria.", duration: 3000, isClosable: true });
+        return;
+      }
+      const options = await webauthnRegisterOptions();
+      const regResponse = await startRegistration({ optionsJSON: options });
+      await webauthnRegisterVerify(regResponse);
+      localStorage.setItem("webauthn_email", user.email);
+      toast({ status: "success", description: "Biometria cadastrada com sucesso!", duration: 3000, isClosable: true });
+    } catch (err) {
+      if (err.name === "NotAllowedError") return;
+      toast({ status: "error", description: err.message || "Erro ao cadastrar biometria.", duration: 4000, isClosable: true });
+    }
+  };
+
   const handleLogout = () => {
     setToken(null);
     setUser(null);
@@ -397,7 +422,7 @@ const App = () => {
   if (!user) {
     return (
       <Box bg={pageBg} minH="100vh">
-        <LoginPage onLogin={handleLogin} onForgotPassword={forgotModal.onOpen} />
+        <LoginPage onLogin={handleLogin} onBiometricLogin={handleBiometricLogin} onForgotPassword={forgotModal.onOpen} />
         <ForgotPasswordModal isOpen={forgotModal.isOpen} onClose={forgotModal.onClose} />
       </Box>
     );
@@ -659,6 +684,26 @@ const App = () => {
           fontSize="sm"
           color={navColor}
           _hover={{ bg: navHoverBg }}
+          onClick={handleRegisterBiometric}
+          textAlign="left"
+          w="full"
+          whiteSpace="nowrap"
+        >
+          <Box flexShrink={0} fontSize="md">🔐</Box>
+          Cadastrar biometria
+        </Box>
+        <Box
+          as="button"
+          display="flex"
+          alignItems="center"
+          justifyContent="flex-start"
+          gap={3}
+          px={3}
+          py={2}
+          borderRadius="md"
+          fontSize="sm"
+          color={navColor}
+          _hover={{ bg: navHoverBg }}
           onClick={toggleColorMode}
           textAlign="left"
           w="full"
@@ -784,6 +829,11 @@ const App = () => {
               </VStack>
               <Divider />
               <VStack spacing={1} align="stretch" px={2} py={3}>
+                <Tooltip label="Cadastrar biometria" placement="right">
+                  <Box as="button" display="flex" alignItems="center" justifyContent="center" px={3} py={2} borderRadius="md" fontSize="sm" color={navColor} _hover={{ bg: navHoverBg }} onClick={handleRegisterBiometric} w="full">
+                    <Box flexShrink={0} fontSize="md">🔐</Box>
+                  </Box>
+                </Tooltip>
                 <Tooltip label={colorMode === "light" ? "Modo escuro" : "Modo claro"} placement="right">
                   <Box as="button" display="flex" alignItems="center" justifyContent="center" px={3} py={2} borderRadius="md" fontSize="sm" color={navColor} _hover={{ bg: navHoverBg }} onClick={toggleColorMode} w="full">
                     <Box flexShrink={0} fontSize="md">{colorMode === "light" ? <MoonIcon /> : <SunIcon />}</Box>

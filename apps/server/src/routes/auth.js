@@ -108,4 +108,8 @@ router.post('/reset-password', async (req, res) => {
   }
 });
 
+// WebAuthn biometric routes
+const webauthnRouter = require('./webauthn');
+router.use('/webauthn', webauthnRouter);
+
 module.exports = router;

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@antiadmin/anticaptchaofficial": "^1.0.55",
+    "@simplewebauthn/server": "^13.3.0",
     "@whiskeysockets/baileys": "^6.7.16",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
