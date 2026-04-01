@@ -1,43 +1,26 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import {
   Box,
   Button,
   Center,
-  Divider,
-  Flex,
   FormControl,
   FormLabel,
   Heading,
   Input,
   Link,
-  Text,
   VStack,
   Alert,
   AlertIcon,
   useColorModeValue
 } from "@chakra-ui/react";
-import { startAuthentication, browserSupportsWebAuthn } from "@simplewebauthn/browser";
-import { webauthnAuthenticateOptions, webauthnAuthenticateVerify } from "../api";
 
-const LoginPage = ({ onLogin, onBiometricLogin, onForgotPassword }) => {
+const LoginPage = ({ onLogin, onForgotPassword }) => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [biometricLoading, setBiometricLoading] = useState(false);
   const [error, setError] = useState("");
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricEmail, setBiometricEmail] = useState(null);
 
   const panelBg = useColorModeValue("white", "gray.800");
-  const dividerColor = useColorModeValue("gray.300", "gray.600");
-
-  useEffect(() => {
-    const savedEmail = localStorage.getItem("webauthn_email");
-    if (savedEmail && browserSupportsWebAuthn()) {
-      setBiometricAvailable(true);
-      setBiometricEmail(savedEmail);
-    }
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -52,26 +35,10 @@ const LoginPage = ({ onLogin, onBiometricLogin, onForgotPassword }) => {
     }
   };
 
-  const handleBiometric = async () => {
-    setError("");
-    setBiometricLoading(true);
-    try {
-      const options = await webauthnAuthenticateOptions(biometricEmail);
-      const authResponse = await startAuthentication({ optionsJSON: options });
-      const result = await webauthnAuthenticateVerify(biometricEmail, authResponse);
-      onBiometricLogin(result);
-    } catch (err) {
-      if (err.name === "NotAllowedError") return; // user cancelled
-      setError(err.message || "Falha na autenticação biométrica.");
-    } finally {
-      setBiometricLoading(false);
-    }
-  };
-
   return (
     <Center minH="100vh">
       <Box bg={panelBg} p={8} borderRadius="xl" boxShadow="lg" w="full" maxW="400px">
-        <VStack spacing={6}>
+        <VStack spacing={6} as="form" onSubmit={handleSubmit}>
           <Heading size="lg">Entrar</Heading>
 
           {error && (
@@ -81,57 +48,33 @@ const LoginPage = ({ onLogin, onBiometricLogin, onForgotPassword }) => {
             </Alert>
           )}
 
-          {biometricAvailable && (
-            <>
-              <Button
-                w="full"
-                size="lg"
-                colorScheme="blue"
-                variant="outline"
-                onClick={handleBiometric}
-                isLoading={biometricLoading}
-                loadingText="Autenticando..."
-                borderRadius="xl"
-              >
-                🔐 Entrar com biometria
-              </Button>
-              <Flex align="center" w="full" gap={3}>
-                <Divider borderColor={dividerColor} />
-                <Text fontSize="xs" color="gray.500" flexShrink={0}>ou</Text>
-                <Divider borderColor={dividerColor} />
-              </Flex>
-            </>
-          )}
+          <FormControl isRequired>
+            <FormLabel>E-mail</FormLabel>
+            <Input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="seu@email.com"
+            />
+          </FormControl>
 
-          <VStack spacing={4} as="form" onSubmit={handleSubmit} w="full">
-            <FormControl isRequired>
-              <FormLabel>E-mail</FormLabel>
-              <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
-              />
-            </FormControl>
+          <FormControl isRequired>
+            <FormLabel>Senha</FormLabel>
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Sua senha"
+            />
+          </FormControl>
 
-            <FormControl isRequired>
-              <FormLabel>Senha</FormLabel>
-              <Input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="Sua senha"
-              />
-            </FormControl>
+          <Button type="submit" colorScheme="blue" w="full" isLoading={loading}>
+            Entrar
+          </Button>
 
-            <Button type="submit" colorScheme="blue" w="full" isLoading={loading}>
-              Entrar
-            </Button>
-
-            <Link color="blue.500" fontSize="sm" onClick={onForgotPassword} cursor="pointer">
-              Esqueci minha senha
-            </Link>
-          </VStack>
+          <Link color="blue.500" fontSize="sm" onClick={onForgotPassword} cursor="pointer">
+            Esqueci minha senha
+          </Link>
         </VStack>
       </Box>
     </Center>

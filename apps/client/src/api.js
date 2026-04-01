@@ -42,49 +42,6 @@ export const login = async (email, password) => {
   return handleResponse(response);
 };
 
-// WebAuthn API
-export const webauthnRegisterOptions = async () => {
-  const r = await authFetch('/api/auth/webauthn/register/options', { method: 'POST' });
-  return handleResponse(r);
-};
-
-export const webauthnRegisterVerify = async (body) => {
-  const r = await authFetch('/api/auth/webauthn/register/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  return handleResponse(r);
-};
-
-export const webauthnAuthenticateOptions = async (email) => {
-  const r = await fetch('/api/auth/webauthn/authenticate/options', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
-  });
-  return handleResponse(r);
-};
-
-export const webauthnAuthenticateVerify = async (email, response) => {
-  const r = await fetch('/api/auth/webauthn/authenticate/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email, response }),
-  });
-  return handleResponse(r);
-};
-
-export const webauthnGetCredentials = async () => {
-  const r = await authFetch('/api/auth/webauthn/credentials');
-  return handleResponse(r);
-};
-
-export const webauthnDeleteCredential = async (id) => {
-  const r = await authFetch(`/api/auth/webauthn/credentials/${id}`, { method: 'DELETE' });
-  return handleResponse(r);
-};
-
 export const fetchMe = async () => {
   const response = await authFetch("/api/auth/me");
   return handleResponse(response);
