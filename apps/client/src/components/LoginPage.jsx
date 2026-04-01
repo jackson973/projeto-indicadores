@@ -31,8 +31,7 @@ const LoginPage = ({ onLogin, onBiometricLogin, onForgotPassword }) => {
   const dividerColor = useColorModeValue("gray.300", "gray.600");
 
   useEffect(() => {
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-    setSupportsWebAuthn(isMobile && browserSupportsWebAuthn());
+    setSupportsWebAuthn(browserSupportsWebAuthn());
     // Pre-fill email from saved biometric
     const savedEmail = localStorage.getItem("webauthn_email");
     if (savedEmail) setEmail(savedEmail);
