@@ -218,7 +218,10 @@ const App = () => {
   const [salesByPlatform, setSalesByPlatform] = useState([]);
   const [abc, setAbc] = useState([]);
   const [error, setError] = useState("");
-  const [activeView, setActiveView] = useState(() => localStorage.getItem("activeView") || "upload");
+  const [activeView, setActiveView] = useState(() => {
+    const saved = localStorage.getItem("activeView");
+    return saved && saved !== "upload" ? saved : "dashboard";
+  });
   const [expandedMenu, setExpandedMenu] = useState(null); // For submenu expansion
   const [autoplay, setAutoplay] = useState(true);
   const [sisplanActive, setSisplanActive] = useState(false);
@@ -405,7 +408,7 @@ const App = () => {
       label: "Importar planilha",
       icon: <ArrowUpIcon />,
       view: "upload",
-      show: true
+      show: false
     },
     {
       label: "Dashboard Vendas",
