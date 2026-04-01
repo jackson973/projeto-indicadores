@@ -313,7 +313,7 @@ const App = () => {
     setToken(null);
     setUser(null);
     setHasData(false);
-    setActiveView("upload");
+    setActiveView("dashboard");
   };
 
   const loadData = async (currentFilters) => {
@@ -827,7 +827,7 @@ const App = () => {
 
         <PWAInstallPrompt />
 
-        {(activeView === "upload" || !hasData) && activeView !== "users" && activeView !== "cashflow" && activeView !== "financial-dashboard" && activeView !== "sisplan-settings" && activeView !== "whatsapp-settings" && activeView !== "upseller-settings" && activeView !== "conversation-logs" && activeView !== "database-maintenance" && activeView !== "terceiros-settlement" && activeView !== "terceiros-groups" && activeView !== "terceiros-prices" && activeView !== "terceiros-rastreio" && activeView !== "system-settings" && activeView !== "products-management" && activeView !== "product-groups" && activeView !== "orders-new" && activeView !== "orders-list" && activeView !== "orders-products" && activeView !== "orders-conditions" && (
+        {activeView === "upload" && (
           <Center py={10}>
             <Box maxW="680px" w="full">
               <UploadForm onUpload={handleUpload} />
