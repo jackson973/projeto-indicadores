@@ -25,16 +25,18 @@ const LoginPage = ({ onLogin, onBiometricLogin, onForgotPassword }) => {
   const [loading, setLoading] = useState(false);
   const [biometricLoading, setBiometricLoading] = useState(false);
   const [error, setError] = useState("");
-  const [supportsWebAuthn, setSupportsWebAuthn] = useState(false);
+  const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEmail, setBiometricEmail] = useState(null);
 
   const panelBg = useColorModeValue("white", "gray.800");
   const dividerColor = useColorModeValue("gray.300", "gray.600");
 
   useEffect(() => {
-    setSupportsWebAuthn(browserSupportsWebAuthn());
-    // Pre-fill email from saved biometric
     const savedEmail = localStorage.getItem("webauthn_email");
-    if (savedEmail) setEmail(savedEmail);
+    if (savedEmail && browserSupportsWebAuthn()) {
+      setBiometricAvailable(true);
+      setBiometricEmail(savedEmail);
+    }
   }, []);
 
   const handleSubmit = async (e) => {
@@ -51,11 +53,6 @@ const LoginPage = ({ onLogin, onBiometricLogin, onForgotPassword }) => {
   };
 
   const handleBiometric = async () => {
-    const biometricEmail = email || localStorage.getItem("webauthn_email");
-    if (!biometricEmail) {
-      setError("Digite seu e-mail para usar a biometria.");
-      return;
-    }
     setError("");
     setBiometricLoading(true);
     try {
@@ -84,6 +81,28 @@ const LoginPage = ({ onLogin, onBiometricLogin, onForgotPassword }) => {
             </Alert>
           )}
 
+          {biometricAvailable && (
+            <>
+              <Button
+                w="full"
+                size="lg"
+                colorScheme="blue"
+                variant="outline"
+                onClick={handleBiometric}
+                isLoading={biometricLoading}
+                loadingText="Autenticando..."
+                borderRadius="xl"
+              >
+                🔐 Entrar com biometria
+              </Button>
+              <Flex align="center" w="full" gap={3}>
+                <Divider borderColor={dividerColor} />
+                <Text fontSize="xs" color="gray.500" flexShrink={0}>ou</Text>
+                <Divider borderColor={dividerColor} />
+              </Flex>
+            </>
+          )}
+
           <VStack spacing={4} as="form" onSubmit={handleSubmit} w="full">
             <FormControl isRequired>
               <FormLabel>E-mail</FormLabel>
@@ -108,33 +127,11 @@ const LoginPage = ({ onLogin, onBiometricLogin, onForgotPassword }) => {
             <Button type="submit" colorScheme="blue" w="full" isLoading={loading}>
               Entrar
             </Button>
+
+            <Link color="blue.500" fontSize="sm" onClick={onForgotPassword} cursor="pointer">
+              Esqueci minha senha
+            </Link>
           </VStack>
-
-          {supportsWebAuthn && (
-            <>
-              <Flex align="center" w="full" gap={3}>
-                <Divider borderColor={dividerColor} />
-                <Text fontSize="xs" color="gray.500" flexShrink={0}>ou</Text>
-                <Divider borderColor={dividerColor} />
-              </Flex>
-              <Button
-                w="full"
-                size="lg"
-                colorScheme="green"
-                variant="outline"
-                onClick={handleBiometric}
-                isLoading={biometricLoading}
-                loadingText="Autenticando..."
-                borderRadius="xl"
-              >
-                🔐 Entrar com biometria
-              </Button>
-            </>
-          )}
-
-          <Link color="blue.500" fontSize="sm" onClick={onForgotPassword} cursor="pointer">
-            Esqueci minha senha
-          </Link>
         </VStack>
       </Box>
     </Center>
