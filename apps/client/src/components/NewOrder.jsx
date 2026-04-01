@@ -258,7 +258,29 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         ? parseFloat(product.price_mn)
         : parseFloat(product.price_pc);
       setQty(product.id, size, currentQty + 1, cart[k]?.unitPrice ?? price);
-      return { status: "success", message: `${product.name} — Tam ${result.size_name} (${currentQty + 1}x)` };
+
+      // Build current size grid for this product (after incrementing)
+      const sizeGrid = {};
+      for (const s of product.sizes) {
+        const sk = cartKey(product.id, s.id);
+        const sName = String(s.size_name || s.name || "").toUpperCase();
+        let qty = cart[sk]?.qty || 0;
+        // Add the just-scanned increment
+        if (s.id === size.id) qty = currentQty + 1;
+        if (qty > 0) sizeGrid[sName] = qty;
+      }
+      const totalQty = Object.values(sizeGrid).reduce((a, b) => a + b, 0);
+
+      return {
+        status: "success",
+        message: `${product.name} — Tam ${result.size_name} (${currentQty + 1}x)`,
+        scanInfo: {
+          productName: product.name,
+          sizeName: String(result.size_name || "").toUpperCase(),
+          sizeGrid,
+          totalQty,
+        },
+      };
     }
     // Found in sisplan but not mapped
     return { status: "error", message: "Não vinculado. Vincule na Config Produtos." };

@@ -173,14 +173,22 @@ export default function BarcodeScanner({
   const [useNative, setUseNative] = useState(hasNativeDetector);
   const mutedColor = useColorModeValue("gray.500", "gray.400");
 
+  // Accumulated scan grid: { productName: { sizeName: qty, ... } }
+  const [scanGrid, setScanGrid] = useState({});
+  const [lastScannedSize, setLastScannedSize] = useState(null); // { productName, sizeName }
+  const [scanTotal, setScanTotal] = useState(0);
+  const processingRef = useRef(false);
+
   const handleScan = useCallback(
     async (decodedText) => {
       const code = decodedText.trim();
       if (!code) return;
+      if (processingRef.current) return;
       const now = Date.now();
-      if (code === lastCodeRef.current && now - lastTimeRef.current < 800) return;
+      if (code === lastCodeRef.current && now - lastTimeRef.current < 1500) return;
       lastCodeRef.current = code;
       lastTimeRef.current = now;
+      processingRef.current = true;
 
       try {
         const result = await onScan?.(code);
@@ -188,9 +196,25 @@ export default function BarcodeScanner({
         const message = result?.message || code;
         setFeedback({ status, message, code });
         playBeep(status);
+
+        // Update scan grid if structured info is returned
+        if (status === "success" && result?.scanInfo) {
+          const { productName, sizeName, sizeGrid } = result.scanInfo;
+          setLastScannedSize({ productName, sizeName });
+          setScanGrid(prev => {
+            const updated = { ...prev, [productName]: sizeGrid };
+            const total = Object.values(updated).reduce(
+              (sum, sizes) => sum + Object.values(sizes).reduce((a, b) => a + b, 0), 0
+            );
+            setScanTotal(total);
+            return updated;
+          });
+        }
       } catch (err) {
         setFeedback({ status: "error", message: err.message || "Erro", code });
         playBeep("error");
+      } finally {
+        processingRef.current = false;
       }
     },
     [onScan]
@@ -326,7 +350,7 @@ export default function BarcodeScanner({
             size="xs"
             variant="ghost"
             color={mutedColor}
-            onClick={() => { unlockAudio(); setCameraError(null); setFeedback(null); setCameraOn(true); }}
+            onClick={() => { unlockAudio(); setCameraError(null); setFeedback(null); setScanGrid({}); setScanTotal(0); setLastScannedSize(null); setCameraOn(true); }}
           >
             Abrir câmera
           </Button>
@@ -419,15 +443,68 @@ export default function BarcodeScanner({
             />
           )}
 
-          {/* Bottom feedback bar */}
+          {/* Bottom feedback bar with product grid */}
           <Box
             px={4} py={3}
             bg={feedback ? `${feedbackColor}.600` : "blackAlpha.800"}
             position="absolute" bottom={0} left={0} right={0}
             zIndex={1}
             transition="background 0.2s"
+            maxH="55vh"
+            overflowY="auto"
           >
-            {feedback ? (
+            {Object.keys(scanGrid).length > 0 ? (
+              <VStack spacing={3} align="stretch">
+                {feedback && (
+                  <Text color="white" fontSize="xs" fontWeight="bold" textAlign="center">
+                    {feedback.status === "success" ? "Vinculado!"
+                      : feedback.status === "duplicate" ? "Já adicionado!"
+                      : "Erro!"}
+                  </Text>
+                )}
+                {Object.entries(scanGrid).map(([productName, sizes]) => {
+                  const productTotal = Object.values(sizes).reduce((a, b) => a + b, 0);
+                  return (
+                    <Box key={productName}>
+                      <Text color="white" fontSize="xs" fontWeight="bold" mb={1}>
+                        {productName}
+                      </Text>
+                      {Object.entries(sizes).map(([sizeName, qty]) => {
+                        const isLast = lastScannedSize?.productName === productName
+                          && lastScannedSize?.sizeName === sizeName;
+                        return (
+                          <Flex key={sizeName} justify="space-between" px={2} py={0.5}>
+                            <Text color="whiteAlpha.800" fontSize="xs" fontFamily="mono" minW="40px">
+                              {sizeName}:
+                            </Text>
+                            <Text
+                              color={isLast ? "yellow.200" : "white"}
+                              fontSize="xs"
+                              fontFamily="mono"
+                              fontWeight={isLast ? "bold" : "normal"}
+                            >
+                              {qty}{isLast ? "*" : ""}
+                            </Text>
+                          </Flex>
+                        );
+                      })}
+                      <Flex justify="flex-end" mt={1} borderTop="1px solid" borderColor="whiteAlpha.300" pt={1}>
+                        <Text color="whiteAlpha.800" fontSize="xs" fontWeight="bold">
+                          Subtotal: {productTotal} un.
+                        </Text>
+                      </Flex>
+                    </Box>
+                  );
+                })}
+                {scanTotal > 0 && (
+                  <Flex justify="center" borderTop="1px solid" borderColor="whiteAlpha.400" pt={2}>
+                    <Text color="white" fontSize="sm" fontWeight="bold">
+                      Total: {scanTotal} Unidades
+                    </Text>
+                  </Flex>
+                )}
+              </VStack>
+            ) : feedback ? (
               <VStack spacing={0}>
                 <Text color="white" fontSize="xs" fontWeight="bold">
                   {feedback.status === "success" ? "Vinculado!"
