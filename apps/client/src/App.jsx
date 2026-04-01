@@ -672,26 +672,28 @@ const App = () => {
 
       {/* Bottom actions */}
       <VStack spacing={1} align="stretch" px={3} py={3}>
-        <Box
-          as="button"
-          display="flex"
-          alignItems="center"
-          justifyContent="flex-start"
-          gap={3}
-          px={3}
-          py={2}
-          borderRadius="md"
-          fontSize="sm"
-          color={navColor}
-          _hover={{ bg: navHoverBg }}
-          onClick={handleRegisterBiometric}
-          textAlign="left"
-          w="full"
-          whiteSpace="nowrap"
-        >
-          <Box flexShrink={0} fontSize="md">🔐</Box>
-          Cadastrar biometria
-        </Box>
+        {isMobile && (
+          <Box
+            as="button"
+            display="flex"
+            alignItems="center"
+            justifyContent="flex-start"
+            gap={3}
+            px={3}
+            py={2}
+            borderRadius="md"
+            fontSize="sm"
+            color={navColor}
+            _hover={{ bg: navHoverBg }}
+            onClick={handleRegisterBiometric}
+            textAlign="left"
+            w="full"
+            whiteSpace="nowrap"
+          >
+            <Box flexShrink={0} fontSize="md">🔐</Box>
+            Cadastrar biometria
+          </Box>
+        )}
         <Box
           as="button"
           display="flex"
@@ -829,11 +831,6 @@ const App = () => {
               </VStack>
               <Divider />
               <VStack spacing={1} align="stretch" px={2} py={3}>
-                <Tooltip label="Cadastrar biometria" placement="right">
-                  <Box as="button" display="flex" alignItems="center" justifyContent="center" px={3} py={2} borderRadius="md" fontSize="sm" color={navColor} _hover={{ bg: navHoverBg }} onClick={handleRegisterBiometric} w="full">
-                    <Box flexShrink={0} fontSize="md">🔐</Box>
-                  </Box>
-                </Tooltip>
                 <Tooltip label={colorMode === "light" ? "Modo escuro" : "Modo claro"} placement="right">
                   <Box as="button" display="flex" alignItems="center" justifyContent="center" px={3} py={2} borderRadius="md" fontSize="sm" color={navColor} _hover={{ bg: navHoverBg }} onClick={toggleColorMode} w="full">
                     <Box flexShrink={0} fontSize="md">{colorMode === "light" ? <MoonIcon /> : <SunIcon />}</Box>
