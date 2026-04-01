@@ -1025,20 +1025,20 @@ const App = () => {
               <>
                 <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} mb={4}>
                   {[1,2,3,4].map(i => (
-                    <Box key={i} bg={panelBg} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor}>
+                    <Box key={i} p={4} borderRadius="lg" borderWidth="1px" borderColor="gray.200" _dark={{ borderColor: "gray.600" }}>
                       <Skeleton height="12px" width="60%" mb={2} />
                       <Skeleton height="28px" width="80%" />
                     </Box>
                   ))}
                 </SimpleGrid>
-                <Box bg={panelBg} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor} mb={4}>
+                <Box p={4} borderRadius="lg" borderWidth="1px" borderColor="gray.200" _dark={{ borderColor: "gray.600" }} mb={4}>
                   <Skeleton height="200px" borderRadius="md" />
                 </Box>
                 <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mb={4}>
-                  <Box bg={panelBg} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor}>
+                  <Box p={4} borderRadius="lg" borderWidth="1px" borderColor="gray.200" _dark={{ borderColor: "gray.600" }}>
                     <Skeleton height="200px" borderRadius="md" />
                   </Box>
-                  <Box bg={panelBg} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor}>
+                  <Box p={4} borderRadius="lg" borderWidth="1px" borderColor="gray.200" _dark={{ borderColor: "gray.600" }}>
                     <Skeleton height="200px" borderRadius="md" />
                   </Box>
                 </SimpleGrid>
