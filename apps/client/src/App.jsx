@@ -18,7 +18,7 @@ import {
   IconButton,
   Image,
   Select,
-  Spinner,
+  Skeleton,
   Tooltip,
   Text,
   SimpleGrid,
@@ -217,6 +217,7 @@ const App = () => {
   const [salesByStore, setSalesByStore] = useState([]);
   const [salesByPlatform, setSalesByPlatform] = useState([]);
   const [abc, setAbc] = useState([]);
+  const [dashLoading, setDashLoading] = useState(false);
   const [error, setError] = useState("");
   const [activeView, setActiveView] = useState(() => {
     const saved = localStorage.getItem("activeView");
@@ -317,29 +318,34 @@ const App = () => {
   };
 
   const loadData = async (currentFilters) => {
-    const params = buildParams(currentFilters);
-    const [
-      summaryData,
-      storeList,
-      periodData,
-      storeData,
-      platformData,
-      abcData
-    ] = await Promise.all([
-      fetchSummary(params),
-      fetchStores(),
-      fetchSalesByPeriod(params),
-      fetchSalesByStore(params),
-      fetchSalesByPlatform(params),
-      fetchAbc(params)
-    ]);
+    setDashLoading(true);
+    try {
+      const params = buildParams(currentFilters);
+      const [
+        summaryData,
+        storeList,
+        periodData,
+        storeData,
+        platformData,
+        abcData
+      ] = await Promise.all([
+        fetchSummary(params),
+        fetchStores(),
+        fetchSalesByPeriod(params),
+        fetchSalesByStore(params),
+        fetchSalesByPlatform(params),
+        fetchAbc(params)
+      ]);
 
-    setSummary(summaryData);
-    setStores(storeList);
-    setSalesByPeriod(periodData);
-    setSalesByStore(storeData);
-    setSalesByPlatform(platformData);
-    setAbc(abcData);
+      setSummary(summaryData);
+      setStores(storeList);
+      setSalesByPeriod(periodData);
+      setSalesByStore(storeData);
+      setSalesByPlatform(platformData);
+      setAbc(abcData);
+    } finally {
+      setDashLoading(false);
+    }
   };
 
   const handleUpload = async (file) => {
@@ -1015,29 +1021,53 @@ const App = () => {
               </Flex>
             )}
 
-            <SummaryCards
-              summary={summary}
-              sisplanActive={sisplanActive}
-              onCanceledClick={canceledDrawer.onOpen}
-              onTodayClick={() => {
-                upsellerTodayDrawer.onOpen();
-              }}
-              onRevenueClick={revenueDrawer.onOpen}
-              onYesterdayClick={() => {
-                setDailySalesDate(getSaoPauloDate(-1));
-                setDailySalesTitle("Vendas Ontem");
-                dailySalesDrawer.onOpen();
-              }}
-              onRefresh={() => loadData(filters)}
-              onRefreshFabrica={async () => {
-                await refreshSisplanData();
-                await loadData(filters);
-              }}
-              onRefreshOnline={async () => {
-                await refreshUpsellerTodayAnalytics();
-                await loadData(filters);
-              }}
-            />
+            {dashLoading && !summary ? (
+              <>
+                <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} mb={4}>
+                  {[1,2,3,4].map(i => (
+                    <Box key={i} bg={panelBg} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor}>
+                      <Skeleton height="12px" width="60%" mb={2} />
+                      <Skeleton height="28px" width="80%" />
+                    </Box>
+                  ))}
+                </SimpleGrid>
+                <Box bg={panelBg} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor} mb={4}>
+                  <Skeleton height="200px" borderRadius="md" />
+                </Box>
+                <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mb={4}>
+                  <Box bg={panelBg} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor}>
+                    <Skeleton height="200px" borderRadius="md" />
+                  </Box>
+                  <Box bg={panelBg} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor}>
+                    <Skeleton height="200px" borderRadius="md" />
+                  </Box>
+                </SimpleGrid>
+              </>
+            ) : (
+              <SummaryCards
+                summary={summary}
+                sisplanActive={sisplanActive}
+                onCanceledClick={canceledDrawer.onOpen}
+                onTodayClick={() => {
+                  upsellerTodayDrawer.onOpen();
+                }}
+                onRevenueClick={revenueDrawer.onOpen}
+                onYesterdayClick={() => {
+                  setDailySalesDate(getSaoPauloDate(-1));
+                  setDailySalesTitle("Vendas Ontem");
+                  dailySalesDrawer.onOpen();
+                }}
+                onRefresh={() => loadData(filters)}
+                onRefreshFabrica={async () => {
+                  await refreshSisplanData();
+                  await loadData(filters);
+                }}
+                onRefreshOnline={async () => {
+                  await refreshUpsellerTodayAnalytics();
+                  await loadData(filters);
+                }}
+              />
+            )}
             <CanceledReportDrawer
               isOpen={canceledDrawer.isOpen}
               onClose={canceledDrawer.onClose}
