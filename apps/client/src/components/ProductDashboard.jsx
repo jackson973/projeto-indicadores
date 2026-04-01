@@ -17,7 +17,8 @@ import {
   MenuList,
   MenuItem,
   Checkbox,
-  Spinner,
+  Skeleton,
+  SkeletonText,
   Center,
   Table,
   Thead,
@@ -331,7 +332,32 @@ const ProductDashboard = () => {
       </Box>
 
       {loading ? (
-        <Center py={20}><Spinner size="xl" /></Center>
+        <>
+          <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} mb={6}>
+            {[1,2,3,4].map(i => (
+              <Box key={i} bg={panelBg} p={4} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
+                <Skeleton height="12px" width="60%" mb={2} />
+                <Skeleton height="28px" width="80%" />
+              </Box>
+            ))}
+          </SimpleGrid>
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mb={6}>
+            <Box bg={panelBg} p={4} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
+              <Skeleton height="200px" borderRadius="md" />
+            </Box>
+            <Box bg={panelBg} p={4} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
+              <Skeleton height="200px" borderRadius="md" />
+            </Box>
+          </SimpleGrid>
+          <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3}>
+            {[1,2,3,4,5,6,7,8].map(i => (
+              <Box key={i} bg={panelBg} p={3} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
+                <Skeleton height="80px" borderRadius="md" mb={2} />
+                <SkeletonText noOfLines={2} spacing={2} />
+              </Box>
+            ))}
+          </SimpleGrid>
+        </>
       ) : !data ? (
         <Center py={20}><Text color="gray.500">Selecione o período para visualizar.</Text></Center>
       ) : (
@@ -565,7 +591,17 @@ const ProductDashboard = () => {
           <ModalCloseButton />
           <ModalBody px={{ base: 2, md: 6 }} pb={6} overflowX="auto">
             {ordersModal.loading ? (
-              <Center py={20}><Spinner size="xl" /></Center>
+              <Box>
+                {[1,2,3,4,5].map(i => (
+                  <Box key={i} py={3} borderBottomWidth="1px" borderColor={borderColor}>
+                    <Flex justify="space-between" mb={2}>
+                      <Skeleton height="14px" width="80px" />
+                      <Skeleton height="14px" width="100px" />
+                    </Flex>
+                    <SkeletonText noOfLines={1} width="60%" />
+                  </Box>
+                ))}
+              </Box>
             ) : ordersModal.orders.length === 0 ? (
               <Center py={20}><Text color="gray.500">Nenhum pedido encontrado.</Text></Center>
             ) : isMobile ? (

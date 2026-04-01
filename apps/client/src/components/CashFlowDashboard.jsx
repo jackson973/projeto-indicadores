@@ -13,7 +13,7 @@ import {
   FormLabel,
   Select,
   HStack,
-  Spinner,
+  Skeleton,
   Center,
   useToast,
   useColorModeValue
@@ -181,7 +181,29 @@ const CashFlowDashboard = () => {
   }, [incomeByCategory, incTotal]);
 
   if (loading && !data) {
-    return <Center py={20}><Spinner size="xl" color="blue.500" /></Center>;
+    return (
+      <Box>
+        <Flex justify="space-between" align="flex-end" mb={6} wrap="wrap" gap={3}>
+          <Skeleton height="28px" width="200px" />
+        </Flex>
+        <SimpleGrid columns={{ base: 2, md: 3, lg: 6 }} spacing={4} mb={6}>
+          {[1,2,3,4,5,6].map(i => (
+            <Box key={i} bg={cardBg} p={4} borderRadius="xl" boxShadow="md" border="1px solid" borderColor={cardBorder}>
+              <Skeleton height="12px" width="70%" mb={2} />
+              <Skeleton height="26px" width="90%" />
+            </Box>
+          ))}
+        </SimpleGrid>
+        <SimpleGrid columns={{ base: 1, md: 2 }} spacing={4} mb={6}>
+          <Box bg={cardBg} p={4} borderRadius="xl" border="1px solid" borderColor={cardBorder}>
+            <Skeleton height="250px" borderRadius="md" />
+          </Box>
+          <Box bg={cardBg} p={4} borderRadius="xl" border="1px solid" borderColor={cardBorder}>
+            <Skeleton height="250px" borderRadius="md" />
+          </Box>
+        </SimpleGrid>
+      </Box>
+    );
   }
 
   const totals = data?.totals || { openingBalance: 0, totalIncome: 0, totalExpense: 0, netResult: 0, closingBalance: 0 };

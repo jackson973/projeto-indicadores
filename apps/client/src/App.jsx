@@ -370,15 +370,9 @@ const App = () => {
     return () => clearInterval(id);
   }, [hasData]);
 
-  // Loading state while checking auth
+  // Loading state while checking auth — splash screen handles this visually
   if (authLoading) {
-    return (
-      <Box bg={pageBg} minH="100vh">
-        <Center minH="100vh">
-          <Spinner size="xl" color="blue.500" />
-        </Center>
-      </Box>
-    );
+    return <Box bg={pageBg} minH="100vh" />;
   }
 
   // Reset password page (via email link)
