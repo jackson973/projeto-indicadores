@@ -173,10 +173,9 @@ export default function BarcodeScanner({
   const [useNative, setUseNative] = useState(hasNativeDetector);
   const mutedColor = useColorModeValue("gray.500", "gray.400");
 
-  // Accumulated scan grid: { productName: { sizeName: qty, ... } }
-  const [scanGrid, setScanGrid] = useState({});
-  const [lastScannedSize, setLastScannedSize] = useState(null); // { productName, sizeName }
-  const [scanTotal, setScanTotal] = useState(0);
+  // Current product grid (only shows the product being scanned now)
+  const [currentProduct, setCurrentProduct] = useState(null); // { name, sizeGrid, totalQty }
+  const [lastScannedSize, setLastScannedSize] = useState(null); // sizeName
   const processingRef = useRef(false);
 
   const handleScan = useCallback(
@@ -197,18 +196,11 @@ export default function BarcodeScanner({
         setFeedback({ status, message, code });
         playBeep(status);
 
-        // Update scan grid if structured info is returned
+        // Show only current product grid
         if (status === "success" && result?.scanInfo) {
-          const { productName, sizeName, sizeGrid } = result.scanInfo;
-          setLastScannedSize({ productName, sizeName });
-          setScanGrid(prev => {
-            const updated = { ...prev, [productName]: sizeGrid };
-            const total = Object.values(updated).reduce(
-              (sum, sizes) => sum + Object.values(sizes).reduce((a, b) => a + b, 0), 0
-            );
-            setScanTotal(total);
-            return updated;
-          });
+          const { productName, sizeName, sizeGrid, totalQty } = result.scanInfo;
+          setCurrentProduct({ name: productName, sizeGrid, totalQty });
+          setLastScannedSize(sizeName);
         }
       } catch (err) {
         setFeedback({ status: "error", message: err.message || "Erro", code });
@@ -350,7 +342,7 @@ export default function BarcodeScanner({
             size="xs"
             variant="ghost"
             color={mutedColor}
-            onClick={() => { unlockAudio(); setCameraError(null); setFeedback(null); setScanGrid({}); setScanTotal(0); setLastScannedSize(null); setCameraOn(true); }}
+            onClick={() => { unlockAudio(); setCameraError(null); setFeedback(null); setCurrentProduct(null); setLastScannedSize(null); setCameraOn(true); }}
           >
             Abrir câmera
           </Button>
@@ -453,8 +445,8 @@ export default function BarcodeScanner({
             maxH="55vh"
             overflowY="auto"
           >
-            {Object.keys(scanGrid).length > 0 ? (
-              <VStack spacing={3} align="stretch">
+            {currentProduct ? (
+              <VStack spacing={2} align="stretch">
                 {feedback && (
                   <Text color="white" fontSize="xs" fontWeight="bold" textAlign="center">
                     {feedback.status === "success" ? "Vinculado!"
@@ -462,47 +454,32 @@ export default function BarcodeScanner({
                       : "Erro!"}
                   </Text>
                 )}
-                {Object.entries(scanGrid).map(([productName, sizes]) => {
-                  const productTotal = Object.values(sizes).reduce((a, b) => a + b, 0);
+                <Text color="white" fontSize="sm" fontWeight="bold">
+                  {currentProduct.name}
+                </Text>
+                {Object.entries(currentProduct.sizeGrid).map(([sizeName, qty]) => {
+                  const isLast = lastScannedSize === sizeName;
                   return (
-                    <Box key={productName}>
-                      <Text color="white" fontSize="xs" fontWeight="bold" mb={1}>
-                        {productName}
+                    <Flex key={sizeName} justify="space-between" px={2} py={0.5}>
+                      <Text color="whiteAlpha.800" fontSize="xs" fontFamily="mono" minW="40px">
+                        {sizeName}:
                       </Text>
-                      {Object.entries(sizes).map(([sizeName, qty]) => {
-                        const isLast = lastScannedSize?.productName === productName
-                          && lastScannedSize?.sizeName === sizeName;
-                        return (
-                          <Flex key={sizeName} justify="space-between" px={2} py={0.5}>
-                            <Text color="whiteAlpha.800" fontSize="xs" fontFamily="mono" minW="40px">
-                              {sizeName}:
-                            </Text>
-                            <Text
-                              color={isLast ? "yellow.200" : "white"}
-                              fontSize="xs"
-                              fontFamily="mono"
-                              fontWeight={isLast ? "bold" : "normal"}
-                            >
-                              {qty}{isLast ? "*" : ""}
-                            </Text>
-                          </Flex>
-                        );
-                      })}
-                      <Flex justify="flex-end" mt={1} borderTop="1px solid" borderColor="whiteAlpha.300" pt={1}>
-                        <Text color="whiteAlpha.800" fontSize="xs" fontWeight="bold">
-                          Subtotal: {productTotal} un.
-                        </Text>
-                      </Flex>
-                    </Box>
+                      <Text
+                        color={isLast ? "yellow.200" : "white"}
+                        fontSize="xs"
+                        fontFamily="mono"
+                        fontWeight={isLast ? "bold" : "normal"}
+                      >
+                        {qty}{isLast ? "*" : ""}
+                      </Text>
+                    </Flex>
                   );
                 })}
-                {scanTotal > 0 && (
-                  <Flex justify="center" borderTop="1px solid" borderColor="whiteAlpha.400" pt={2}>
-                    <Text color="white" fontSize="sm" fontWeight="bold">
-                      Total: {scanTotal} Unidades
-                    </Text>
-                  </Flex>
-                )}
+                <Flex justify="center" borderTop="1px solid" borderColor="whiteAlpha.300" pt={2}>
+                  <Text color="white" fontSize="sm" fontWeight="bold">
+                    Total: {currentProduct.totalQty} Unidades
+                  </Text>
+                </Flex>
               </VStack>
             ) : feedback ? (
               <VStack spacing={0}>

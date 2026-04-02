@@ -92,6 +92,8 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   const [cart, setCart]                             = useState({});
   const [openProduct, setOpenProduct]               = useState(null);
   const [scannerOpen, setScannerOpen]               = useState(false);
+  const [autoSavedOrderId, setAutoSavedOrderId]     = useState(null);
+  const autoSavePendingRef                          = useRef(false);
 
   const customerDrawer  = useDisclosure();
   const cartDrawer      = useDisclosure();
@@ -128,6 +130,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   useEffect(() => {
     if (!initialOrder || catalog.length === 0 || cartInitialized.current) return;
     cartInitialized.current = true;
+    setAutoSavedOrderId(initialOrder.id);
 
     setPriceTable(initialOrder.price_table || "");
     setSelectedCondition(initialOrder.payment_condition || null);
@@ -258,6 +261,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         ? parseFloat(product.price_mn)
         : parseFloat(product.price_pc);
       setQty(product.id, size, currentQty + 1, cart[k]?.unitPrice ?? price);
+      autoSavePendingRef.current = true;
 
       // Build current size grid for this product (after incrementing)
       const sizeGrid = {};
@@ -285,6 +289,54 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
     // Found in sisplan but not mapped
     return { status: "error", message: "Não vinculado. Vincule na Config Produtos." };
   }, [catalog, cart, priceTable, setQty]);
+
+  // ─── Auto-save order on every cart change while scanning ──────────────────
+  useEffect(() => {
+    if (!autoSavePendingRef.current) return;
+    autoSavePendingRef.current = false;
+
+    const items = Object.values(cart);
+    if (items.length === 0) return;
+
+    const condObj = conditions.find(c => c.name === selectedCondition);
+    const customer_snapshot = selectedCustomer ? {
+      sisplan_id:   selectedCustomer.sisplan_id,
+      fantasy_name: selectedCustomer.fantasy_name,
+      company_name: selectedCustomer.company_name,
+      cnpj:         selectedCustomer.cnpj,
+    } : {};
+    const orderItems = items.map(item => ({
+      catalog_product_id: item.product.id,
+      product_name:       item.product.name,
+      size_name:          item.size.size_name || item.size.name,
+      sisplan_sku:        item.size.sisplan_sku || null,
+      qty:                item.qty,
+      unit_price:         item.unitPrice,
+    }));
+
+    const payload = {
+      customer_id:           selectedCustomer?.id || null,
+      customer_snapshot,
+      price_table:           priceTable || "MN",
+      payment_condition:     condObj?.name     || selectedCondition || null,
+      payment_condition_erp: condObj?.erp_code || null,
+      notes,
+      items: orderItems,
+    };
+
+    (async () => {
+      try {
+        if (autoSavedOrderId) {
+          await apiUpdateOrder(autoSavedOrderId, payload);
+        } else {
+          const order = await apiCreateOrder({ type: "pedido", ...payload });
+          setAutoSavedOrderId(order.id);
+        }
+      } catch (err) {
+        console.warn("[AutoSave] Erro ao salvar pedido:", err.message);
+      }
+    })();
+  }, [cart]);
 
   async function handleSubmit(type) {
     if (!selectedCustomer) {
@@ -319,8 +371,9 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
     setSubmitting(true);
     try {
       let order;
-      if (isEditing) {
-        order = await apiUpdateOrder(initialOrder.id, {
+      if (isEditing || autoSavedOrderId) {
+        const orderId = isEditing ? initialOrder.id : autoSavedOrderId;
+        order = await apiUpdateOrder(orderId, {
           customer_id: selectedCustomer.id,
           customer_snapshot,
           price_table: priceTable,
@@ -334,6 +387,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         if (onSaved) onSaved(order);
       } else {
         order = await apiCreateOrder({ type, customer_id: selectedCustomer.id, customer_snapshot, price_table: priceTable, payment_condition: condObj?.name || null, payment_condition_erp: condObj?.erp_code || null, notes, items });
+        setAutoSavedOrderId(order.id);
         toast({
           status: "success",
           title: type === "pedido" ? "Pedido salvo!" : "Orçamento salvo!",
@@ -346,6 +400,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         setPriceTable("");
         setSelectedCondition(null);
         setNotes("");
+        setAutoSavedOrderId(null);
         downloadOrderPdf(order).catch(() => {});
       }
     } catch (err) {
