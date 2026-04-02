@@ -51,6 +51,7 @@ import BarcodeScanner from "./BarcodeScanner";
 const PRICE_TABLES = [
   { id: "PC", label: "PC" },
   { id: "MN", label: "MN" },
+  { id: "SN", label: "SN" },
 ];
 
 // Normalize catalog sizes from API (size_name → name for UI)
@@ -258,7 +259,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
       }
       const k = cartKey(product.id, size.id);
       const currentQty = cart[k]?.qty || 0;
-      const price = priceTable === "MN"
+      const price = (priceTable === "MN" || priceTable === "SN")
         ? parseFloat(product.price_mn)
         : parseFloat(product.price_pc);
       setQty(product.id, size, currentQty + 1, cart[k]?.unitPrice ?? price);
@@ -477,7 +478,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         {/* Price table */}
         <FormControl>
           <FormLabel fontSize="sm" mb={1}>Tabela de Preços *</FormLabel>
-          <SimpleGrid columns={2} gap={2}>
+          <SimpleGrid columns={3} gap={2}>
             {PRICE_TABLES.map(t => (
               <Box
                 key={t.id}
@@ -740,7 +741,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                     <Text fontSize="xs" color={mutedColor}>{selectedCustomer.cnpj}</Text>
                   </Box>
                   {priceTable && (
-                    <Badge colorScheme={priceTable === "MN" ? "purple" : "blue"} fontSize="xs">
+                    <Badge colorScheme={priceTable === "MN" ? "purple" : priceTable === "SN" ? "orange" : "blue"} fontSize="xs">
                       {priceTable}
                     </Badge>
                   )}
@@ -926,7 +927,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
 // ---- Product Thumbnail (compact card for grid) ----
 function ProductThumb({ product, totalInCart, cartTotal, priceTable, cardBg, borderColor, mutedColor, photoBg, onOpen, onClear }) {
   const blueBorder = useColorModeValue("blue.400", "blue.300");
-  const basePrice = priceTable === "MN"
+  const basePrice = (priceTable === "MN" || priceTable === "SN")
     ? parseFloat(product.price_mn ?? product.price_pc ?? 0)
     : parseFloat(product.price_pc ?? 0);
 
@@ -1012,7 +1013,7 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
   function basePrice(table, p) {
     const prod = p || product;
     if (!prod) return 0;
-    if (table === "MN") return parseFloat(prod.price_mn ?? prod.price_pc ?? 0);
+    if (table === "MN" || table === "SN") return parseFloat(prod.price_mn ?? prod.price_pc ?? 0);
     return parseFloat(prod.price_pc ?? 0);
   }
 
