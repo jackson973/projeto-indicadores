@@ -166,20 +166,39 @@ async function deleteEntry(id) {
 // ── Balances ──
 
 async function getBalance(year, month, boxId) {
-  // Always try to auto-calculate from the nearest PRIOR month's balance.
-  // This guarantees that closing balance of month M = opening balance of month M+1.
-  const prevBalance = await db.query(
+  // Find the EARLIEST stored balance (seed) for this box, then sum ALL entries
+  // from that seed month through end of month-1. This ensures closing balance of
+  // month M always equals opening balance of month M+1.
+  const seedBalance = await db.query(
     `SELECT year, month, opening_balance FROM cashflow_balances
-     WHERE (year < $1 OR (year = $1 AND month < $2)) AND box_id = $3
-     ORDER BY year DESC, month DESC LIMIT 1`,
-    [year, month, boxId]
+     WHERE box_id = $1
+     ORDER BY year ASC, month ASC LIMIT 1`,
+    [boxId]
   );
 
-  if (prevBalance.rows.length > 0) {
-    const baseBalance = parseFloat(prevBalance.rows[0].opening_balance);
-    const by = prevBalance.rows[0].year;
-    const bm = prevBalance.rows[0].month;
-    const sumFromDate = `${by}-${String(bm).padStart(2, '0')}-01`;
+  if (seedBalance.rows.length > 0) {
+    const seedYear = seedBalance.rows[0].year;
+    const seedMonth = seedBalance.rows[0].month;
+    const baseBalance = parseFloat(seedBalance.rows[0].opening_balance);
+
+    // If the requested month IS the seed month, check if user has set an explicit
+    // balance for this exact month (allows manual override of the seed)
+    if (seedYear === year && seedMonth === month) {
+      const explicit = await db.query(
+        `SELECT opening_balance FROM cashflow_balances WHERE year = $1 AND month = $2 AND box_id = $3`,
+        [year, month, boxId]
+      );
+      if (explicit.rows.length > 0) {
+        return parseFloat(explicit.rows[0].opening_balance);
+      }
+    }
+
+    // If requested month is before the seed, fall through to entry-only calc
+    if (year < seedYear || (year === seedYear && month <= seedMonth)) {
+      return baseBalance;
+    }
+
+    const sumFromDate = `${seedYear}-${String(seedMonth).padStart(2, '0')}-01`;
 
     let endYear = year, endMonth = month - 1;
     if (endMonth === 0) { endMonth = 12; endYear--; }
@@ -198,15 +217,6 @@ async function getBalance(year, month, boxId) {
     const totalExpense = parseFloat(sums.rows[0].total_expense);
 
     return Number((baseBalance + totalIncome - totalExpense).toFixed(2));
-  }
-
-  // No prior balance — use explicit balance for THIS month as seed (first month of the system)
-  const result = await db.query(
-    `SELECT opening_balance FROM cashflow_balances WHERE year = $1 AND month = $2 AND box_id = $3`,
-    [year, month, boxId]
-  );
-  if (result.rows.length > 0) {
-    return parseFloat(result.rows[0].opening_balance);
   }
 
   // No balance at all — calculate from all entries before this month
@@ -240,10 +250,12 @@ async function getAllBoxesBalance(year, month) {
 }
 
 async function setBalance(year, month, openingBalance, boxId) {
+  // Replace all stored balances for this box with a single seed at the given month.
+  // This prevents stale intermediate balances from contaminating future calculations.
+  await db.query('DELETE FROM cashflow_balances WHERE box_id = $1', [boxId]);
   await db.query(
     `INSERT INTO cashflow_balances (year, month, opening_balance, box_id)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (year, month, box_id) DO UPDATE SET opening_balance = $3`,
+     VALUES ($1, $2, $3, $4)`,
     [year, month, openingBalance, boxId]
   );
 }
