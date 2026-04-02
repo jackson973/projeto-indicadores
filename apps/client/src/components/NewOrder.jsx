@@ -202,6 +202,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
 
   function setQty(productId, size, qty, unitPrice) {
     const k = cartKey(productId, size.id);
+    autoSavePendingRef.current = true;
     if (qty <= 0) {
       setCart(prev => { const n = { ...prev }; delete n[k]; return n; });
     } else {
@@ -261,7 +262,6 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         ? parseFloat(product.price_mn)
         : parseFloat(product.price_pc);
       setQty(product.id, size, currentQty + 1, cart[k]?.unitPrice ?? price);
-      autoSavePendingRef.current = true;
 
       // Build current size grid for this product (after incrementing)
       const sizeGrid = {};
@@ -329,7 +329,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         if (autoSavedOrderId) {
           await apiUpdateOrder(autoSavedOrderId, payload);
         } else {
-          const order = await apiCreateOrder({ type: "pedido", ...payload });
+          const order = await apiCreateOrder({ type: "orcamento", status: "rascunho", ...payload });
           setAutoSavedOrderId(order.id);
         }
       } catch (err) {

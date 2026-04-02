@@ -440,7 +440,7 @@ export default function OrdersList() {
                     Converter para Pedido
                   </Button>
                 )}
-                {(selected.status === "enviado" || selected.status === "concluido") && !selected.sisplan_order_id && (
+                {(selected.status === "enviado" || selected.status === "concluido") && !selected.sisplan_order_id && selected.customer_id && (
                   <Button
                     w="full" colorScheme="green" size="md" borderRadius="xl"
                     onClick={handleIntegrate}
@@ -450,14 +450,14 @@ export default function OrdersList() {
                     Integrar Sisplan
                   </Button>
                 )}
-                <SimpleGrid columns={selected.status === "rascunho" ? 4 : 2} gap={2} w="full">
+                <SimpleGrid columns={(selected.status === "rascunho" || selected.type === "orcamento") ? 4 : 2} gap={2} w="full">
                   <Button
                     variant="outline" colorScheme="gray" size="md" borderRadius="xl"
                     onClick={handleOpenPdf}
                   >
                     📄 PDF
                   </Button>
-                  {selected.status === "rascunho" && (
+                  {(selected.status === "rascunho" || selected.type === "orcamento") && (
                     <Button
                       variant="outline" colorScheme="blue" size="md" borderRadius="xl"
                       isDisabled={detailLoading}
@@ -466,7 +466,7 @@ export default function OrdersList() {
                       ✏️ Editar
                     </Button>
                   )}
-                  {selected.status === "rascunho" && (
+                  {(selected.status === "rascunho" || selected.type === "orcamento") && (
                     <Button
                       variant="outline" colorScheme="red" size="md" borderRadius="xl"
                       onClick={handleDelete}

@@ -524,7 +524,7 @@ async function associateBarcodesByGroup(catalogProductId, groupId) {
 
 async function deleteOrder(id) {
   const { rows } = await pool.query(
-    `DELETE FROM orders WHERE id = $1 AND status = 'rascunho' RETURNING id`,
+    `DELETE FROM orders WHERE id = $1 AND (status = 'rascunho' OR type = 'orcamento') RETURNING id`,
     [id]
   );
   return rows[0] || null;
