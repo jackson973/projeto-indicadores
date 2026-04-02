@@ -446,9 +446,9 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     // ── Helpers ──────────────────────────────────────────────────────────────
     const fmtBRL = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    // Fetch image via HTTP and convert to PNG buffer for PDFKit (supports PNG/JPEG only)
+    // Fetch image via HTTP, resize and convert to JPEG for small file size
     const PORT = process.env.PORT || 4000;
-    const loadImage = async (urlPath) => {
+    const loadImage = async (urlPath, maxW = 100, maxH = 100) => {
       if (!urlPath) return null;
       const http = require('http');
       return new Promise((resolve) => {
@@ -458,8 +458,11 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
           resp.on('data', (c) => chunks.push(c));
           resp.on('end', async () => {
             try {
-              const png = await sharp(Buffer.concat(chunks)).png().toBuffer();
-              resolve(png);
+              const buf = await sharp(Buffer.concat(chunks))
+                .resize(maxW, maxH, { fit: 'inside', withoutEnlargement: true })
+                .jpeg({ quality: 70 })
+                .toBuffer();
+              resolve(buf);
             } catch (_) { resolve(null); }
           });
           resp.on('error', () => resolve(null));
@@ -483,13 +486,15 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
         .restore();
     };
 
+    const PAGE_H = 842; // A4 height in points
+    const PAGE_BOTTOM = PAGE_H - M; // usable bottom
     let curY = M;
 
     // ── HEADER ───────────────────────────────────────────────────────────────
     const LOGO_W = 80;
     const LOGO_H = 64;
 
-    const logoData = await loadImage(logoUrl);
+    const logoData = await loadImage(logoUrl, 160, 128);
     if (logoData) {
       doc.image(logoData, M, curY, { width: LOGO_W, fit: [LOGO_W, LOGO_H] });
     }
@@ -550,22 +555,37 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     txt('ITENS DO PEDIDO', M, curY, { size: 7, font: 'Helvetica-Bold', color: ACCENT });
     curY += 11;
 
-    // Table header
+    // Table columns
     const IMG_COL = 52;   // photo column
     const NM_COL  = PW - IMG_COL - 55 - 65 - 65; // name
     const QT_COL  = 55;
     const PR_COL  = 65;
     const TOT_COL = 65;
-
     const thH = 18;
-    fillRect(M, curY, PW, thH, THBG);
-    strokeRect(M, curY, PW, thH, RULE);
-    const thY = curY + (thH - 8) / 2;
-    txt('Produto',         M + IMG_COL + 6,              thY, { size: 8, font: 'Helvetica-Bold', color: MID });
-    txt('Qtde',            M + IMG_COL + NM_COL,         thY, { size: 8, font: 'Helvetica-Bold', color: MID, align: 'center', w: QT_COL });
-    txt('Preço Unit.',     M + IMG_COL + NM_COL + QT_COL, thY, { size: 8, font: 'Helvetica-Bold', color: MID, align: 'right', w: PR_COL });
-    txt('Total',           M + IMG_COL + NM_COL + QT_COL + PR_COL, thY, { size: 8, font: 'Helvetica-Bold', color: MID, align: 'right', w: TOT_COL });
-    curY += thH;
+    const ROW_H = 40;
+
+    // Draw table header (reusable for new pages)
+    const drawTableHeader = () => {
+      fillRect(M, curY, PW, thH, THBG);
+      strokeRect(M, curY, PW, thH, RULE);
+      const thY = curY + (thH - 8) / 2;
+      txt('Produto',         M + IMG_COL + 6,              thY, { size: 8, font: 'Helvetica-Bold', color: MID });
+      txt('Qtde',            M + IMG_COL + NM_COL,         thY, { size: 8, font: 'Helvetica-Bold', color: MID, align: 'center', w: QT_COL });
+      txt('Preço Unit.',     M + IMG_COL + NM_COL + QT_COL, thY, { size: 8, font: 'Helvetica-Bold', color: MID, align: 'right', w: PR_COL });
+      txt('Total',           M + IMG_COL + NM_COL + QT_COL + PR_COL, thY, { size: 8, font: 'Helvetica-Bold', color: MID, align: 'right', w: TOT_COL });
+      curY += thH;
+    };
+
+    // Check if we need a new page, and if so, add page + re-draw table header
+    const ensureSpace = (needed) => {
+      if (curY + needed > PAGE_BOTTOM) {
+        doc.addPage();
+        curY = M;
+        drawTableHeader();
+      }
+    };
+
+    drawTableHeader();
 
     // Group by product
     const grouped = {};
@@ -574,31 +594,41 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
       grouped[item.product_name].items.push(item);
     }
 
+    // Pre-load all product images in parallel (resized thumbnails)
+    const groupEntries = Object.entries(grouped);
+    const imageCache = {};
+    await Promise.all(groupEntries.map(async ([productName, { photo_url }]) => {
+      if (photo_url) {
+        try {
+          imageCache[productName] = await loadImage(photo_url, 90, 70);
+        } catch (_) { /* skip */ }
+      }
+    }));
+
     let totalQty = 0;
     let totalVal = 0;
     let rowIdx   = 0;
 
-    for (const [productName, { items: sizes, photo_url }] of Object.entries(grouped)) {
+    for (const [productName, { items: sizes }] of groupEntries) {
       const prodQty   = sizes.reduce((s, i) => s + i.qty, 0);
       const prodTotal = sizes.reduce((s, i) => s + Number(i.unit_price) * i.qty, 0);
       const unitPrice = Number(sizes[0].unit_price);
-      const ROW_H     = 40;
       const bg        = rowIdx % 2 === 0 ? WHITE : ROWALT;
+
+      ensureSpace(ROW_H);
 
       fillRect(M, curY, PW, ROW_H, bg);
       hline(curY + ROW_H, M, M + PW, RULE, 0.4);
 
-      // Photo
-      if (photo_url) {
+      // Photo (from cache)
+      const imgData = imageCache[productName];
+      if (imgData) {
         try {
-          const imgData = await loadImage(photo_url);
-          if (imgData) {
-            doc.image(imgData, M + 3, curY + 3, { fit: [IMG_COL - 6, ROW_H - 6] });
-          }
+          doc.image(imgData, M + 3, curY + 3, { fit: [IMG_COL - 6, ROW_H - 6] });
         } catch (_) { /* skip if image fails */ }
       }
 
-      // Product name + sizes
+      // Product name
       const textX = M + IMG_COL + 6;
       txt(productName, textX, curY + (ROW_H - 9) / 2, { size: 9, font: 'Helvetica-Bold', color: DARK, w: NM_COL - 8 });
 
@@ -624,6 +654,7 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     }
 
     // ── TOTAIS ───────────────────────────────────────────────────────────────
+    ensureSpace(50); // ensure totals fit on current page
     curY += 6;
     hline(curY, M, M + PW, ACCENT, 1);
     curY += 8;
