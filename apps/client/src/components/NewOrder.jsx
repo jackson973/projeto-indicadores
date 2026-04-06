@@ -1122,8 +1122,7 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
       setTotalInput("");
     } else {
       sizesToAdd.forEach(s => {
-        const current = getQty(product.id, s.id);
-        setQty(product.id, s, current + addQty, price);
+        setQty(product.id, s, addQty, price);
       });
     }
   }
@@ -1245,9 +1244,14 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
                   cursor={addQty <= 1 ? "not-allowed" : "pointer"}
                   opacity={addQty <= 1 ? 0.4 : 1}
                 >−</Box>
-                <Text fontSize="md" fontWeight="bold" px={3} minW="30px" textAlign="center" userSelect="none">
-                  {addQty}
-                </Text>
+                <Input
+                  value={addQty}
+                  onChange={e => { const v = parseInt(e.target.value, 10); if (v > 0) setAddQty(v); else if (e.target.value === "") setAddQty(1); }}
+                  onFocus={e => e.target.select()}
+                  variant="unstyled"
+                  fontSize="md" fontWeight="bold" px={1} w="40px" textAlign="center"
+                  inputMode="numeric" pattern="[0-9]*"
+                />
                 <Box
                   as="button" px={4} h="full"
                   display="flex" alignItems="center" justifyContent="center"
@@ -1260,10 +1264,7 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
                 onClick={handleAdd}
                 isDisabled={selectedCount === 0}
               >
-                {totalInCart > 0
-                  ? `+ ${addQty} x ${selectedCount} tam.`
-                  : `Adicionar ${addQty} x ${selectedCount} tam.`
-                }
+                Adicionar {addQty} x {selectedCount} tam.
               </Button>
             </Flex>
           ) : (
