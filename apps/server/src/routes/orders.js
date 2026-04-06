@@ -362,6 +362,21 @@ router.put('/:id', async (req, res) => {
     const order = req.body.items !== undefined
       ? await repo.updateOrderFull(req.params.id, req.body)
       : await repo.updateOrder(req.params.id, req.body);
+
+    // Integração automática no Sisplan quando pedido é finalizado (type=pedido, status=enviado)
+    if (order.type === 'pedido' && order.status === 'enviado' && !order.sisplan_order_id) {
+      try {
+        const result = await sisplanOrderIntegration.integrateOrderExecute(order.id, req.user.id);
+        if (result.success) {
+          const updated = await repo.getOrderById(order.id);
+          return res.json(updated);
+        }
+        console.error('[Sisplan Integration] Falha na integração automática:', result.errors);
+      } catch (intErr) {
+        console.error('[Sisplan Integration] Erro na integração automática:', intErr.message);
+      }
+    }
+
     res.json(order);
   } catch (err) {
     console.error('orders/:id PUT error:', err);

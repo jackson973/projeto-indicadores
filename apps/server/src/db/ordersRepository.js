@@ -265,14 +265,20 @@ async function createOrder({ type, status, customer_id, customer_snapshot, price
   }
 }
 
-async function updateOrderFull(id, { customer_id, customer_snapshot, price_table, payment_condition, payment_condition_erp, notes, items }) {
+async function updateOrderFull(id, { customer_id, customer_snapshot, price_table, payment_condition, payment_condition_erp, notes, items, type, status }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const total = items.reduce((s, i) => s + i.qty * i.unit_price, 0);
+    const baseParams = [customer_id, JSON.stringify(customer_snapshot), price_table, payment_condition || null, payment_condition_erp || null, notes, total, id];
+    const extraFields = [];
+    const extraParams = [];
+    if (type !== undefined)   { extraParams.push(type);   extraFields.push(`type=$${baseParams.length + extraParams.length}`); }
+    if (status !== undefined) { extraParams.push(status); extraFields.push(`status=$${baseParams.length + extraParams.length}`); }
+    const extraSql = extraFields.length ? ', ' + extraFields.join(', ') : '';
     await client.query(
-      `UPDATE orders SET customer_id=$1, customer_snapshot=$2, price_table=$3, payment_condition=$4, payment_condition_erp=$5, notes=$6, total=$7, updated_at=NOW() WHERE id=$8`,
-      [customer_id, JSON.stringify(customer_snapshot), price_table, payment_condition || null, payment_condition_erp || null, notes, total, id]
+      `UPDATE orders SET customer_id=$1, customer_snapshot=$2, price_table=$3, payment_condition=$4, payment_condition_erp=$5, notes=$6, total=$7${extraSql}, updated_at=NOW() WHERE id=$8`,
+      [...baseParams, ...extraParams]
     );
     await client.query('DELETE FROM order_items WHERE order_id=$1', [id]);
     await _insertOrderItems(client, id, items);

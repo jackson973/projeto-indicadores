@@ -372,9 +372,10 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
     setSubmitting(true);
     try {
       let order;
+      const isFinalizing = !isEditing && autoSavedOrderId;
       if (isEditing || autoSavedOrderId) {
         const orderId = isEditing ? initialOrder.id : autoSavedOrderId;
-        order = await apiUpdateOrder(orderId, {
+        const payload = {
           customer_id: selectedCustomer.id,
           customer_snapshot,
           price_table: priceTable,
@@ -382,17 +383,41 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
           payment_condition_erp: condObj?.erp_code || null,
           notes,
           items,
-        });
-        toast({ status: "success", title: "Alterações salvas!", description: `#${order.id} atualizado.`, duration: 3000, isClosable: true });
-        cartDrawer.onClose();
-        if (onSaved) onSaved(order);
+        };
+        // Quando é finalização de rascunho auto-salvo, envia type e status
+        if (isFinalizing) {
+          payload.type = type;
+          payload.status = type === 'pedido' ? 'enviado' : 'rascunho';
+        }
+        order = await apiUpdateOrder(orderId, payload);
+        if (isFinalizing) {
+          toast({
+            status: "success",
+            title: type === "pedido" ? "Pedido enviado!" : "Orçamento salvo!",
+            description: `#${order.id} ${type === "pedido" ? "transmitido com sucesso." : "criado com sucesso."}`,
+            duration: 3000,
+          });
+          cartDrawer.onClose();
+          setCart({});
+          setSelectedCustomer(null);
+          setPriceTable("");
+          setSelectedCondition(null);
+          setNotes("");
+          setAutoSavedOrderId(null);
+          downloadOrderPdf(order).catch(() => {});
+          if (onSaved) onSaved(order);
+        } else {
+          toast({ status: "success", title: "Alterações salvas!", description: `#${order.id} atualizado.`, duration: 3000, isClosable: true });
+          cartDrawer.onClose();
+          if (onSaved) onSaved(order);
+        }
       } else {
         order = await apiCreateOrder({ type, customer_id: selectedCustomer.id, customer_snapshot, price_table: priceTable, payment_condition: condObj?.name || null, payment_condition_erp: condObj?.erp_code || null, notes, items });
         setAutoSavedOrderId(order.id);
         toast({
           status: "success",
-          title: type === "pedido" ? "Pedido salvo!" : "Orçamento salvo!",
-          description: `#${order.id} criado com sucesso.`,
+          title: type === "pedido" ? "Pedido enviado!" : "Orçamento salvo!",
+          description: `#${order.id} ${type === "pedido" ? "transmitido com sucesso." : "criado com sucesso."}`,
           duration: 3000,
         });
         cartDrawer.onClose();
