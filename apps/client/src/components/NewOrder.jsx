@@ -585,12 +585,21 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
                 const item = cart[k];
                 return item ? sum + (item.unitPrice ?? 0) * item.qty : sum;
               }, 0);
+              // Get the unit price from the cart (may differ from catalog price)
+              const cartUnitPrice = (() => {
+                for (const s of product.sizes) {
+                  const item = cart[cartKey(product.id, s.id)];
+                  if (item && item.qty > 0) return item.unitPrice;
+                }
+                return null;
+              })();
               return (
                 <ProductThumb
                   key={product.id}
                   product={product}
                   totalInCart={totalInCart}
                   cartTotal={cartTotalForProduct}
+                  cartUnitPrice={cartUnitPrice}
                   priceTable={priceTable}
                   cardBg={cardBg}
                   borderColor={borderColor}
@@ -925,11 +934,13 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
 }
 
 // ---- Product Thumbnail (compact card for grid) ----
-function ProductThumb({ product, totalInCart, cartTotal, priceTable, cardBg, borderColor, mutedColor, photoBg, onOpen, onClear }) {
+function ProductThumb({ product, totalInCart, cartTotal, cartUnitPrice, priceTable, cardBg, borderColor, mutedColor, photoBg, onOpen, onClear }) {
   const blueBorder = useColorModeValue("blue.400", "blue.300");
   const basePrice = (priceTable === "MN" || priceTable === "SN")
     ? parseFloat(product.price_mn ?? product.price_pc ?? 0)
     : parseFloat(product.price_pc ?? 0);
+  const displayPrice = (totalInCart > 0 && cartUnitPrice != null) ? cartUnitPrice : basePrice;
+  const priceWasChanged = totalInCart > 0 && cartUnitPrice != null && Math.abs(cartUnitPrice - basePrice) > 0.001;
 
   return (
     <Box
@@ -981,12 +992,12 @@ function ProductThumb({ product, totalInCart, cartTotal, priceTable, cardBg, bor
           {product.name}
         </Text>
         <Flex justify="space-between" align="center">
-          <Text fontSize="sm" fontWeight="bold" color="blue.500">
-            R$ {fmtBRL(basePrice)}
+          <Text fontSize="sm" fontWeight="bold" color={priceWasChanged ? "orange.500" : "blue.500"}>
+            R$ {fmtBRL(displayPrice)}
           </Text>
           {totalInCart > 0 && (
             <Text fontSize="xs" fontWeight="bold" color="green.500">
-              R$ {fmtBRL(cartTotal || basePrice * totalInCart)}
+              R$ {fmtBRL(cartTotal || displayPrice * totalInCart)}
             </Text>
           )}
         </Flex>
