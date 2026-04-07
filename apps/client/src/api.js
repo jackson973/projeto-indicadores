@@ -871,6 +871,11 @@ export const triggerSisplanProductSync = async () => {
   return handleResponse(response);
 };
 
+export const triggerSisplanOrderSync = async () => {
+  const response = await authFetch("/api/orders/check-deleted", { method: "POST" });
+  return handleResponse(response);
+};
+
 // ── System Settings ─────────────────────────────────────────────────────────
 
 export const fetchSystemSettings = async () => {

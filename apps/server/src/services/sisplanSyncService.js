@@ -534,7 +534,7 @@ async function startSisplanSyncScheduler() {
     const interval = settings.syncIntervalMinutes || 5;
     const schedule = `*/${interval} * * * *`;
 
-    const { checkDeletedOrders } = require('./sisplanOrderIntegrationService');
+    const { syncOrdersFromERP } = require('./sisplanOrderIntegrationService');
 
     currentJob = cron.schedule(schedule, async () => {
       console.log('[Sisplan Sync] Iniciando ciclo de sincronização...');
@@ -543,9 +543,9 @@ async function startSisplanSyncScheduler() {
       await runOfSync();
       await runProductSync();
       try {
-        await checkDeletedOrders();
+        await syncOrdersFromERP();
       } catch (err) {
-        console.error('[Sisplan Order Check] Erro no scheduler:', err.message);
+        console.error('[Sisplan Order Sync] Erro no scheduler:', err.message);
       }
       console.log('[Sisplan Sync] Ciclo de sincronização finalizado.');
     }, {
@@ -592,5 +592,6 @@ module.exports = {
   runProductSync,
   testFirebirdConnection,
   queryFirebird,
-  getFirebirdOptions
+  getFirebirdOptions,
+  resolveRowBlobs
 };

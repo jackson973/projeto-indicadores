@@ -290,13 +290,13 @@ router.post('/customers/sync', requireAdmin, async (req, res) => {
 
 // ─── Orders ──────────────────────────────────────────────────────────────────
 
-// Forçar verificação de pedidos deletados no Sisplan
+// Forçar sincronização de pedidos do ERP (sync reversa + detecção de deletados)
 router.post('/check-deleted', requireAdmin, async (req, res) => {
   try {
-    await sisplanOrderIntegration.checkDeletedOrders();
+    await sisplanOrderIntegration.syncOrdersFromERP();
     res.json({ ok: true });
   } catch (err) {
-    console.error('orders/check-deleted error:', err);
+    console.error('orders/sync-erp error:', err);
     res.status(500).json({ error: err.message });
   }
 });

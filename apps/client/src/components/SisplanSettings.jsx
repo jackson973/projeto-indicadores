@@ -40,7 +40,8 @@ import {
   triggerSisplanSync,
   triggerSisplanNfSync,
   triggerOfSync,
-  triggerSisplanProductSync
+  triggerSisplanProductSync,
+  triggerSisplanOrderSync
 } from "../api";
 
 const SYSTEM_FIELDS = [
@@ -157,6 +158,7 @@ const SisplanSettings = () => {
   const [testingProductQuery, setTestingProductQuery] = useState(false);
   const [syncingOf, setSyncingOf] = useState(false);
   const [syncingProduct, setSyncingProduct] = useState(false);
+  const [syncingOrders, setSyncingOrders] = useState(false);
   const [ofQueryColumns, setOfQueryColumns] = useState([]);
   const [ofPreviewRows, setOfPreviewRows] = useState([]);
   const [productQueryColumns, setProductQueryColumns] = useState([]);
@@ -443,6 +445,18 @@ const SisplanSettings = () => {
       toast({ title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncingProduct(false);
+    }
+  };
+
+  const handleOrderSync = async () => {
+    setSyncingOrders(true);
+    try {
+      await triggerSisplanOrderSync();
+      toast({ title: "Pedidos sincronizados com o ERP", status: "success", duration: 4000 });
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setSyncingOrders(false);
     }
   };
 
@@ -1141,7 +1155,37 @@ const SisplanSettings = () => {
           </AccordionPanel>
         </AccordionItem>
 
-        {/* 6. Agendamento (ultimo) */}
+        {/* 6. Sync Reversa de Pedidos */}
+        <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
+          <AccordionButton py={3} _expanded={{ bg: refBg }}>
+            <Box flex="1" textAlign="left">
+              <Text fontWeight="semibold">Pedidos (Sync Reversa)</Text>
+            </Box>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel pb={4}>
+            <VStack spacing={3} align="stretch">
+              <Text fontSize="sm" color="gray.500">
+                Sincroniza os pedidos integrados com os dados atualizados do ERP (itens, quantidades, preços, cliente).
+                Pedidos deletados no ERP recebem o status "Deletado no ERP".
+              </Text>
+              <Box>
+                <Button
+                  size="sm"
+                  colorScheme="teal"
+                  variant="outline"
+                  isLoading={syncingOrders}
+                  loadingText="Sincronizando..."
+                  onClick={handleOrderSync}
+                >
+                  Sincronizar Pedidos Agora
+                </Button>
+              </Box>
+            </VStack>
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* 7. Agendamento (ultimo) */}
         <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
           <AccordionButton py={3} _expanded={{ bg: refBg }}>
             <Box flex="1" textAlign="left">

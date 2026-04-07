@@ -219,15 +219,17 @@ async function getOrderById(id) {
       COALESCE(
         json_agg(
           json_build_object(
-            'id',                 i.id,
-            'catalog_product_id', i.catalog_product_id,
-            'product_name',       i.product_name,
-            'size_name',          i.size_name,
-            'sisplan_sku',        i.sisplan_sku,
-            'qty',                i.qty,
-            'unit_price',         i.unit_price,
-            'subtotal',           i.subtotal,
-            'photo_url',          p.photo_url
+            'id',                   i.id,
+            'catalog_product_id',   i.catalog_product_id,
+            'product_name',         i.product_name,
+            'size_name',            i.size_name,
+            'sisplan_sku',          i.sisplan_sku,
+            'sisplan_color_code',   i.sisplan_color_code,
+            'sisplan_color_name',   i.sisplan_color_name,
+            'qty',                  i.qty,
+            'unit_price',           i.unit_price,
+            'subtotal',             i.subtotal,
+            'photo_url',            p.photo_url
           ) ORDER BY i.id
         ) FILTER (WHERE i.id IS NOT NULL),
         '[]'

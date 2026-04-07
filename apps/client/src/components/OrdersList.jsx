@@ -37,10 +37,11 @@ const TYPE_LABELS = {
 };
 
 const STATUS_LABELS = {
-  rascunho:  { label: "Rascunho",  color: "gray"   },
-  enviado:   { label: "Enviado",   color: "orange" },
-  concluido: { label: "Concluído", color: "green"  },
-  cancelado: { label: "Cancelado", color: "red"    },
+  rascunho:     { label: "Rascunho",        color: "gray"   },
+  enviado:      { label: "Enviado",          color: "orange" },
+  concluido:    { label: "Concluído",        color: "green"  },
+  cancelado:    { label: "Cancelado",        color: "red"    },
+  deletado_erp: { label: "Deletado no ERP", color: "red"    },
 };
 
 function formatDate(iso) {
@@ -194,6 +195,7 @@ export default function OrdersList() {
           <option value="enviado">Enviado</option>
           <option value="concluido">Concluído</option>
           <option value="cancelado">Cancelado</option>
+          <option value="deletado_erp">Deletado no ERP</option>
         </Select>
       </SimpleGrid>
 
@@ -210,12 +212,15 @@ export default function OrdersList() {
           {orders.map(order => {
             // Se tem sisplan_order_id, é PEDIDO independente do type original
             const isIntegrated = !!order.sisplan_order_id;
-            const typeInfo   = isIntegrated
+            const isDeletedErp = order.status === 'deletado_erp';
+            const typeInfo   = isIntegrated || isDeletedErp
               ? { label: "Pedido", color: "blue" }
               : (TYPE_LABELS[order.type] || { label: order.type, color: "gray" });
-            const statusInfo = isIntegrated
-              ? { label: "Integrado", color: "green" }
-              : (STATUS_LABELS[order.status] || { label: order.status, color: "gray" });
+            const statusInfo = isDeletedErp
+              ? { label: "Deletado no ERP", color: "red" }
+              : isIntegrated
+                ? { label: "Integrado", color: "green" }
+                : (STATUS_LABELS[order.status] || { label: order.status, color: "gray" });
             const c = customer(order);
             return (
               <Box
@@ -311,19 +316,27 @@ export default function OrdersList() {
               <ModalHeader pb={2}>
                 {(() => {
                   const integrated = !!selected.sisplan_order_id;
-                  const typeLabel = integrated ? "Pedido" : (selected.type === "pedido" ? "Pedido" : "Orçamento");
-                  const stLabel = integrated
-                    ? { label: "Integrado", color: "green" }
-                    : (STATUS_LABELS[selected.status] || { label: selected.status, color: "gray" });
+                  const deletedErp = selected.status === 'deletado_erp';
+                  const typeLabel = (integrated || deletedErp) ? "Pedido" : (selected.type === "pedido" ? "Pedido" : "Orçamento");
+                  const stLabel = deletedErp
+                    ? { label: "Deletado no ERP", color: "red" }
+                    : integrated
+                      ? { label: "Integrado", color: "green" }
+                      : (STATUS_LABELS[selected.status] || { label: selected.status, color: "gray" });
                   return (
                     <VStack align="start" spacing={1}>
                       <HStack spacing={2} flexWrap="wrap">
                         <Text fontSize="md">{typeLabel} #{selected.id}</Text>
                         <Badge colorScheme={stLabel.color}>{stLabel.label}</Badge>
                       </HStack>
-                      {integrated && (
+                      {integrated && !deletedErp && (
                         <Text fontSize="sm" color="green.600" fontWeight="semibold">
                           Pedido no ERP: {selected.sisplan_order_id}
+                        </Text>
+                      )}
+                      {deletedErp && (
+                        <Text fontSize="sm" color="red.500" fontWeight="semibold">
+                          Este pedido foi deletado no ERP
                         </Text>
                       )}
                     </VStack>
@@ -435,12 +448,12 @@ export default function OrdersList() {
               </ModalBody>
 
               <ModalFooter flexDirection="column" gap={2} pb={{ base: 8, md: 4 }}>
-                {selected.status === "rascunho" && selected.type === "orcamento" && (
+                {selected.status !== "deletado_erp" && selected.status === "rascunho" && selected.type === "orcamento" && (
                   <Button w="full" colorScheme="blue" size="md" borderRadius="xl" onClick={handleConvertToOrder}>
                     Converter para Pedido
                   </Button>
                 )}
-                {(selected.status === "enviado" || selected.status === "concluido") && !selected.sisplan_order_id && selected.customer_id && (
+                {selected.status !== "deletado_erp" && (selected.status === "enviado" || selected.status === "concluido") && !selected.sisplan_order_id && selected.customer_id && (
                   <Button
                     w="full" colorScheme="green" size="md" borderRadius="xl"
                     onClick={handleIntegrate}
@@ -450,32 +463,37 @@ export default function OrdersList() {
                     Integrar Sisplan
                   </Button>
                 )}
-                <SimpleGrid columns={(selected.status === "rascunho" || selected.type === "orcamento") ? 4 : 2} gap={2} w="full">
-                  <Button
-                    variant="outline" colorScheme="gray" size="md" borderRadius="xl"
-                    onClick={handleOpenPdf}
-                  >
-                    📄 PDF
-                  </Button>
-                  {(selected.status === "rascunho" || selected.type === "orcamento") && (
-                    <Button
-                      variant="outline" colorScheme="blue" size="md" borderRadius="xl"
-                      isDisabled={detailLoading}
-                      onClick={() => { onClose(); setEditingOrder(selected); }}
-                    >
-                      ✏️ Editar
-                    </Button>
-                  )}
-                  {(selected.status === "rascunho" || selected.type === "orcamento") && (
-                    <Button
-                      variant="outline" colorScheme="red" size="md" borderRadius="xl"
-                      onClick={handleDelete}
-                    >
-                      🗑 Excluir
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="md" borderRadius="xl" onClick={onClose}>Fechar</Button>
-                </SimpleGrid>
+                {(() => {
+                  const canEdit = selected.status !== "deletado_erp" && (selected.status === "rascunho" || selected.type === "orcamento");
+                  return (
+                    <SimpleGrid columns={canEdit ? 4 : 2} gap={2} w="full">
+                      <Button
+                        variant="outline" colorScheme="gray" size="md" borderRadius="xl"
+                        onClick={handleOpenPdf}
+                      >
+                        📄 PDF
+                      </Button>
+                      {canEdit && (
+                        <Button
+                          variant="outline" colorScheme="blue" size="md" borderRadius="xl"
+                          isDisabled={detailLoading}
+                          onClick={() => { onClose(); setEditingOrder(selected); }}
+                        >
+                          ✏️ Editar
+                        </Button>
+                      )}
+                      {canEdit && (
+                        <Button
+                          variant="outline" colorScheme="red" size="md" borderRadius="xl"
+                          onClick={handleDelete}
+                        >
+                          🗑 Excluir
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="md" borderRadius="xl" onClick={onClose}>Fechar</Button>
+                    </SimpleGrid>
+                  );
+                })()}
               </ModalFooter>
             </>
           )}

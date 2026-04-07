@@ -2,7 +2,7 @@ const Firebird = require('node-firebird');
 const db = require('../db/connection');
 const ordersRepo = require('../db/ordersRepository');
 const sisplanRepo = require('../db/sisplanRepository');
-const { getFirebirdOptions } = require('./sisplanSyncService');
+const { getFirebirdOptions, resolveRowBlobs } = require('./sisplanSyncService');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -435,9 +435,61 @@ async function loadOrderData(orderId, userId) {
   return { order, items, customer, user };
 }
 
-// ─── Verificação de vendas/pedidos deletados no Sisplan ──────────────────────
+// ─── Sync reversa: ERP → App (itens + header + detecção de deletados) ───────
 
-async function checkDeletedOrders() {
+function toStr(val) {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'string') return val.trim();
+  if (Buffer.isBuffer(val)) return val.toString('utf-8').trim();
+  return String(val).trim();
+}
+
+function buildErpOrderItemsQuery(numeros) {
+  const inList = numeros.map(n => `'${n}'`).join(',');
+  return `
+    SELECT
+      itens.COR AS "idColor",
+      itens.TAM AS "tam",
+      cor.DESCRICAO AS "colorName",
+      itens.NUMERO AS "order_id",
+      pedidos.HR_EMISSAO AS "date",
+      produto.descricao AS "product",
+      (itens.QTDE + itens.QTDE_F) - itens.QTDE_CANC AS "quantity",
+      itens.PRECO AS "unit_price",
+      CAST(UDF_NVL((itens.QTDE + itens.QTDE_F) * CAST(itens.PRECO AS NUMERIC(14,2))) AS NUMERIC(7,2)) AS "total",
+      produto.codigo AS "sku",
+      produto.codigo||'-'||cor.DESCRICAO||'-'||itens.tam AS "variation",
+      (SELECT scid.COD_UF FROM CADCEP_001 scep INNER JOIN CIDADE scid ON scid.CODIGO = scep.CODMUN WHERE cliente.CEP = scep.CEP) AS "state",
+      '--' AS "status",
+      produto.descricao AS "ad_name",
+      '' AS "image",
+      cliente.FANTASIA AS "nome_fantasia",
+      cliente.nome AS "clientName",
+      cliente.codcli AS "codcli",
+      cliente.cnpj AS "cnpj",
+      pedidos.OBS AS "obs",
+      pedidos.PGTO AS "pgto",
+      pedidos.CODREP AS "codrep"
+    FROM PED_ITEN_001 itens
+    INNER JOIN PEDIDO_001 pedidos ON pedidos.NUMERO = itens.NUMERO
+    INNER JOIN PA_ITEN_001 pi ON pi.CODIGO = itens.CODIGO AND pi.COR = itens.COR AND pi.TAM = itens.TAM
+    INNER JOIN PRODUTO_001 produto ON produto.CODIGO = itens.codigo
+    INNER JOIN ENTIDADE_001 cliente ON cliente.codcli = pedidos.codcli
+    INNER JOIN CADCOR_001 cor ON cor.COR = pi.COR
+    WHERE pedidos.NUMERO IN (${inList})
+    GROUP BY
+      itens.NUMERO, pedidos.NUMERO, pedidos.HR_EMISSAO,
+      produto.codigo, produto.DESCRICAO, cliente.cep,
+      pi.cor, cor.DESCRICAO, itens.CODIGO, itens.TAM,
+      itens.PRECO_ORIG, itens.PRECO, itens.COR,
+      pedidos.DESC_ITEN_TOTAL, pedidos.PER_DESC, pedidos.COM1,
+      itens.QTDE, itens.QTDE_F, itens.QTDE_CANC,
+      cliente.FANTASIA, cliente.nome, cliente.codcli, cliente.cnpj,
+      pedidos.OBS, pedidos.PGTO, pedidos.CODREP
+  `;
+}
+
+async function syncOrdersFromERP() {
   let fbDb = null;
 
   try {
@@ -445,27 +497,208 @@ async function checkDeletedOrders() {
     if (!settings || !settings.active) return;
     const fbOptions = getFirebirdOptions(settings);
 
+    // 1. Buscar pedidos integrados no app (exceto deletado_erp e cancelado)
+    const { rows: integrated } = await db.query(
+      `SELECT id, sisplan_order_id, customer_id, notes, payment_condition_erp
+       FROM orders
+       WHERE sisplan_order_id IS NOT NULL
+         AND status NOT IN ('deletado_erp', 'cancelado')`
+    );
+
+    if (integrated.length === 0) {
+      console.log('[Sisplan Order Sync] Nenhum pedido integrado para sincronizar.');
+      return;
+    }
+
+    const orderMap = {};
+    for (const o of integrated) {
+      orderMap[o.sisplan_order_id.trim()] = o;
+    }
+    const numeros = Object.keys(orderMap);
+
+    console.log(`[Sisplan Order Sync] Sincronizando ${numeros.length} pedido(s)...`);
+
+    // 2. Conectar ao Firebird e buscar dados
     fbDb = await firebirdAttach(fbOptions);
     const transaction = await firebirdTransaction(fbDb);
 
-    // Buscar todos os números de pedido que existem no Sisplan (Fabrica)
-    const rows = await firebirdQuery(
+    // 2a. Buscar quais números existem no Sisplan (pra detectar deletados)
+    const existRows = await firebirdQuery(
       transaction,
       `SELECT NUMERO FROM PEDIDO_001`
     );
+    const sisplanNumeros = new Set(existRows.map(r => (r.NUMERO || '').trim()));
+
+    // 2b. Buscar itens dos pedidos que existem
+    const numerosExistentes = numeros.filter(n => sisplanNumeros.has(n));
+    let erpItems = [];
+    if (numerosExistentes.length > 0) {
+      const rawItems = await firebirdQuery(
+        transaction,
+        buildErpOrderItemsQuery(numerosExistentes)
+      );
+      // Resolver BLOBs (ex: OBS) antes de fechar transação
+      for (const row of rawItems) {
+        erpItems.push(await resolveRowBlobs(row, transaction));
+      }
+    }
+
     await firebirdCommit(transaction);
 
-    const sisplanNumeros = new Set(rows.map(r => (r.NUMERO || '').trim()));
-    console.log(`[Sisplan Order Check] ${sisplanNumeros.size} pedidos encontrados no Sisplan`);
+    // Fechar Firebird antes de processar PostgreSQL
+    await firebirdDetach(fbDb);
+    fbDb = null;
 
-    let salesDeleted = 0;
-    let ordersDeleted = 0;
+    // 3. Agrupar itens por número do pedido
+    const itemsByOrder = {};
+    for (const row of erpItems) {
+      const numero = toStr(row.order_id);
+      if (!itemsByOrder[numero]) itemsByOrder[numero] = { items: [], header: null };
+      itemsByOrder[numero].items.push(row);
+      // Header é o mesmo pra todos os itens do pedido
+      if (!itemsByOrder[numero].header) {
+        itemsByOrder[numero].header = {
+          nome_fantasia: toStr(row.nome_fantasia),
+          clientName: toStr(row.clientName),
+          codcli: toStr(row.codcli),
+          cnpj: toStr(row.cnpj),
+          state: toStr(row.state),
+          obs: toStr(row.obs),
+          pgto: toStr(row.pgto),
+          codrep: toStr(row.codrep),
+        };
+      }
+    }
 
-    // 1. Verificar tabela sales (vendas Fabrica) — deletar registros órfãos
+    let synced = 0;
+    let deleted = 0;
+
+    // 4. Processar cada pedido
+    for (const numero of numeros) {
+      const order = orderMap[numero];
+
+      // 4a. Pedido deletado no ERP
+      if (!sisplanNumeros.has(numero)) {
+        await db.query(
+          `UPDATE orders SET status = 'deletado_erp', updated_at = NOW() WHERE id = $1`,
+          [order.id]
+        );
+        deleted++;
+        console.log(`[Sisplan Order Sync] Pedido #${order.id} (${numero}) deletado no ERP → status=deletado_erp`);
+        continue;
+      }
+
+      // 4b. Pedido existe no ERP → regravar itens + atualizar header
+      const erpData = itemsByOrder[numero];
+      if (!erpData || erpData.items.length === 0) {
+        // Pedido existe mas sem itens (todos cancelados?)
+        const client = await db.getClient();
+        try {
+          await client.query('BEGIN');
+          await client.query('DELETE FROM order_items WHERE order_id = $1', [order.id]);
+          await client.query('UPDATE orders SET total = 0, updated_at = NOW() WHERE id = $1', [order.id]);
+          await client.query('COMMIT');
+          synced++;
+          console.log(`[Sisplan Order Sync] Pedido #${order.id} (${numero}) → 0 itens (todos removidos/cancelados)`);
+        } catch (err) {
+          await client.query('ROLLBACK');
+          console.error(`[Sisplan Order Sync] Erro no pedido #${order.id}:`, err.message);
+        } finally {
+          client.release();
+        }
+        continue;
+      }
+
+      // Regravar itens em transaction
+      const client = await db.getClient();
+      try {
+        await client.query('BEGIN');
+
+        // Delete itens antigos
+        await client.query('DELETE FROM order_items WHERE order_id = $1', [order.id]);
+
+        // Insert novos itens do ERP
+        let total = 0;
+        for (const item of erpData.items) {
+          const qty = Number(item.quantity) || 0;
+          const unitPrice = Number(item.unit_price) || 0;
+          total += qty * unitPrice;
+
+          await client.query(
+            `INSERT INTO order_items (order_id, product_name, size_name, sisplan_sku, sisplan_color_code, sisplan_color_name, qty, unit_price)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [
+              order.id,
+              toStr(item.product),
+              toStr(item.tam),
+              toStr(item.sku),
+              toStr(item.idColor),
+              toStr(item.colorName),
+              qty,
+              unitPrice,
+            ]
+          );
+        }
+
+        // Atualizar header do pedido (notes, payment_condition_erp, customer_snapshot parcial, total)
+        const header = erpData.header;
+        const updateFields = ['total = $2', 'updated_at = NOW()'];
+        const updateParams = [order.id, Math.round(total * 100) / 100];
+
+        // Atualizar notes se veio do ERP
+        if (header.obs) {
+          updateParams.push(header.obs);
+          updateFields.push(`notes = $${updateParams.length}`);
+        }
+
+        // Atualizar payment_condition_erp
+        if (header.pgto) {
+          updateParams.push(header.pgto);
+          updateFields.push(`payment_condition_erp = $${updateParams.length}`);
+        }
+
+        // Atualizar customer_snapshot com dados atualizados do ERP
+        const snapshot = {
+          sisplan_id: header.codcli,
+          fantasy_name: header.nome_fantasia,
+          company_name: header.clientName,
+          cnpj: header.cnpj,
+          uf: header.state,
+        };
+        updateParams.push(JSON.stringify(snapshot));
+        updateFields.push(`customer_snapshot = $${updateParams.length}`);
+
+        // Atualizar representante (created_by) se mudou no ERP
+        if (header.codrep) {
+          const { rows: [repUser] } = await client.query(
+            `SELECT id FROM users WHERE rep_code = $1 LIMIT 1`,
+            [header.codrep]
+          );
+          if (repUser) {
+            updateParams.push(repUser.id);
+            updateFields.push(`created_by = $${updateParams.length}`);
+          }
+        }
+
+        await client.query(
+          `UPDATE orders SET ${updateFields.join(', ')} WHERE id = $1`,
+          updateParams
+        );
+
+        await client.query('COMMIT');
+        synced++;
+      } catch (err) {
+        await client.query('ROLLBACK');
+        console.error(`[Sisplan Order Sync] Erro no pedido #${order.id} (${numero}):`, err.message);
+      } finally {
+        client.release();
+      }
+    }
+
+    // 5. Limpar vendas órfãs na tabela sales (mesmo comportamento anterior)
     const { rows: fabricaSales } = await db.query(
       `SELECT DISTINCT order_id FROM sales WHERE store = 'Fabrica'`
     );
-
     if (fabricaSales.length > 0) {
       const orphanSales = fabricaSales.filter(s => !sisplanNumeros.has(s.order_id.trim()));
       if (orphanSales.length > 0) {
@@ -475,35 +708,13 @@ async function checkDeletedOrders() {
           `DELETE FROM sales WHERE store = 'Fabrica' AND order_id IN (${placeholders})`,
           orphanIds
         );
-        salesDeleted = rowCount;
-        console.log(`[Sisplan Order Check] ${orphanIds.length} pedido(s) Fabrica removido(s) (${rowCount} linhas): ${orphanIds.join(', ')}`);
+        console.log(`[Sisplan Order Sync] ${orphanIds.length} venda(s) Fabrica órfã(s) removida(s) (${rowCount} linhas)`);
       }
     }
 
-    // 2. Verificar tabela orders (pedidos B2B) — limpar sisplan_order_id
-    const { rows: integrated } = await db.query(
-      `SELECT id, sisplan_order_id FROM orders WHERE sisplan_order_id IS NOT NULL`
-    );
-
-    if (integrated.length > 0) {
-      const orphanOrders = integrated.filter(o => !sisplanNumeros.has(o.sisplan_order_id.trim()));
-      if (orphanOrders.length > 0) {
-        for (const order of orphanOrders) {
-          await db.query(
-            `UPDATE orders SET sisplan_order_id = NULL, updated_at = NOW() WHERE id = $1`,
-            [order.id]
-          );
-        }
-        ordersDeleted = orphanOrders.length;
-        console.log(`[Sisplan Order Check] ${orphanOrders.length} pedido(s) B2B desvinculado(s): ${orphanOrders.map(o => `#${o.id} (${o.sisplan_order_id})`).join(', ')}`);
-      }
-    }
-
-    if (salesDeleted === 0 && ordersDeleted === 0) {
-      console.log(`[Sisplan Order Check] ${fabricaSales.length} vendas Fabrica + ${integrated.length} pedidos B2B verificados, todos ok.`);
-    }
+    console.log(`[Sisplan Order Sync] Concluído: ${synced} sincronizado(s), ${deleted} deletado(s) no ERP.`);
   } catch (err) {
-    console.error('[Sisplan Order Check] Erro:', err.message);
+    console.error('[Sisplan Order Sync] Erro:', err.message);
   } finally {
     if (fbDb) await firebirdDetach(fbDb);
   }
@@ -512,5 +723,5 @@ async function checkDeletedOrders() {
 module.exports = {
   integrateOrderDryRun,
   integrateOrderExecute,
-  checkDeletedOrders,
+  syncOrdersFromERP,
 };
