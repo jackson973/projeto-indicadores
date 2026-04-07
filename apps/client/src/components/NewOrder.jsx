@@ -403,7 +403,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
           setSelectedCondition(null);
           setNotes("");
           setAutoSavedOrderId(null);
-          downloadOrderPdf(order).catch(() => {});
+          if (type === 'pedido') downloadOrderPdf(order).catch(() => {});
           if (onSaved) onSaved(order);
         } else {
           toast({ status: "success", title: "Alterações salvas!", description: `#${order.id} atualizado.`, duration: 3000 });
@@ -425,7 +425,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         setSelectedCondition(null);
         setNotes("");
         setAutoSavedOrderId(null);
-        downloadOrderPdf(order).catch(() => {});
+        if (type === 'pedido') downloadOrderPdf(order).catch(() => {});
       }
     } catch (err) {
       toast({  status: "error", description: err.message, duration: 3000  });
