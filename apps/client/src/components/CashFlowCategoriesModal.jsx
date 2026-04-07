@@ -18,7 +18,6 @@ import {
   HStack,
   Badge,
   Button,
-  useToast,
   useColorModeValue
 } from "@chakra-ui/react";
 import { AddIcon, EditIcon, DeleteIcon, CheckIcon, CloseIcon } from "@chakra-ui/icons";
@@ -28,6 +27,7 @@ import {
   updateCashflowCategory,
   deleteCashflowCategory
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const CashFlowCategoriesModal = ({ isOpen, onClose, onCategoriesChange }) => {
   const [categories, setCategories] = useState([]);
@@ -35,7 +35,7 @@ const CashFlowCategoriesModal = ({ isOpen, onClose, onCategoriesChange }) => {
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState("");
   const [adding, setAdding] = useState(false);
-  const toast = useToast();
+  const toast = useAppToast();
   const headerBg = useColorModeValue("gray.50", "gray.700");
 
   const load = async () => {
@@ -43,7 +43,7 @@ const CashFlowCategoriesModal = ({ isOpen, onClose, onCategoriesChange }) => {
       const data = await fetchCashflowCategories();
       setCategories(data);
     } catch (err) {
-      toast({ title: "Erro ao carregar categorias.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar categorias.", status: "error", duration: 3000 });
     }
   };
 
@@ -60,7 +60,7 @@ const CashFlowCategoriesModal = ({ isOpen, onClose, onCategoriesChange }) => {
       await load();
       onCategoriesChange?.();
     } catch (err) {
-      toast({ title: err.message || "Erro ao criar categoria.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao criar categoria.", status: "error", duration: 3000 });
     } finally {
       setAdding(false);
     }
@@ -74,7 +74,7 @@ const CashFlowCategoriesModal = ({ isOpen, onClose, onCategoriesChange }) => {
       await load();
       onCategoriesChange?.();
     } catch (err) {
-      toast({ title: err.message || "Erro ao atualizar categoria.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao atualizar categoria.", status: "error", duration: 3000 });
     }
   };
 
@@ -84,7 +84,7 @@ const CashFlowCategoriesModal = ({ isOpen, onClose, onCategoriesChange }) => {
       await load();
       onCategoriesChange?.();
     } catch (err) {
-      toast({ title: err.message || "Erro ao excluir categoria.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao excluir categoria.", status: "error", duration: 3000 });
     }
   };
 

@@ -23,7 +23,6 @@ import {
   ModalFooter,
   ModalCloseButton,
   Checkbox,
-  useToast,
   useColorModeValue,
   useBreakpointValue,
   useDisclosure
@@ -49,6 +48,7 @@ import {
   removeProductsFromGroupBatch,
   fetchTerceirosProducts
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const TerceirosProductGroups = () => {
   const [groups, setGroups] = useState([]);
@@ -91,7 +91,7 @@ const TerceirosProductGroups = () => {
   const [selectedUngrouped, setSelectedUngrouped] = useState(new Set());
   const [batchAssigning, setBatchAssigning] = useState(false);
 
-  const toast = useToast();
+  const toast = useAppToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
 
   const cardBg = useColorModeValue("white", "gray.800");
@@ -109,7 +109,7 @@ const TerceirosProductGroups = () => {
       const data = await fetchTerceirosProductGroups();
       setGroups(data);
     } catch (err) {
-      toast({ title: "Erro ao carregar grupos.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar grupos.", status: "error", duration: 3000 });
     } finally {
       setLoadingGroups(false);
     }
@@ -122,7 +122,7 @@ const TerceirosProductGroups = () => {
       const data = await fetchGroupProducts(groupId);
       setGroupProducts(data);
     } catch (err) {
-      toast({ title: "Erro ao carregar produtos do grupo.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar produtos do grupo.", status: "error", duration: 3000 });
     } finally {
       setLoadingProducts(false);
     }
@@ -135,7 +135,7 @@ const TerceirosProductGroups = () => {
       const data = await fetchTerceirosProducts();
       setAllProducts(data);
     } catch (err) {
-      toast({ title: "Erro ao carregar produtos do ERP.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar produtos do ERP.", status: "error", duration: 3000 });
     } finally {
       setLoadingAllProducts(false);
     }
@@ -191,7 +191,7 @@ const TerceirosProductGroups = () => {
       await loadAllProducts();
       await loadGroups();
     } catch (err) {
-      toast({ title: err.message || "Erro ao adicionar produto.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao adicionar produto.", status: "error", duration: 3000 });
     } finally {
       setAssigningProduct(null);
     }
@@ -211,7 +211,7 @@ const TerceirosProductGroups = () => {
       await loadAllProducts();
       await loadGroups();
     } catch (err) {
-      toast({ title: err.message || "Erro ao adicionar produtos.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao adicionar produtos.", status: "error", duration: 3000 });
     } finally {
       setBatchAssigning(false);
     }
@@ -238,10 +238,10 @@ const TerceirosProductGroups = () => {
       await createTerceirosProductGroup(newGroupName.trim());
       setNewGroupName("");
       createModal.onClose();
-      toast({ title: "Grupo criado com sucesso.", status: "success", duration: 3000 });
+      toast({  title: "Grupo criado com sucesso.", status: "success", duration: 3000 });
       await loadGroups();
     } catch (err) {
-      toast({ title: err.message || "Erro ao criar grupo.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao criar grupo.", status: "error", duration: 3000 });
     } finally {
       setCreating(false);
     }
@@ -253,10 +253,10 @@ const TerceirosProductGroups = () => {
     try {
       await updateTerceirosProductGroup(id, editingName.trim());
       setEditingId(null);
-      toast({ title: "Grupo atualizado.", status: "success", duration: 3000 });
+      toast({  title: "Grupo atualizado.", status: "success", duration: 3000 });
       await loadGroups();
     } catch (err) {
-      toast({ title: err.message || "Erro ao atualizar grupo.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao atualizar grupo.", status: "error", duration: 3000 });
     }
   };
 
@@ -267,10 +267,10 @@ const TerceirosProductGroups = () => {
       if (selectedGroupId === id) {
         setSelectedGroupId(null);
       }
-      toast({ title: "Grupo excluido.", status: "success", duration: 3000 });
+      toast({  title: "Grupo excluido.", status: "success", duration: 3000 });
       await loadGroups();
     } catch (err) {
-      toast({ title: err.message || "Erro ao excluir grupo. Verifique se nao esta em uso.", status: "error", duration: 4000 });
+      toast({  title: err.message || "Erro ao excluir grupo. Verifique se nao esta em uso.", status: "error", duration: 4000 });
     }
   };
 
@@ -283,7 +283,7 @@ const TerceirosProductGroups = () => {
       await loadGroupProducts(selectedGroupId);
       await loadGroups();
     } catch (err) {
-      toast({ title: err.message || "Erro ao adicionar produto.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao adicionar produto.", status: "error", duration: 3000 });
     } finally {
       setAddingProduct(null);
     }
@@ -304,7 +304,7 @@ const TerceirosProductGroups = () => {
       await loadGroupProducts(selectedGroupId);
       await loadGroups();
     } catch (err) {
-      toast({ title: err.message || "Erro ao adicionar produtos.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao adicionar produtos.", status: "error", duration: 3000 });
     } finally {
       setBatchAdding(false);
     }
@@ -315,11 +315,11 @@ const TerceirosProductGroups = () => {
     if (!selectedGroupId) return;
     try {
       await removeProductFromGroup(selectedGroupId, productCode);
-      toast({ title: "Produto removido do grupo.", status: "success", duration: 3000 });
+      toast({  title: "Produto removido do grupo.", status: "success", duration: 3000 });
       await loadGroupProducts(selectedGroupId);
       await loadGroups();
     } catch (err) {
-      toast({ title: err.message || "Erro ao remover produto.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao remover produto.", status: "error", duration: 3000 });
     }
   };
 
@@ -335,7 +335,7 @@ const TerceirosProductGroups = () => {
       await loadGroupProducts(selectedGroupId);
       await loadGroups();
     } catch (err) {
-      toast({ title: err.message || "Erro ao remover produtos.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao remover produtos.", status: "error", duration: 3000 });
     } finally {
       setRemovingBatch(false);
     }

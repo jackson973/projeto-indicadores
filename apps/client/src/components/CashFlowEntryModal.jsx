@@ -16,9 +16,9 @@ import {
   Select,
   Button,
   HStack,
-  ButtonGroup,
-  useToast
+  ButtonGroup
 } from "@chakra-ui/react";
+import useAppToast from "../hooks/useAppToast";
 
 const formatBRL = (value) =>
   (value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -33,7 +33,7 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
     status: "pending"
   });
   const [saving, setSaving] = useState(false);
-  const toast = useToast();
+  const toast = useAppToast();
 
   useEffect(() => {
     if (entry) {
@@ -68,7 +68,7 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!form.date || !form.categoryId || !form.description.trim() || !form.amount) {
-      toast({ title: "Preencha todos os campos obrigatórios.", status: "warning", duration: 3000 });
+      toast({  title: "Preencha todos os campos obrigatórios.", status: "warning", duration: 3000 });
       return;
     }
     setSaving(true);
@@ -83,7 +83,7 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
       }, entry?.id);
       onClose();
     } catch (err) {
-      toast({ title: err.message || "Erro ao salvar.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao salvar.", status: "error", duration: 3000 });
     } finally {
       setSaving(false);
     }

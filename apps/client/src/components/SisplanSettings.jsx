@@ -29,8 +29,7 @@ import {
   Thead,
   Tr,
   VStack,
-  useColorModeValue,
-  useToast
+  useColorModeValue
 } from "@chakra-ui/react";
 import {
   fetchSisplanSettings,
@@ -43,6 +42,7 @@ import {
   triggerSisplanProductSync,
   triggerSisplanOrderSync
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const SYSTEM_FIELDS = [
   { key: "order_id", label: "order_id", description: "Número do pedido", required: true },
@@ -169,7 +169,7 @@ const SisplanSettings = () => {
   const [previewRows, setPreviewRows] = useState([]);
   const [nfQueryColumns, setNfQueryColumns] = useState([]);
   const [nfPreviewRows, setNfPreviewRows] = useState([]);
-  const toast = useToast();
+  const toast = useAppToast();
 
   const panelBg = useColorModeValue("white", "gray.800");
   const refBg = useColorModeValue("gray.50", "gray.700");
@@ -229,7 +229,7 @@ const SisplanSettings = () => {
         lastSyncRows: data.productLastSyncRows
       });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setLoading(false);
     }
@@ -239,10 +239,10 @@ const SisplanSettings = () => {
     setSaving(true);
     try {
       await updateSisplanSettings(form);
-      toast({ title: "Configurações salvas com sucesso!", status: "success", duration: 3000 });
+      toast({  title: "Configurações salvas com sucesso!", status: "success", duration: 3000 });
       await loadSettings();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSaving(false);
     }
@@ -258,9 +258,9 @@ const SisplanSettings = () => {
         fbUser: form.fbUser,
         fbPassword: form.fbPassword
       });
-      toast({ title: result.message, status: "success", duration: 3000 });
+      toast({  title: result.message, status: "success", duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setTestingConnection(false);
     }
@@ -282,10 +282,9 @@ const SisplanSettings = () => {
       toast({
         title: `Query executada: ${result.totalPreview} registros retornados`,
         status: "success",
-        duration: 3000
-      });
+        duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setTestingQuery(false);
     }
@@ -295,10 +294,10 @@ const SisplanSettings = () => {
     setSyncing(true);
     try {
       const result = await triggerSisplanSync();
-      toast({ title: result.message, status: "success", duration: 4000 });
+      toast({  title: result.message, status: "success", duration: 4000 });
       await loadSettings();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncing(false);
     }
@@ -330,10 +329,9 @@ const SisplanSettings = () => {
       toast({
         title: `Query executada: ${result.totalPreview} registros retornados`,
         status: "success",
-        duration: 3000
-      });
+        duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setTestingNfQuery(false);
     }
@@ -343,10 +341,10 @@ const SisplanSettings = () => {
     setSyncingNf(true);
     try {
       const result = await triggerSisplanNfSync();
-      toast({ title: result.message, status: "success", duration: 4000 });
+      toast({  title: result.message, status: "success", duration: 4000 });
       await loadSettings();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncingNf(false);
     }
@@ -378,10 +376,9 @@ const SisplanSettings = () => {
       toast({
         title: `Query executada: ${result.totalPreview} registros retornados`,
         status: "success",
-        duration: 3000
-      });
+        duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setTestingOfQuery(false);
     }
@@ -391,10 +388,10 @@ const SisplanSettings = () => {
     setSyncingOf(true);
     try {
       const result = await triggerOfSync();
-      toast({ title: result.message, status: "success", duration: 4000 });
+      toast({  title: result.message, status: "success", duration: 4000 });
       await loadSettings();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncingOf(false);
     }
@@ -426,10 +423,9 @@ const SisplanSettings = () => {
       toast({
         title: `Query executada: ${result.totalPreview} registros retornados`,
         status: "success",
-        duration: 3000
-      });
+        duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setTestingProductQuery(false);
     }
@@ -439,10 +435,10 @@ const SisplanSettings = () => {
     setSyncingProduct(true);
     try {
       const result = await triggerSisplanProductSync();
-      toast({ title: result.message, status: "success", duration: 4000 });
+      toast({  title: result.message, status: "success", duration: 4000 });
       await loadSettings();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncingProduct(false);
     }
@@ -452,9 +448,9 @@ const SisplanSettings = () => {
     setSyncingOrders(true);
     try {
       await triggerSisplanOrderSync();
-      toast({ title: "Pedidos sincronizados com o ERP", status: "success", duration: 4000 });
+      toast({  title: "Pedidos sincronizados com o ERP", status: "success", duration: 4000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncingOrders(false);
     }

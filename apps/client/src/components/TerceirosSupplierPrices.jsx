@@ -14,7 +14,6 @@ import {
   Select,
   Button,
   IconButton,
-  useToast,
   useColorModeValue,
   useBreakpointValue,
   useDisclosure,
@@ -58,6 +57,7 @@ const formatPrice = (value) =>
     maximumFractionDigits: 3
   }).format(Number(value || 0));
 import SearchableSelect from "./SearchableSelect";
+import useAppToast from "../hooks/useAppToast";
 
 const PdfIcon = createIcon({
   displayName: "PdfIcon",
@@ -131,7 +131,7 @@ const TerceirosSupplierPrices = () => {
 
   const modal = useDisclosure();
   const bulkModal = useDisclosure();
-  const toast = useToast();
+  const toast = useAppToast();
 
   const isMobile = useBreakpointValue({ base: true, md: false });
   const panelBg = useColorModeValue("white", "gray.800");
@@ -152,7 +152,7 @@ const TerceirosSupplierPrices = () => {
         setGroups(grpData);
         setEtapas(etapasData);
       } catch (err) {
-        toast({ title: "Erro ao carregar dados de referência.", status: "error", duration: 3000 });
+        toast({  title: "Erro ao carregar dados de referência.", status: "error", duration: 3000 });
       }
     };
     loadRefs();
@@ -165,7 +165,7 @@ const TerceirosSupplierPrices = () => {
       const data = await fetchTerceirosSupplierPrices(filterSupplier, filterGroup);
       setPrices(data);
     } catch (err) {
-      toast({ title: "Erro ao carregar preços.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar preços.", status: "error", duration: 3000 });
     } finally {
       setLoading(false);
     }
@@ -439,11 +439,11 @@ const TerceirosSupplierPrices = () => {
   // ── CRUD ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!form.codcli || !form.groupId) {
-      toast({ title: "Fornecedor e Grupo são obrigatórios.", status: "warning", duration: 3000 });
+      toast({  title: "Fornecedor e Grupo são obrigatórios.", status: "warning", duration: 3000 });
       return;
     }
     if (form.price <= 0) {
-      toast({ title: "Informe um preço válido.", status: "warning", duration: 3000 });
+      toast({  title: "Informe um preço válido.", status: "warning", duration: 3000 });
       return;
     }
     setSaving(true);
@@ -462,15 +462,15 @@ const TerceirosSupplierPrices = () => {
       };
       if (editingPrice) {
         await updateTerceirosSupplierPrice(editingPrice.id, payload);
-        toast({ title: "Preço atualizado.", status: "success", duration: 3000 });
+        toast({  title: "Preço atualizado.", status: "success", duration: 3000 });
       } else {
         await createTerceirosSupplierPrice(payload);
-        toast({ title: "Preço criado.", status: "success", duration: 3000 });
+        toast({  title: "Preço criado.", status: "success", duration: 3000 });
       }
       modal.onClose();
       await loadPrices();
     } catch (err) {
-      toast({ title: err.message || "Erro ao salvar preço.", status: "error", duration: 5000 });
+      toast({  title: err.message || "Erro ao salvar preço.", status: "error", duration: 5000 });
     } finally {
       setSaving(false);
     }
@@ -478,12 +478,12 @@ const TerceirosSupplierPrices = () => {
 
   const handleBulkSave = async () => {
     if (!bulkForm.codcli || !bulkForm.groupId) {
-      toast({ title: "Fornecedor e Grupo são obrigatórios.", status: "warning", duration: 3000 });
+      toast({  title: "Fornecedor e Grupo são obrigatórios.", status: "warning", duration: 3000 });
       return;
     }
     const validRows = bulkRows.filter((r) => r.price > 0);
     if (validRows.length === 0) {
-      toast({ title: "Informe pelo menos um preço.", status: "warning", duration: 3000 });
+      toast({  title: "Informe pelo menos um preço.", status: "warning", duration: 3000 });
       return;
     }
     setSavingBulk(true);
@@ -508,8 +508,7 @@ const TerceirosSupplierPrices = () => {
           title: `${created} criado(s), ${errors.length} erro(s)`,
           description: errors.map((e) => `${e.part}: ${e.error}`).join("; "),
           status: errors.length === items.length ? "error" : "warning",
-          duration: 8000,
-          isClosable: true
+          duration: 8000
         });
       } else {
         toast({ title: `${created} preço(s) criado(s).`, status: "success", duration: 3000 });
@@ -519,7 +518,7 @@ const TerceirosSupplierPrices = () => {
         await loadPrices();
       }
     } catch (err) {
-      toast({ title: err.message || "Erro ao salvar preços.", status: "error", duration: 5000 });
+      toast({  title: err.message || "Erro ao salvar preços.", status: "error", duration: 5000 });
     } finally {
       setSavingBulk(false);
     }
@@ -529,10 +528,10 @@ const TerceirosSupplierPrices = () => {
     if (!window.confirm(`Excluir este preço?`)) return;
     try {
       await deleteTerceirosSupplierPrice(row.id);
-      toast({ title: "Preço excluído.", status: "success", duration: 3000 });
+      toast({  title: "Preço excluído.", status: "success", duration: 3000 });
       await loadPrices();
     } catch (err) {
-      toast({ title: err.message || "Erro ao excluir preço.", status: "error", duration: 5000 });
+      toast({  title: err.message || "Erro ao excluir preço.", status: "error", duration: 5000 });
     }
   };
 
@@ -559,7 +558,7 @@ const TerceirosSupplierPrices = () => {
       const name = supplierLabel(codcli).replace(/[^a-zA-Z0-9]/g, "_");
       downloadBlob(blob, `precos_${name}.xlsx`);
     } catch (err) {
-      toast({ title: "Erro ao exportar Excel.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao exportar Excel.", status: "error", duration: 3000 });
     }
   };
 
@@ -574,7 +573,7 @@ const TerceirosSupplierPrices = () => {
       const name = supplierLabel(codcli).replace(/[^a-zA-Z0-9]/g, "_");
       downloadBlob(blob, `precos_${name}.pdf`);
     } catch (err) {
-      toast({ title: "Erro ao exportar PDF.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao exportar PDF.", status: "error", duration: 3000 });
     }
   };
 

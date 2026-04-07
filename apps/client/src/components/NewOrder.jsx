@@ -25,7 +25,6 @@ import {
   Textarea,
   useColorModeValue,
   useDisclosure,
-  useToast,
   VStack,
   Drawer,
   DrawerOverlay,
@@ -47,6 +46,7 @@ import {
   scanBarcode,
 } from "../api";
 import BarcodeScanner from "./BarcodeScanner";
+import useAppToast from "../hooks/useAppToast";
 
 const PRICE_TABLES = [
   { id: "PC", label: "PC" },
@@ -100,7 +100,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   const cartDrawer      = useDisclosure();
   const confirmDialog   = useDisclosure();
   const cancelRef       = useRef(null);
-  const toast           = useToast();
+  const toast = useAppToast();
 
   const panelBg     = useColorModeValue("white", "gray.800");
   const cardBg      = useColorModeValue("white", "gray.750");
@@ -112,7 +112,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   useEffect(() => {
     fetchOrderCatalog()
       .then(data => setCatalog(normalizeCatalog(data)))
-      .catch(err => toast({ status: "error", description: err.message, duration: 3000, isClosable: true }))
+      .catch(err => toast({  status: "error", description: err.message, duration: 3000  }))
       .finally(() => setCatalogLoading(false));
     fetchPaymentConditions()
       .then(data => {
@@ -166,7 +166,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
     setCustomersLoading(true);
     fetchOrderCustomers(search)
       .then(setCustomers)
-      .catch(err => toast({ status: "error", description: err.message, duration: 3000, isClosable: true }))
+      .catch(err => toast({  status: "error", description: err.message, duration: 3000  }))
       .finally(() => setCustomersLoading(false));
   }, []);
 
@@ -229,10 +229,10 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
     setSyncing(true);
     try {
       const { count } = await syncOrderCustomers();
-      toast({ status: "success", description: `${count} clientes sincronizados.`, duration: 3000, isClosable: true });
+      toast({ status: "success", description: `${count} clientes sincronizados.`, duration: 3000 });
       loadCustomers(customerSearch);
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 4000, isClosable: true });
+      toast({  status: "error", description: err.message, duration: 4000  });
     } finally {
       setSyncing(false);
     }
@@ -341,15 +341,15 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
 
   async function handleSubmit(type) {
     if (!selectedCustomer) {
-      toast({ status: "warning", description: "Selecione o cliente.", duration: 2500, isClosable: true });
+      toast({  status: "warning", description: "Selecione o cliente.", duration: 2500  });
       return;
     }
     if (!priceTable) {
-      toast({ status: "warning", description: "Selecione a tabela de preços.", duration: 2500, isClosable: true });
+      toast({  status: "warning", description: "Selecione a tabela de preços.", duration: 2500  });
       return;
     }
     if (cartItems.length === 0) {
-      toast({ status: "warning", description: "Adicione ao menos um produto.", duration: 2500, isClosable: true });
+      toast({  status: "warning", description: "Adicione ao menos um produto.", duration: 2500  });
       return;
     }
 
@@ -395,8 +395,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
             status: "success",
             title: type === "pedido" ? "Pedido enviado!" : "Orçamento salvo!",
             description: `#${order.id} ${type === "pedido" ? "transmitido com sucesso." : "criado com sucesso."}`,
-            duration: 3000,
-          });
+            duration: 3000 });
           cartDrawer.onClose();
           setCart({});
           setSelectedCustomer(null);
@@ -407,7 +406,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
           downloadOrderPdf(order).catch(() => {});
           if (onSaved) onSaved(order);
         } else {
-          toast({ status: "success", title: "Alterações salvas!", description: `#${order.id} atualizado.`, duration: 3000, isClosable: true });
+          toast({ status: "success", title: "Alterações salvas!", description: `#${order.id} atualizado.`, duration: 3000 });
           cartDrawer.onClose();
           if (onSaved) onSaved(order);
         }
@@ -418,8 +417,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
           status: "success",
           title: type === "pedido" ? "Pedido enviado!" : "Orçamento salvo!",
           description: `#${order.id} ${type === "pedido" ? "transmitido com sucesso." : "criado com sucesso."}`,
-          duration: 3000,
-        });
+          duration: 3000 });
         cartDrawer.onClose();
         setCart({});
         setSelectedCustomer(null);
@@ -430,7 +428,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         downloadOrderPdf(order).catch(() => {});
       }
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000, isClosable: true });
+      toast({  status: "error", description: err.message, duration: 3000  });
     } finally {
       setSubmitting(false);
     }

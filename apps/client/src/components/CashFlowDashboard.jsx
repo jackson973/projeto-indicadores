@@ -15,7 +15,6 @@ import {
   HStack,
   Skeleton,
   Center,
-  useToast,
   useColorModeValue
 } from "@chakra-ui/react";
 import {
@@ -36,6 +35,7 @@ import {
 import { fetchCashflowDashboard, fetchCashflowBoxes } from "../api";
 import { formatCurrency, formatPercent } from "../utils/format";
 import { getSaoPauloYear, getSaoPauloMonth } from "../utils/timezone";
+import useAppToast from "../hooks/useAppToast";
 
 const PIE_COLORS = ["#0ea5e9", "#6366f1", "#22c55e", "#f97316", "#e11d48", "#8b5cf6", "#14b8a6", "#f59e0b", "#ec4899", "#06b6d4"];
 const EXPENSE_STACK_COLORS = ["#e11d48", "#f97316", "#eab308", "#22c55e", "#3b82f6", "#8b5cf6", "#ec4899", "#14b8a6", "#78716c", "#06b6d4"];
@@ -92,7 +92,7 @@ const CashFlowDashboard = () => {
   const [selectedBoxId, setSelectedBoxId] = useState(null);
   const [activeExpCategory, setActiveExpCategory] = useState(null);
   const [activeIncCategory, setActiveIncCategory] = useState(null);
-  const toast = useToast();
+  const toast = useAppToast();
 
   const cardBg = useColorModeValue("white", "gray.800");
   const cardBorder = useColorModeValue("gray.100", "gray.700");
@@ -126,7 +126,7 @@ const CashFlowDashboard = () => {
       setData(result);
     } catch (err) {
       console.error("Dashboard financeiro error:", err);
-      toast({ title: "Erro ao carregar dashboard financeiro.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar dashboard financeiro.", status: "error", duration: 3000 });
     } finally {
       setLoading(false);
     }

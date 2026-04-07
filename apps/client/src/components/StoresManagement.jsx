@@ -27,7 +27,6 @@ import {
   VStack,
   useColorModeValue,
   useDisclosure,
-  useToast,
 } from "@chakra-ui/react";
 import { AddIcon, DeleteIcon, EditIcon, ViewIcon, ViewOffIcon } from "@chakra-ui/icons";
 import {
@@ -39,6 +38,7 @@ import {
   getStoreOAuthUrl,
   exchangeStoreOAuthCode,
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 // ── Platform metadata ─────────────────────────────────────────────────────────
 
@@ -296,7 +296,7 @@ export default function StoresManagement() {
   const modal = useDisclosure();
   const deleteModal = useDisclosure();
   const oauthModal = useDisclosure();
-  const toast = useToast();
+  const toast = useAppToast();
 
   const panelBg = useColorModeValue("gray.50", "gray.800");
   const mutedColor = useColorModeValue("gray.500", "gray.400");
@@ -312,7 +312,7 @@ export default function StoresManagement() {
       const data = await fetchStoresManagement();
       setStores(data);
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 4000 });
+      toast({  title: err.message, status: "error", duration: 4000 });
     } finally {
       setLoading(false);
     }
@@ -343,7 +343,7 @@ export default function StoresManagement() {
   // Save (create or update)
   async function handleSave() {
     if (!form.name.trim()) {
-      toast({ title: "Nome da loja é obrigatório.", status: "warning" });
+      toast({  title: "Nome da loja é obrigatório.", status: "warning" });
       return;
     }
 
@@ -361,16 +361,16 @@ export default function StoresManagement() {
       if (editing) {
         const updated = await updateStoreMgmt(editing.id, payload);
         setStores((s) => s.map((st) => (st.id === updated.id ? updated : st)));
-        toast({ title: "Loja atualizada!", status: "success" });
+        toast({  title: "Loja atualizada!", status: "success" });
       } else {
         const created = await createStoreMgmt({ ...payload, platform: form.platform });
         setStores((s) => [...s, created]);
-        toast({ title: "Loja criada!", status: "success" });
+        toast({  title: "Loja criada!", status: "success" });
       }
 
       modal.onClose();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 4000 });
+      toast({  title: err.message, status: "error", duration: 4000 });
     } finally {
       setSaving(false);
     }
@@ -384,9 +384,9 @@ export default function StoresManagement() {
       if (result.store) {
         setStores((s) => s.map((st) => (st.id === result.store.id ? result.store : st)));
       }
-      toast({ title: result.message, status: "success", duration: 5000 });
+      toast({  title: result.message, status: "success", duration: 5000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
       // Reload to reflect error status
       loadStores();
     } finally {
@@ -406,10 +406,10 @@ export default function StoresManagement() {
     try {
       await deleteStoreMgmt(deleteTarget.id);
       setStores((s) => s.filter((st) => st.id !== deleteTarget.id));
-      toast({ title: "Loja removida.", status: "info" });
+      toast({  title: "Loja removida.", status: "info" });
       deleteModal.onClose();
     } catch (err) {
-      toast({ title: err.message, status: "error" });
+      toast({  title: err.message, status: "error" });
     } finally {
       setSaving(false);
     }
@@ -423,7 +423,7 @@ export default function StoresManagement() {
       const { url } = await getStoreOAuthUrl(store.id);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err) {
-      toast({ title: err.message, status: "error" });
+      toast({  title: err.message, status: "error" });
       return;
     }
     oauthModal.onOpen();
@@ -432,17 +432,17 @@ export default function StoresManagement() {
   // OAuth: exchange code for tokens
   async function handleExchangeCode() {
     if (!oauthCode.trim()) {
-      toast({ title: "Cole o código de autorização.", status: "warning" });
+      toast({  title: "Cole o código de autorização.", status: "warning" });
       return;
     }
     setExchanging(true);
     try {
       const result = await exchangeStoreOAuthCode(oauthStore.id, oauthCode.trim());
       setStores((s) => s.map((st) => (st.id === result.store.id ? result.store : st)));
-      toast({ title: result.message, status: "success", duration: 6000 });
+      toast({  title: result.message, status: "success", duration: 6000 });
       oauthModal.onClose();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 6000 });
+      toast({  title: err.message, status: "error", duration: 6000 });
     } finally {
       setExchanging(false);
     }

@@ -26,7 +26,6 @@ import {
   Center,
   Textarea,
   useBreakpointValue,
-  useToast,
   useColorModeValue,
   Modal,
   ModalOverlay,
@@ -72,6 +71,7 @@ import {
 import { getToken } from "../api";
 import { getSaoPauloYear, getSaoPauloMonth } from "../utils/timezone";
 import { formatCurrency } from "../utils/format";
+import useAppToast from "../hooks/useAppToast";
 
 const formatUnitPrice = (value) =>
   new Intl.NumberFormat("pt-BR", {
@@ -188,7 +188,7 @@ const TerceirosSettlement = () => {
   useEffect(() => { unsettledOfsRef.current = unsettledOfs; }, [unsettledOfs]);
   useEffect(() => { selectedOfsRef.current = selectedOfs; }, [selectedOfs]);
 
-  const toast = useToast();
+  const toast = useAppToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
 
   // ── Colors ────────────────────────────────────────────────────────────────
@@ -226,7 +226,7 @@ const TerceirosSettlement = () => {
       setSettlements(data);
     } catch (err) {
       console.error("Erro ao carregar fechamentos:", err);
-      toast({ title: "Erro ao carregar fechamentos.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar fechamentos.", status: "error", duration: 3000 });
     } finally {
       setLoading(false);
     }
@@ -247,7 +247,7 @@ const TerceirosSettlement = () => {
       const data = await fetchTerceirosSettlement(id);
       setViewingSettlement(data);
     } catch (err) {
-      toast({ title: "Erro ao carregar detalhes.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar detalhes.", status: "error", duration: 3000 });
     } finally {
       setLoadingDetail(false);
     }
@@ -258,10 +258,10 @@ const TerceirosSettlement = () => {
     try {
       if (settlement.status === "paid") {
         await unpayTerceirosSettlement(settlement.id);
-        toast({ title: "Fechamento marcado como em aberto.", status: "info", duration: 3000 });
+        toast({  title: "Fechamento marcado como em aberto.", status: "info", duration: 3000 });
       } else {
         await payTerceirosSettlement(settlement.id);
-        toast({ title: "Fechamento marcado como pago.", status: "success", duration: 3000 });
+        toast({  title: "Fechamento marcado como pago.", status: "success", duration: 3000 });
       }
       await loadSettlements();
       if (viewingSettlement && viewingSettlement.id === settlement.id) {
@@ -269,7 +269,7 @@ const TerceirosSettlement = () => {
         setViewingSettlement(updated);
       }
     } catch (err) {
-      toast({ title: "Erro ao alterar status.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao alterar status.", status: "error", duration: 3000 });
     }
   }, [loadSettlements, viewingSettlement, toast]);
 
@@ -278,13 +278,13 @@ const TerceirosSettlement = () => {
     if (!window.confirm(`Excluir o fechamento de "${settlement.supplierName}" - ${monthNames[(settlement.referenceMonth || 1) - 1]}/${settlement.referenceYear}?`)) return;
     try {
       await deleteTerceirosSettlement(settlement.id);
-      toast({ title: "Fechamento excluído.", status: "success", duration: 3000 });
+      toast({  title: "Fechamento excluído.", status: "success", duration: 3000 });
       if (viewingSettlement && viewingSettlement.id === settlement.id) {
         setViewingSettlement(null);
       }
       await loadSettlements();
     } catch (err) {
-      toast({ title: err.message || "Erro ao excluir.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao excluir.", status: "error", duration: 3000 });
     }
   }, [loadSettlements, viewingSettlement, toast]);
 
@@ -299,7 +299,7 @@ const TerceirosSettlement = () => {
       setEditMonth(data.referenceMonth || data.reference_month || 1);
       setEditYear(data.referenceYear || data.reference_year || getSaoPauloYear());
     } catch (err) {
-      toast({ title: "Erro ao carregar fechamento.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar fechamento.", status: "error", duration: 3000 });
     } finally {
       setLoadingDetail(false);
     }
@@ -310,12 +310,12 @@ const TerceirosSettlement = () => {
     setSavingEdit(true);
     try {
       await updateTerceirosSettlement(editingSettlement.id, { notes: editNotes, referenceMonth: editMonth, referenceYear: editYear });
-      toast({ title: "Fechamento atualizado.", status: "success", duration: 3000 });
+      toast({  title: "Fechamento atualizado.", status: "success", duration: 3000 });
       const updated = await fetchTerceirosSettlement(editingSettlement.id);
       setEditingSettlement(updated);
       await loadSettlements();
     } catch (err) {
-      toast({ title: "Erro ao salvar.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao salvar.", status: "error", duration: 3000 });
     } finally {
       setSavingEdit(false);
     }
@@ -326,12 +326,12 @@ const TerceirosSettlement = () => {
     if (!window.confirm("Remover este item do fechamento?")) return;
     try {
       await removeSettlementItem(editingSettlement.id, itemId);
-      toast({ title: "Item removido.", status: "success", duration: 2000 });
+      toast({  title: "Item removido.", status: "success", duration: 2000 });
       const updated = await fetchTerceirosSettlement(editingSettlement.id);
       setEditingSettlement(updated);
       await loadSettlements();
     } catch (err) {
-      toast({ title: "Erro ao remover item.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao remover item.", status: "error", duration: 3000 });
     }
   }, [editingSettlement, loadSettlements, toast]);
 
@@ -339,12 +339,12 @@ const TerceirosSettlement = () => {
     if (!editingSettlement) return;
     try {
       await updateSettlementItem(editingSettlement.id, itemId, data);
-      toast({ title: "Item atualizado.", status: "success", duration: 2000 });
+      toast({  title: "Item atualizado.", status: "success", duration: 2000 });
       const updated = await fetchTerceirosSettlement(editingSettlement.id);
       setEditingSettlement(updated);
       await loadSettlements();
     } catch (err) {
-      toast({ title: "Erro ao atualizar item.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao atualizar item.", status: "error", duration: 3000 });
     }
   }, [editingSettlement, loadSettlements, toast]);
 
@@ -357,12 +357,12 @@ const TerceirosSettlement = () => {
         unitPrice: parseFloat(unitPrice) || 0,
         priceSource: "table"
       }]);
-      toast({ title: "Item readicionado.", status: "success", duration: 2000 });
+      toast({  title: "Item readicionado.", status: "success", duration: 2000 });
       const updated = await fetchTerceirosSettlement(editingSettlement.id);
       setEditingSettlement(updated);
       await loadSettlements();
     } catch (err) {
-      toast({ title: "Erro ao readicionar item.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao readicionar item.", status: "error", duration: 3000 });
     }
   }, [editingSettlement, loadSettlements, toast]);
 
@@ -414,7 +414,7 @@ const TerceirosSettlement = () => {
           setEditSelectedOfs(auto);
         } catch { setEditOfPrices({}); }
       } else { setEditOfPrices({}); }
-    } catch { toast({ title: "Erro ao carregar OFs.", status: "error", duration: 3000 }); }
+    } catch { toast({  title: "Erro ao carregar OFs.", status: "error", duration: 3000 }); }
     finally { setLoadingEditOfs(false); }
   }, [editingSettlement, editDateFrom, editDateTo, editOfSearchInput, toast]);
 
@@ -437,7 +437,7 @@ const TerceirosSettlement = () => {
       setEditOfSearchInput("");
       if (editOfSearchRef.current) editOfSearchRef.current.value = "";
       await loadSettlements();
-    } catch { toast({ title: "Erro ao adicionar OFs.", status: "error", duration: 3000 }); }
+    } catch { toast({  title: "Erro ao adicionar OFs.", status: "error", duration: 3000 }); }
   }, [editingSettlement, editSelectedOfs, editUnsettledOfs, editOfPrices, loadSettlements, toast]);
 
   // ── Export helper ─────────────────────────────────────────────────────────
@@ -465,7 +465,7 @@ const TerceirosSettlement = () => {
       document.body.removeChild(link);
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (err) {
-      toast({ title: "Erro ao exportar PDF.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao exportar PDF.", status: "error", duration: 3000 });
     }
   }, [toast, buildExportFilename]);
 
@@ -487,7 +487,7 @@ const TerceirosSettlement = () => {
       document.body.removeChild(link);
       setTimeout(() => URL.revokeObjectURL(url), 5000);
     } catch (err) {
-      toast({ title: "Erro ao exportar Excel.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao exportar Excel.", status: "error", duration: 3000 });
     }
   }, [toast, buildExportFilename]);
 
@@ -606,7 +606,7 @@ const TerceirosSettlement = () => {
         setOfPrices((prev) => ({ ...prev, ...legacyPriceMap }));
       }
     } catch (err) {
-      toast({ title: "Erro ao carregar OFs.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar OFs.", status: "error", duration: 3000 });
     } finally {
       setLoadingOfs(false);
     }
@@ -626,7 +626,7 @@ const TerceirosSettlement = () => {
     const hasDates = !!dateFrom || !!dateTo;
 
     if (!hasSupplier && !hasOfs && !hasDates) {
-      toast({ title: "Informe pelo menos um filtro: fornecedor, OFs ou período.", status: "warning", duration: 3000 });
+      toast({  title: "Informe pelo menos um filtro: fornecedor, OFs ou período.", status: "warning", duration: 3000 });
       return;
     }
     loadUnsettledOfs({ codcli: newSupplier || null, ofNumbers: currentSearch });
@@ -739,7 +739,7 @@ const TerceirosSettlement = () => {
   // ── Create new settlement ─────────────────────────────────────────────────
   const handleCreateSettlement = useCallback(async () => {
     if (selectedOfs.size === 0) {
-      toast({ title: "Selecione pelo menos uma OF.", status: "warning", duration: 3000 });
+      toast({  title: "Selecione pelo menos uma OF.", status: "warning", duration: 3000 });
       return;
     }
 
@@ -751,13 +751,13 @@ const TerceirosSettlement = () => {
     });
 
     if (selectedSuppliers.size > 1) {
-      toast({ title: "As OFs selecionadas pertencem a fornecedores diferentes. Selecione OFs de um único fornecedor.", status: "warning", duration: 5000 });
+      toast({  title: "As OFs selecionadas pertencem a fornecedores diferentes. Selecione OFs de um único fornecedor.", status: "warning", duration: 5000 });
       return;
     }
 
     const codcli = newSupplier || [...selectedSuppliers][0];
     if (!codcli) {
-      toast({ title: "Não foi possível identificar o fornecedor.", status: "warning", duration: 3000 });
+      toast({  title: "Não foi possível identificar o fornecedor.", status: "warning", duration: 3000 });
       return;
     }
 
@@ -794,7 +794,7 @@ const TerceirosSettlement = () => {
     });
 
     if (missingPrices) {
-      toast({ title: "Existem itens selecionados sem preço definido.", status: "warning", duration: 4000 });
+      toast({  title: "Existem itens selecionados sem preço definido.", status: "warning", duration: 4000 });
       return;
     }
 
@@ -813,7 +813,7 @@ const TerceirosSettlement = () => {
         discounts: newDiscounts.length > 0 ? newDiscounts : undefined,
         draftId: activeDraftId || undefined
       });
-      toast({ title: "Fechamento criado com sucesso.", status: "success", duration: 3000 });
+      toast({  title: "Fechamento criado com sucesso.", status: "success", duration: 3000 });
       setActiveDraftId(null);
       setCreating(false);
       setNewSupplier("");
@@ -834,7 +834,7 @@ const TerceirosSettlement = () => {
       setNewDiscounts([]);
       await loadSettlements();
     } catch (err) {
-      toast({ title: err.message || "Erro ao criar fechamento.", status: "error", duration: 4000 });
+      toast({  title: err.message || "Erro ao criar fechamento.", status: "error", duration: 4000 });
     } finally {
       setSubmitting(false);
     }
@@ -843,7 +843,7 @@ const TerceirosSettlement = () => {
   // ── Draft save/restore (persisted in DB) ─────────────────────────────────
   const handleSaveDraft = useCallback(async () => {
     if (!newSupplier) {
-      toast({ title: "Selecione um fornecedor para salvar o rascunho.", status: "warning", duration: 3000 });
+      toast({  title: "Selecione um fornecedor para salvar o rascunho.", status: "warning", duration: 3000 });
       return;
     }
 
@@ -876,10 +876,10 @@ const TerceirosSettlement = () => {
       }, activeDraftId || undefined);
 
       setActiveDraftId(result.id);
-      toast({ title: "Rascunho salvo com sucesso.", status: "success", duration: 3000 });
+      toast({  title: "Rascunho salvo com sucesso.", status: "success", duration: 3000 });
       await loadSettlements();
     } catch (err) {
-      toast({ title: err.message || "Erro ao salvar rascunho.", status: "error", duration: 4000 });
+      toast({  title: err.message || "Erro ao salvar rascunho.", status: "error", duration: 4000 });
     } finally {
       setSavingDraft(false);
     }
@@ -962,9 +962,9 @@ const TerceirosSettlement = () => {
       setEditedGroupPrices(dd.editedGroupPrices || {});
 
       setLoadingOfs(false);
-      toast({ title: "Rascunho restaurado.", status: "info", duration: 3000 });
+      toast({  title: "Rascunho restaurado.", status: "info", duration: 3000 });
     } catch (err) {
-      toast({ title: err.message || "Erro ao restaurar rascunho.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao restaurar rascunho.", status: "error", duration: 3000 });
     } finally {
       setRestoringDraft(false);
     }
@@ -1017,7 +1017,7 @@ const TerceirosSettlement = () => {
       setEditingSettlement(updated);
       await loadSettlements();
     } catch (err) {
-      toast({ title: err.message || "Erro ao adicionar desconto.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao adicionar desconto.", status: "error", duration: 3000 });
     }
   }, [editingSettlement, loadSettlements, toast]);
 
@@ -1029,7 +1029,7 @@ const TerceirosSettlement = () => {
       setEditingSettlement(updated);
       await loadSettlements();
     } catch (err) {
-      toast({ title: err.message || "Erro ao remover desconto.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao remover desconto.", status: "error", duration: 3000 });
     }
   }, [editingSettlement, loadSettlements, toast]);
 

@@ -35,7 +35,6 @@ import {
   Wrap,
   WrapItem,
   useColorModeValue,
-  useToast,
   useBreakpointValue,
 } from "@chakra-ui/react";
 import { SearchIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, SmallCloseIcon } from "@chakra-ui/icons";
@@ -45,6 +44,7 @@ import {
   updateProductKitQty,
   fetchProductVariations,
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 /**
  * Detecta se o nome do anúncio sugere kit com quantidades variáveis.
@@ -86,7 +86,7 @@ const ProductsManagement = () => {
   const [editVarKitQty, setEditVarKitQty] = useState(1);
   const [savingVarKit, setSavingVarKit] = useState(false);
 
-  const toast = useToast();
+  const toast = useAppToast();
   const panelBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
   const hoverBg = useColorModeValue("gray.50", "gray.700");
@@ -108,7 +108,7 @@ const ProductsManagement = () => {
       setTotal(data.total || 0);
       setPage(pg);
     } catch (err) {
-      toast({ title: "Erro ao carregar produtos", description: err.message, status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar produtos", description: err.message, status: "error", duration: 3000 });
     } finally {
       setLoading(false);
     }
@@ -144,9 +144,9 @@ const ProductsManagement = () => {
         prev.map((p) => (p.store_variation_key === product.store_variation_key ? { ...p, kit_qty: editKitQty } : p))
       );
       setEditingKey(null);
-      toast({ title: "Qtd Kit atualizada", status: "success", duration: 2000 });
+      toast({  title: "Qtd Kit atualizada", status: "success", duration: 2000 });
     } catch (err) {
-      toast({ title: "Erro ao salvar", description: err.message, status: "error", duration: 3000 });
+      toast({  title: "Erro ao salvar", description: err.message, status: "error", duration: 3000 });
     } finally {
       setSavingKit(false);
     }
@@ -188,9 +188,9 @@ const ProductsManagement = () => {
         prev.map((v) => (v.prefix === prefix ? { ...v, kit_qty: editVarKitQty } : v))
       );
       setEditingVarPrefix(null);
-      toast({ title: "Qtd Kit variação atualizada", status: "success", duration: 2000 });
+      toast({  title: "Qtd Kit variação atualizada", status: "success", duration: 2000 });
     } catch (err) {
-      toast({ title: "Erro ao salvar", description: err.message, status: "error", duration: 3000 });
+      toast({  title: "Erro ao salvar", description: err.message, status: "error", duration: 3000 });
     } finally {
       setSavingVarKit(false);
     }

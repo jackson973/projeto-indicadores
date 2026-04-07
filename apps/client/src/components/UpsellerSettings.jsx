@@ -25,8 +25,7 @@ import {
   Thead,
   Tr,
   VStack,
-  useColorModeValue,
-  useToast
+  useColorModeValue
 } from "@chakra-ui/react";
 import { ViewIcon, ViewOffIcon, CopyIcon } from "@chakra-ui/icons";
 import {
@@ -35,6 +34,7 @@ import {
   triggerUpsellerSync,
   triggerCatalogSync
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const UpsellerSettings = () => {
   const [form, setForm] = useState({
@@ -57,7 +57,7 @@ const UpsellerSettings = () => {
   const [syncingCatalog, setSyncingCatalog] = useState(null); // platform being synced
   const [showCaptchaKey, setShowCaptchaKey] = useState(false);
   const [lastUsedCaptchaKey, setLastUsedCaptchaKey] = useState("");
-  const toast = useToast();
+  const toast = useAppToast();
 
   const panelBg = useColorModeValue("white", "gray.800");
   const sectionBg = useColorModeValue("gray.50", "gray.700");
@@ -97,7 +97,7 @@ const UpsellerSettings = () => {
         setLastUsedCaptchaKey(data.anticaptchaKey);
       }
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setLoading(false);
     }
@@ -111,10 +111,10 @@ const UpsellerSettings = () => {
         setLastUsedCaptchaKey(form.anticaptchaKey);
       }
       await updateUpsellerSettings(form);
-      toast({ title: "Configurações salvas com sucesso!", status: "success", duration: 3000 });
+      toast({  title: "Configurações salvas com sucesso!", status: "success", duration: 3000 });
       await loadSettings();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSaving(false);
     }
@@ -124,10 +124,10 @@ const UpsellerSettings = () => {
     setSyncing(true);
     try {
       const result = await triggerUpsellerSync();
-      toast({ title: result.message, status: "success", duration: 4000 });
+      toast({  title: result.message, status: "success", duration: 4000 });
       await loadSettings();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncing(false);
     }
@@ -141,10 +141,9 @@ const UpsellerSettings = () => {
         title: `Catálogo ${platform} sincronizado`,
         description: `${result.products} produtos, ${result.varUpserted} variações`,
         status: "success",
-        duration: 5000,
-      });
+        duration: 5000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncingCatalog(null);
     }
@@ -278,7 +277,7 @@ const UpsellerSettings = () => {
                             aria-label="Copiar chave"
                             onClick={() => {
                               navigator.clipboard.writeText(lastUsedCaptchaKey);
-                              toast({ title: "Chave copiada!", status: "success", duration: 2000 });
+                              toast({  title: "Chave copiada!", status: "success", duration: 2000 });
                             }}
                           />
                           <Button

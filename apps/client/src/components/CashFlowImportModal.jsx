@@ -15,7 +15,6 @@ import {
   Text,
   Box,
   Icon,
-  useToast,
   AlertDialog,
   AlertDialogOverlay,
   AlertDialogContent,
@@ -27,6 +26,7 @@ import {
 import { AttachmentIcon, WarningIcon } from "@chakra-ui/icons";
 import * as XLSX from "xlsx";
 import { checkImportDuplicates } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const MONTH_MAP = {
   'janeiro': 1, 'fevereiro': 2, 'março': 3, 'marco': 3, 'abril': 4,
@@ -83,7 +83,7 @@ const CashFlowImportModal = ({ isOpen, onClose, boxes, selectedBoxId, onImport }
   const fileInputRef = useRef(null);
   const cancelRef = useRef();
   const alertDialog = useDisclosure();
-  const toast = useToast();
+  const toast = useAppToast();
 
   // Reset state when modal opens
   useEffect(() => {
@@ -98,8 +98,7 @@ const CashFlowImportModal = ({ isOpen, onClose, boxes, selectedBoxId, onImport }
           title: "Caixa selecionado não encontrado",
           description: `Selecionado automaticamente: ${boxes[0].name}`,
           status: "warning",
-          duration: 3000
-        });
+          duration: 3000 });
       }
       setFile(null);
       setDuplicateInfo(null);
@@ -183,12 +182,11 @@ const CashFlowImportModal = ({ isOpen, onClose, boxes, selectedBoxId, onImport }
 
     } catch (error) {
       console.error('Error checking duplicates:', error);
-      toast({
+      toast({ 
         title: "Erro ao verificar duplicatas",
         description: "Não foi possível verificar registros existentes. A importação pode continuar.",
         status: "warning",
-        duration: 4000
-      });
+        duration: 4000 });
     } finally {
       setChecking(false);
     }
@@ -201,12 +199,11 @@ const CashFlowImportModal = ({ isOpen, onClose, boxes, selectedBoxId, onImport }
 
     // Validate file type
     if (!selectedFile.name.match(/\.(xlsx|xls)$/i)) {
-      toast({
+      toast({ 
         title: "Arquivo inválido",
         description: "O arquivo selecionado não é um Excel válido (.xlsx ou .xls).",
         status: "error",
-        duration: 4000
-      });
+        duration: 4000 });
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }

@@ -23,11 +23,11 @@ import {
   Tr,
   VStack,
   useColorModeValue,
-  useToast,
   Code
 } from "@chakra-ui/react";
 import { ChevronLeftIcon, ChevronRightIcon, SearchIcon, ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import { fetchWhatsappConversations, fetchWhatsappConversationUsers } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const formatDate = (dateStr) => {
   if (!dateStr) return "-";
@@ -180,7 +180,7 @@ const ConversationLogs = () => {
     endDate: ""
   });
   const [searchInput, setSearchInput] = useState("");
-  const toast = useToast();
+  const toast = useAppToast();
   const cardBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
 
@@ -200,7 +200,7 @@ const ConversationLogs = () => {
       setTotalPages(data.totalPages);
       setTotal(data.total);
     } catch (err) {
-      toast({ title: "Erro ao carregar conversas", description: err.message, status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar conversas", description: err.message, status: "error", duration: 3000 });
     } finally {
       setLoading(false);
     }

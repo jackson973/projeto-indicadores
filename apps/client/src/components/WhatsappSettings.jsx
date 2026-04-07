@@ -36,8 +36,7 @@ import {
   Thead,
   Tr,
   VStack,
-  useColorModeValue,
-  useToast
+  useColorModeValue
 } from "@chakra-ui/react";
 import { DeleteIcon, ViewIcon, ViewOffIcon, CopyIcon } from "@chakra-ui/icons";
 import {
@@ -52,6 +51,7 @@ import {
   updateWhatsappSalesAlert,
   getToken
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const LLM_PROVIDERS = [
   { value: "groq", label: "Groq (gratuito)", needsKey: true },
@@ -125,7 +125,7 @@ const WhatsappSettings = () => {
   const [alerts, setAlerts] = useState([]);
   const [alertsLoading, setAlertsLoading] = useState(false);
   const eventSourceRef = useRef(null);
-  const toast = useToast();
+  const toast = useAppToast();
 
   const panelBg = useColorModeValue("white", "gray.800");
   const refBg = useColorModeValue("gray.50", "gray.700");
@@ -235,7 +235,7 @@ const WhatsappSettings = () => {
         setLastUsedLlmConfig(config);
       }
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setLoading(false);
     }
@@ -254,7 +254,7 @@ const WhatsappSettings = () => {
       const data = await fetchWhatsappSalesAlerts();
       setAlerts(data);
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setAlertsLoading(false);
     }
@@ -284,7 +284,7 @@ const WhatsappSettings = () => {
     try {
       await updateWhatsappSalesAlert(userId, updated);
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
       loadAlerts(); // revert on error
     }
   };
@@ -294,7 +294,7 @@ const WhatsappSettings = () => {
       await deleteWhatsappPhone(id);
       await loadSavedPhones();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     }
   };
 
@@ -324,10 +324,10 @@ const WhatsappSettings = () => {
         setLastUsedLlmConfig(config);
       }
       await updateWhatsappSettings(form);
-      toast({ title: "Configurações salvas com sucesso!", status: "success", duration: 3000 });
+      toast({  title: "Configurações salvas com sucesso!", status: "success", duration: 3000 });
       await loadSettings();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSaving(false);
     }
@@ -344,9 +344,9 @@ const WhatsappSettings = () => {
         llmBaseUrl: form.llmBaseUrl
       });
       setTestResponse(result.response);
-      toast({ title: result.message, status: "success", duration: 3000 });
+      toast({  title: result.message, status: "success", duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setTestingLlm(false);
     }
@@ -357,9 +357,9 @@ const WhatsappSettings = () => {
     setQrCode(null);
     try {
       await connectWhatsapp();
-      toast({ title: "Conexão iniciada. Aguarde o QR Code.", status: "info", duration: 3000 });
+      toast({  title: "Conexão iniciada. Aguarde o QR Code.", status: "info", duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
       setConnecting(false);
     }
   };
@@ -370,11 +370,11 @@ const WhatsappSettings = () => {
       await disconnectWhatsapp();
       setQrCode(null);
       setLiveStatus("disconnected");
-      toast({ title: "Desconectado com sucesso.", status: "success", duration: 3000 });
+      toast({  title: "Desconectado com sucesso.", status: "success", duration: 3000 });
       await loadSettings();
       await loadSavedPhones();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setDisconnecting(false);
     }
@@ -690,7 +690,7 @@ const WhatsappSettings = () => {
                                   aria-label="Copiar chave"
                                   onClick={() => {
                                     navigator.clipboard.writeText(lastUsedLlmConfig.apiKey);
-                                    toast({ title: "Chave copiada!", status: "success", duration: 2000 });
+                                    toast({  title: "Chave copiada!", status: "success", duration: 2000 });
                                   }}
                                 />
                                 <Button

@@ -38,7 +38,6 @@ import {
   ModalBody,
   Badge,
   Link,
-  useToast,
   useColorModeValue,
   useBreakpointValue,
   useDisclosure,
@@ -59,6 +58,7 @@ import {
   Cell,
 } from "recharts";
 import { fetchProductDashboard, fetchProductGroups, fetchProductStores, fetchProductOrders } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const PIE_COLORS = ["#0ea5e9", "#6366f1", "#22c55e", "#f97316", "#e11d48", "#8b5cf6", "#14b8a6", "#f59e0b", "#ec4899", "#06b6d4"];
 
@@ -95,7 +95,7 @@ const ProductDashboard = () => {
   const [ordersModal, setOrdersModal] = useState({ product: null, orders: [], loading: false });
   const { isOpen: isOrdersOpen, onOpen: onOrdersOpen, onClose: onOrdersClose } = useDisclosure();
 
-  const toast = useToast();
+  const toast = useAppToast();
   const panelBg = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.700");
   const menuBg = useColorModeValue("white", "gray.800");
@@ -118,7 +118,7 @@ const ProductDashboard = () => {
       );
       setData(result);
     } catch (err) {
-      toast({ title: "Erro ao carregar dashboard", description: err.message, status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar dashboard", description: err.message, status: "error", duration: 3000 });
     } finally {
       setLoading(false);
     }
@@ -155,7 +155,7 @@ const ProductDashboard = () => {
       const orders = await fetchProductOrders(product.store_variation_key, startDate, endDate, product.variation_filter || null);
       setOrdersModal({ product, orders, loading: false });
     } catch {
-      toast({ title: "Erro ao buscar pedidos", status: "error", duration: 3000 });
+      toast({  title: "Erro ao buscar pedidos", status: "error", duration: 3000 });
       setOrdersModal((prev) => ({ ...prev, loading: false }));
     }
   };

@@ -22,12 +22,12 @@ import {
   Text,
   useColorModeValue,
   useDisclosure,
-  useToast,
   VStack,
 } from "@chakra-ui/react";
 import { SearchIcon } from "@chakra-ui/icons";
 import { fetchOrders, fetchOrderById, updateOrderStatus, downloadOrderPdf, deleteOrder as apiDeleteOrder, integrateOrderSisplan } from "../api";
 import NewOrder from "./NewOrder";
+import useAppToast from "../hooks/useAppToast";
 
 const fmtBRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -72,7 +72,7 @@ export default function OrdersList() {
   const [integrating, setIntegrating] = useState(false);
 
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const toast = useToast();
+  const toast = useAppToast();
 
   const cardBg      = useColorModeValue("white", "gray.750");
   const borderColor = useColorModeValue("gray.200", "gray.600");
@@ -83,7 +83,7 @@ export default function OrdersList() {
     setLoading(true);
     fetchOrders({ search: search.trim() || undefined, type: filterType || undefined, status: filterStatus || undefined })
       .then(setOrders)
-      .catch(err => toast({ status: "error", description: err.message, duration: 3000 }))
+      .catch(err => toast({  status: "error", description: err.message, duration: 3000 }))
       .finally(() => setLoading(false));
   }, [search, filterType, filterStatus]);
 
@@ -101,7 +101,7 @@ export default function OrdersList() {
       const full = await fetchOrderById(order.id);
       setSelected(full);
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     } finally {
       setDetailLoading(false);
     }
@@ -112,7 +112,7 @@ export default function OrdersList() {
     try {
       await downloadOrderPdf(selected);
     } catch {
-      toast({ status: "error", description: "Erro ao gerar PDF.", duration: 3000 });
+      toast({  status: "error", description: "Erro ao gerar PDF.", duration: 3000 });
     }
   }
 
@@ -122,9 +122,9 @@ export default function OrdersList() {
       const updated = await updateOrderStatus(selected.id, { status: "enviado", type: "pedido" });
       setSelected(updated);
       setOrders(prev => prev.map(o => o.id === updated.id ? updated : o));
-      toast({ status: "success", description: "Convertido para pedido.", duration: 2000 });
+      toast({  status: "success", description: "Convertido para pedido.", duration: 2000 });
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     }
   }
 
@@ -135,9 +135,9 @@ export default function OrdersList() {
       await apiDeleteOrder(selected.id);
       setOrders(prev => prev.filter(o => o.id !== selected.id));
       setSelected(null);
-      toast({ status: "success", description: "Orçamento excluído.", duration: 2000 });
+      toast({  status: "success", description: "Orçamento excluído.", duration: 2000 });
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     }
   }
 
@@ -148,14 +148,14 @@ export default function OrdersList() {
     try {
       const result = await integrateOrderSisplan(selected.id);
       if (result.success) {
-        toast({ status: "success", description: `Pedido integrado no Sisplan (${result.numero})`, duration: 5000 });
+        toast({  status: "success", description: `Pedido integrado no Sisplan (${result.numero })`, duration: 5000 });
         setSelected({ ...selected, sisplan_order_id: result.numero });
         setOrders(prev => prev.map(o => o.id === selected.id ? { ...o, sisplan_order_id: result.numero } : o));
       } else {
-        toast({ status: "error", description: result.errors?.join(", ") || "Erro na integração", duration: 5000 });
+        toast({  status: "error", description: result.errors?.join(", ") || "Erro na integração", duration: 5000 });
       }
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 5000 });
+      toast({  status: "error", description: err.message, duration: 5000 });
     } finally {
       setIntegrating(false);
     }

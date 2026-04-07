@@ -32,7 +32,6 @@ import {
   VStack,
   useBreakpointValue,
   useDisclosure,
-  useToast,
   useColorModeValue
 } from "@chakra-ui/react";
 import { AddIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, SearchIcon, CloseIcon } from "@chakra-ui/icons";
@@ -56,6 +55,7 @@ import {
   fetchCashflowBoxes,
   fetchCashflowAlerts
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const monthNames = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -104,7 +104,7 @@ const CashFlow = () => {
   const recurrencesModal = useDisclosure();
   const boxesModal = useDisclosure();
   const importModal = useDisclosure();
-  const toast = useToast();
+  const toast = useAppToast();
 
   const isMobile = useBreakpointValue({ base: true, md: false });
   const cardBg = useColorModeValue("white", "gray.800");
@@ -158,11 +158,11 @@ const CashFlow = () => {
 
       const failed = [catsResult, entsResult, sumResult, alertsResult].filter(r => r.status === "rejected");
       if (failed.length > 0) {
-        toast({ title: "Erro ao carregar alguns dados. Verifique o console.", status: "warning", duration: 4000 });
+        toast({  title: "Erro ao carregar alguns dados. Verifique o console.", status: "warning", duration: 4000 });
       }
     } catch (err) {
       console.error("loadData error:", err);
-      toast({ title: "Erro ao carregar dados.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar dados.", status: "error", duration: 3000 });
     } finally {
       setLoading(false);
     }
@@ -196,7 +196,7 @@ const CashFlow = () => {
       await toggleCashflowEntryStatus(id);
       await loadData();
     } catch (err) {
-      toast({ title: "Erro ao alterar status.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao alterar status.", status: "error", duration: 3000 });
     }
   };
 
@@ -205,7 +205,7 @@ const CashFlow = () => {
       await deleteCashflowEntry(id);
       await loadData();
     } catch (err) {
-      toast({ title: "Erro ao excluir.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao excluir.", status: "error", duration: 3000 });
     }
   };
 
@@ -223,7 +223,7 @@ const CashFlow = () => {
       setEditingBalance(false);
       await loadData();
     } catch (err) {
-      toast({ title: "Erro ao salvar saldo.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao salvar saldo.", status: "error", duration: 3000 });
     }
   };
 
@@ -231,16 +231,15 @@ const CashFlow = () => {
     setImporting(true);
     try {
       const result = await importCashflow(file, boxId);
-      toast({
+      toast({ 
         title: result.message || "Importação concluída.",
         description: result.sheets?.join(", "),
         status: "success",
-        duration: 6000,
-        isClosable: true
-      });
+        duration: 6000
+ });
       await loadData();
     } catch (err) {
-      toast({ title: err.message || "Erro na importação.", status: "error", duration: 4000 });
+      toast({  title: err.message || "Erro na importação.", status: "error", duration: 4000 });
     } finally {
       setImporting(false);
     }

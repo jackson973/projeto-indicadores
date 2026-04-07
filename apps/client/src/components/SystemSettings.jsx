@@ -10,8 +10,7 @@ import {
   Input,
   Text,
   VStack,
-  useColorModeValue,
-  useToast
+  useColorModeValue
 } from "@chakra-ui/react";
 import { DeleteIcon } from "@chakra-ui/icons";
 import {
@@ -22,6 +21,7 @@ import {
   uploadPwaIcon,
   deletePwaIcon
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const SystemSettings = ({ onLogoChange }) => {
   const [form, setForm] = useState({ companyName: "" });
@@ -31,7 +31,7 @@ const SystemSettings = ({ onLogoChange }) => {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadingPwa, setUploadingPwa] = useState(false);
-  const toast = useToast();
+  const toast = useAppToast();
 
   const panelBg = useColorModeValue("white", "gray.800");
 
@@ -46,7 +46,7 @@ const SystemSettings = ({ onLogoChange }) => {
       setLogoUrl(data.logoPath ? `/uploads/${data.logoPath}?t=${Date.now()}` : null);
       setPwaIconUrl(data.pwaIconPath ? `/uploads/${data.pwaIconPath}?t=${Date.now()}` : null);
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setLoading(false);
     }
@@ -56,9 +56,9 @@ const SystemSettings = ({ onLogoChange }) => {
     setSaving(true);
     try {
       await updateSystemSettings({ companyName: form.companyName });
-      toast({ title: "Configuracoes salvas!", status: "success", duration: 3000 });
+      toast({  title: "Configuracoes salvas!", status: "success", duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSaving(false);
     }
@@ -72,10 +72,10 @@ const SystemSettings = ({ onLogoChange }) => {
     try {
       const result = await uploadSystemLogo(file);
       setLogoUrl(`/uploads/${result.logoPath}?t=${Date.now()}`);
-      toast({ title: "Logo atualizada!", status: "success", duration: 3000 });
+      toast({  title: "Logo atualizada!", status: "success", duration: 3000 });
       onLogoChange?.();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setUploading(false);
       e.target.value = "";
@@ -86,10 +86,10 @@ const SystemSettings = ({ onLogoChange }) => {
     try {
       await deleteSystemLogo();
       setLogoUrl(null);
-      toast({ title: "Logo removida.", status: "success", duration: 3000 });
+      toast({  title: "Logo removida.", status: "success", duration: 3000 });
       onLogoChange?.();
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     }
   };
 
@@ -101,9 +101,9 @@ const SystemSettings = ({ onLogoChange }) => {
     try {
       const result = await uploadPwaIcon(file);
       setPwaIconUrl(`/uploads/${result.pwaIconPath}?t=${Date.now()}`);
-      toast({ title: "Icone PWA atualizado!", status: "success", duration: 3000 });
+      toast({  title: "Icone PWA atualizado!", status: "success", duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setUploadingPwa(false);
       e.target.value = "";
@@ -114,9 +114,9 @@ const SystemSettings = ({ onLogoChange }) => {
     try {
       await deletePwaIcon();
       setPwaIconUrl(null);
-      toast({ title: "Icone PWA removido.", status: "success", duration: 3000 });
+      toast({  title: "Icone PWA removido.", status: "success", duration: 3000 });
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 5000 });
+      toast({  title: err.message, status: "error", duration: 5000 });
     }
   };
 

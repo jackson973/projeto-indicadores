@@ -25,7 +25,6 @@ import {
   ModalCloseButton,
   Checkbox,
   Tag,
-  useToast,
   useColorModeValue,
   useBreakpointValue,
   useDisclosure
@@ -53,6 +52,7 @@ import {
   fetchAllAdsWithGroup,
   fetchProductVariations,
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const ProductGroups = () => {
   const [groups, setGroups] = useState([]);
@@ -104,7 +104,7 @@ const ProductGroups = () => {
   const [variationQueue, setVariationQueue] = useState([]); // queue of ads waiting for variation pick
   const [batchAddedCount, setBatchAddedCount] = useState(0); // counter for batch progress
 
-  const toast = useToast();
+  const toast = useAppToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
 
   // Busca multi-palavra: "pijama emoji" bate em "PIJAMA MASC. MANGA LONGA JUVENIL ROBO EMOJI"
@@ -131,21 +131,21 @@ const ProductGroups = () => {
   const loadGroups = async () => {
     setLoadingGroups(true);
     try { setGroups(await fetchProductGroups()); }
-    catch { toast({ title: "Erro ao carregar grupos.", status: "error", duration: 3000 }); }
+    catch { toast({  title: "Erro ao carregar grupos.", status: "error", duration: 3000 }); }
     finally { setLoadingGroups(false); }
   };
 
   const loadGroupItems = async (groupId) => {
     setLoadingItems(true);
     try { setGroupItems(await fetchProductGroupItems(groupId)); }
-    catch { toast({ title: "Erro ao carregar itens do grupo.", status: "error", duration: 3000 }); }
+    catch { toast({  title: "Erro ao carregar itens do grupo.", status: "error", duration: 3000 }); }
     finally { setLoadingItems(false); }
   };
 
   const loadAllAds = async () => {
     setLoadingAllAds(true);
     try { setAllAds(await fetchAllAdsWithGroup()); }
-    catch { toast({ title: "Erro ao carregar anúncios.", status: "error", duration: 3000 }); }
+    catch { toast({  title: "Erro ao carregar anúncios.", status: "error", duration: 3000 }); }
     finally { setLoadingAllAds(false); }
   };
 
@@ -271,9 +271,9 @@ const ProductGroups = () => {
     try {
       await createProductGroup(newGroupName.trim());
       setNewGroupName(""); createModal.onClose();
-      toast({ title: "Grupo criado com sucesso.", status: "success", duration: 3000 });
+      toast({  title: "Grupo criado com sucesso.", status: "success", duration: 3000 });
       await loadGroups();
-    } catch (err) { toast({ title: err.message || "Erro ao criar grupo.", status: "error", duration: 3000 }); }
+    } catch (err) { toast({  title: err.message || "Erro ao criar grupo.", status: "error", duration: 3000 }); }
     finally { setCreating(false); }
   };
 
@@ -282,18 +282,18 @@ const ProductGroups = () => {
     try {
       await updateProductGroup(id, editingName.trim());
       setEditingId(null);
-      toast({ title: "Grupo atualizado.", status: "success", duration: 3000 });
+      toast({  title: "Grupo atualizado.", status: "success", duration: 3000 });
       await loadGroups();
-    } catch (err) { toast({ title: err.message || "Erro ao atualizar grupo.", status: "error", duration: 3000 }); }
+    } catch (err) { toast({  title: err.message || "Erro ao atualizar grupo.", status: "error", duration: 3000 }); }
   };
 
   const handleDelete = async (id) => {
     try {
       await deleteProductGroup(id);
       if (selectedGroupId === id) setSelectedGroupId(null);
-      toast({ title: "Grupo excluído.", status: "success", duration: 3000 });
+      toast({  title: "Grupo excluído.", status: "success", duration: 3000 });
       await loadGroups();
-    } catch (err) { toast({ title: err.message || "Erro ao excluir grupo.", status: "error", duration: 4000 }); }
+    } catch (err) { toast({  title: err.message || "Erro ao excluir grupo.", status: "error", duration: 4000 }); }
   };
 
   // ── Add/remove items (ad_name stores store_variation_key) ─────────────
@@ -324,7 +324,7 @@ const ProductGroups = () => {
       // No variations or single variation — add directly
       await addProductGroupItem(targetGroupId, ad.store_variation_key, null, ad.sisplan_codigo || null);
       await loadGroupItems(selectedGroupId || targetGroupId); await loadGroups(); await loadAllAds();
-    } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
+    } catch (err) { toast({  title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
     finally { setAddingAd(null); }
   };
 
@@ -365,7 +365,7 @@ const ProductGroups = () => {
         await loadGroupItems(selectedGroupId || variationTargetGroupId); await loadGroups(); await loadAllAds();
         setBatchAddedCount(0);
       }
-    } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
+    } catch (err) { toast({  title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
     finally { setLoadingVariations(false); }
   };
 
@@ -418,7 +418,7 @@ const ProductGroups = () => {
       const ads = filteredAds.filter((a) => selectedSearchResults.has(a.store_variation_key));
       await handleBatchWithVariations(ads, selectedGroupId);
       setSelectedSearchResults(new Set()); setProductSearch("");
-    } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
+    } catch (err) { toast({  title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
     finally { setBatchAdding(false); }
   };
 
@@ -426,9 +426,9 @@ const ProductGroups = () => {
     if (!selectedGroupId) return;
     try {
       await removeProductGroupItem(selectedGroupId, key, variationFilter);
-      toast({ title: "Anúncio removido do grupo.", status: "success", duration: 3000 });
+      toast({  title: "Anúncio removido do grupo.", status: "success", duration: 3000 });
       await loadGroupItems(selectedGroupId); await loadGroups(); await loadAllAds();
-    } catch (err) { toast({ title: err.message || "Erro ao remover.", status: "error", duration: 3000 }); }
+    } catch (err) { toast({  title: err.message || "Erro ao remover.", status: "error", duration: 3000 }); }
   };
 
   const handleBatchRemove = async () => {
@@ -444,7 +444,7 @@ const ProductGroups = () => {
       toast({ title: `${items.length} anúncio(s) removido(s).`, status: "success", duration: 3000 });
       setSelectedItems(new Set());
       await loadGroupItems(selectedGroupId); await loadGroups(); await loadAllAds();
-    } catch (err) { toast({ title: err.message || "Erro ao remover.", status: "error", duration: 3000 }); }
+    } catch (err) { toast({  title: err.message || "Erro ao remover.", status: "error", duration: 3000 }); }
     finally { setRemovingBatch(false); }
   };
 
@@ -460,7 +460,7 @@ const ProductGroups = () => {
       const ads = ungroupedAds.filter((a) => selectedUngrouped.has(a.store_variation_key));
       await handleBatchWithVariations(ads, parseInt(assignTargetGroupId));
       setSelectedUngrouped(new Set());
-    } catch (err) { toast({ title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
+    } catch (err) { toast({  title: err.message || "Erro ao adicionar.", status: "error", duration: 3000 }); }
     finally { setBatchAssigning(false); }
   };
 

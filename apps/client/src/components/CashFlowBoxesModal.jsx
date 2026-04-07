@@ -17,7 +17,6 @@ import {
   IconButton,
   HStack,
   Button,
-  useToast,
   useColorModeValue
 } from "@chakra-ui/react";
 import { AddIcon, EditIcon, DeleteIcon, CheckIcon, CloseIcon } from "@chakra-ui/icons";
@@ -27,6 +26,7 @@ import {
   updateCashflowBox,
   deleteCashflowBox
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const CashFlowBoxesModal = ({ isOpen, onClose, onBoxesChange }) => {
   const [boxes, setBoxes] = useState([]);
@@ -34,7 +34,7 @@ const CashFlowBoxesModal = ({ isOpen, onClose, onBoxesChange }) => {
   const [editingId, setEditingId] = useState(null);
   const [editingName, setEditingName] = useState("");
   const [adding, setAdding] = useState(false);
-  const toast = useToast();
+  const toast = useAppToast();
   const headerBg = useColorModeValue("gray.50", "gray.700");
 
   const load = async () => {
@@ -42,7 +42,7 @@ const CashFlowBoxesModal = ({ isOpen, onClose, onBoxesChange }) => {
       const data = await fetchCashflowBoxes();
       setBoxes(data);
     } catch (err) {
-      toast({ title: "Erro ao carregar caixas.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar caixas.", status: "error", duration: 3000 });
     }
   };
 
@@ -59,7 +59,7 @@ const CashFlowBoxesModal = ({ isOpen, onClose, onBoxesChange }) => {
       await load();
       onBoxesChange?.();
     } catch (err) {
-      toast({ title: err.message || "Erro ao criar caixa.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao criar caixa.", status: "error", duration: 3000 });
     } finally {
       setAdding(false);
     }
@@ -73,7 +73,7 @@ const CashFlowBoxesModal = ({ isOpen, onClose, onBoxesChange }) => {
       await load();
       onBoxesChange?.();
     } catch (err) {
-      toast({ title: err.message || "Erro ao atualizar caixa.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao atualizar caixa.", status: "error", duration: 3000 });
     }
   };
 
@@ -83,7 +83,7 @@ const CashFlowBoxesModal = ({ isOpen, onClose, onBoxesChange }) => {
       await load();
       onBoxesChange?.();
     } catch (err) {
-      toast({ title: err.message || "Erro ao excluir caixa.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao excluir caixa.", status: "error", duration: 3000 });
     }
   };
 

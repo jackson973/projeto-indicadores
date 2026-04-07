@@ -29,7 +29,6 @@ import {
   Text,
   useColorModeValue,
   useDisclosure,
-  useToast,
   VStack,
 } from "@chakra-ui/react";
 import { AddIcon, DeleteIcon, EditIcon, SearchIcon } from "@chakra-ui/icons";
@@ -50,6 +49,7 @@ import {
 } from "../api";
 import BarcodeScanner from "./BarcodeScanner";
 import SearchableSelect from "./SearchableSelect";
+import useAppToast from "../hooks/useAppToast";
 
 const SIZE_ORDER = ["RN", "PP", "P", "M", "G", "GG", "XG", "XGG", "EG", "EGG"];
 const fmtBRL = (v) => (Number(v) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -88,7 +88,7 @@ export default function OrderProductsConfig() {
   const { isOpen, onOpen, onClose }                     = useDisclosure();
   const { isOpen: isDeleteOpen, onOpen: onDeleteOpen, onClose: onDeleteClose } = useDisclosure();
   const fileRef = useRef();
-  const toast   = useToast();
+  const toast = useAppToast();
 
   const panelBg     = useColorModeValue("white", "gray.800");
   const cardBg      = useColorModeValue("white", "gray.750");
@@ -103,7 +103,7 @@ export default function OrderProductsConfig() {
         setSisplanProducts(sp);
         setGroups(grp);
       })
-      .catch(err => toast({ status: "error", description: err.message, duration: 3000 }))
+      .catch(err => toast({  status: "error", description: err.message, duration: 3000 }))
       .finally(() => setLoading(false));
   }, []);
 
@@ -234,9 +234,9 @@ export default function OrderProductsConfig() {
     try {
       await removeCatalogBarcode(barcodeId);
       setBarcodes(prev => prev.filter(b => b.id !== barcodeId));
-      toast({ status: "success", description: "Código removido.", duration: 2000 });
+      toast({  status: "success", description: "Código removido.", duration: 2000 });
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     }
   }
 
@@ -245,12 +245,12 @@ export default function OrderProductsConfig() {
     setAssociating(true);
     try {
       const result = await associateBarcodesByGroup(editing.id, groupId);
-      toast({ status: "success", description: result.message, duration: 4000 });
+      toast({  status: "success", description: result.message, duration: 4000 });
       // Reload barcodes
       const updated = await fetchCatalogBarcodes(editing.id);
       setBarcodes(updated);
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     } finally {
       setAssociating(false);
       setGroupSelectOpen(false);
@@ -264,27 +264,27 @@ export default function OrderProductsConfig() {
       setEditing(prev => ({ ...prev, group_id: groupId ? Number(groupId) : null }));
       // Update in products list too
       setProducts(prev => prev.map(p => p.id === editing.id ? { ...p, group_id: groupId ? Number(groupId) : null } : p));
-      toast({ status: "success", description: groupId ? "Grupo vinculado! Barcodes serão resolvidos automaticamente." : "Grupo desvinculado.", duration: 3000 });
+      toast({  status: "success", description: groupId ? "Grupo vinculado! Barcodes serão resolvidos automaticamente." : "Grupo desvinculado.", duration: 3000 });
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     }
   }
 
   async function handleSave() {
     if (!editing.name.trim()) {
-      toast({ status: "warning", description: "Informe o nome do produto.", duration: 2500 });
+      toast({  status: "warning", description: "Informe o nome do produto.", duration: 2500 });
       return;
     }
     if (!editing.price_pc || isNaN(parseFloat(editing.price_pc))) {
-      toast({ status: "warning", description: "Informe o preço PC.", duration: 2500 });
+      toast({  status: "warning", description: "Informe o preço PC.", duration: 2500 });
       return;
     }
     if (!editing.price_mn || isNaN(parseFloat(editing.price_mn))) {
-      toast({ status: "warning", description: "Informe o preço MN.", duration: 2500 });
+      toast({  status: "warning", description: "Informe o preço MN.", duration: 2500 });
       return;
     }
     if (editing.sizes.length === 0) {
-      toast({ status: "warning", description: "Selecione o produto Sisplan de referência para carregar os tamanhos.", duration: 3000 });
+      toast({  status: "warning", description: "Selecione o produto Sisplan de referência para carregar os tamanhos.", duration: 3000 });
       return;
     }
 
@@ -316,10 +316,10 @@ export default function OrderProductsConfig() {
           ? prev.map(p => p.id === saved.id ? saved : p)
           : [...prev, saved]
       );
-      toast({ status: "success", description: editing.id ? "Produto atualizado!" : "Produto criado!", duration: 2000 });
+      toast({  status: "success", description: editing.id ? "Produto atualizado!" : "Produto criado!", duration: 2000 });
       onClose();
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     } finally {
       setSaving(false);
     }
@@ -329,9 +329,9 @@ export default function OrderProductsConfig() {
     try {
       await deleteOrderCatalogProduct(deleting.id);
       setProducts(prev => prev.filter(p => p.id !== deleting.id));
-      toast({ status: "success", description: "Produto removido.", duration: 2000 });
+      toast({  status: "success", description: "Produto removido.", duration: 2000 });
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     }
     onDeleteClose();
     setDeleting(null);

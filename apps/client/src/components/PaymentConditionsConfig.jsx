@@ -2,13 +2,14 @@ import { useState, useEffect } from "react";
 import {
   Badge, Box, Button, Flex, HStack, IconButton, Input, Modal,
   ModalBody, ModalCloseButton, ModalContent, ModalFooter, ModalHeader,
-  ModalOverlay, Spinner, Text, useColorModeValue, useDisclosure, useToast, VStack,
+  ModalOverlay, Spinner, Text, useColorModeValue, useDisclosure, VStack,
 } from "@chakra-ui/react";
 import { AddIcon, DeleteIcon, EditIcon } from "@chakra-ui/icons";
 import {
   fetchPaymentConditions, createPaymentCondition,
   updatePaymentCondition, deletePaymentCondition,
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 function toErpPreview(terms) {
   const nums = String(terms || "").match(/\d+/g);
@@ -26,7 +27,7 @@ export default function PaymentConditionsConfig() {
   const [editingId, setEditingId]   = useState(null);
 
   const { isOpen, onOpen, onClose } = useDisclosure();
-  const toast      = useToast();
+  const toast = useAppToast();
   const cardBg     = useColorModeValue("white", "gray.800");
   const borderColor = useColorModeValue("gray.200", "gray.600");
   const mutedColor  = useColorModeValue("gray.500", "gray.400");
@@ -37,7 +38,7 @@ export default function PaymentConditionsConfig() {
   async function load() {
     setLoading(true);
     try { setConditions(await fetchPaymentConditions()); }
-    catch (err) { toast({ status: "error", description: err.message, duration: 3000 }); }
+    catch (err) { toast({  status: "error", description: err.message, duration: 3000 }); }
     finally { setLoading(false); }
   }
 
@@ -57,10 +58,10 @@ export default function PaymentConditionsConfig() {
 
   async function handleSave() {
     if (!form.name.trim()) {
-      toast({ status: "warning", description: "Informe o nome.", duration: 2500 }); return;
+      toast({  status: "warning", description: "Informe o nome.", duration: 2500 }); return;
     }
     if (!form.terms.trim()) {
-      toast({ status: "warning", description: "Informe as parcelas.", duration: 2500 }); return;
+      toast({  status: "warning", description: "Informe as parcelas.", duration: 2500 }); return;
     }
     setSaving(true);
     try {
@@ -74,7 +75,7 @@ export default function PaymentConditionsConfig() {
       }
       onClose();
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     } finally { setSaving(false); }
   }
 
@@ -82,9 +83,9 @@ export default function PaymentConditionsConfig() {
     try {
       await deletePaymentCondition(id);
       setConditions(prev => prev.filter(c => c.id !== id));
-      toast({ status: "success", description: "Condição removida.", duration: 2000 });
+      toast({  status: "success", description: "Condição removida.", duration: 2000 });
     } catch (err) {
-      toast({ status: "error", description: err.message, duration: 3000 });
+      toast({  status: "error", description: err.message, duration: 3000 });
     }
   }
 

@@ -30,11 +30,11 @@ import {
   Tr,
   VStack,
   useColorModeValue,
-  useDisclosure,
-  useToast
+  useDisclosure
 } from "@chakra-ui/react";
 import { AddIcon, EditIcon, DeleteIcon } from "@chakra-ui/icons";
 import { fetchUsers, createUser, updateUser, updateUserPassword, deleteUser } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const formatPhoneDisplay = (value) => {
   if (!value) return "-";
@@ -73,7 +73,7 @@ const UsersManagement = () => {
   const [form, setForm] = useState({ name: "", email: "", password: "", role: "user", active: true, whatsapp: "", isRep: false, repCode: "" });
   const [saving, setSaving] = useState(false);
   const modal = useDisclosure();
-  const toast = useToast();
+  const toast = useAppToast();
 
   const panelBg = useColorModeValue("white", "gray.800");
   const headerBg = useColorModeValue("gray.50", "gray.700");
@@ -120,7 +120,7 @@ const UsersManagement = () => {
         if (form.password) {
           await updateUserPassword(editingUser.id, form.password);
         }
-        toast({ title: "Usuário atualizado.", status: "success", duration: 3000 });
+        toast({  title: "Usuário atualizado.", status: "success", duration: 3000 });
       } else {
         await createUser({
           name: form.name,
@@ -130,12 +130,12 @@ const UsersManagement = () => {
           whatsapp: form.whatsapp,
           repCode: form.isRep ? form.repCode : null
         });
-        toast({ title: "Usuário criado.", status: "success", duration: 3000 });
+        toast({  title: "Usuário criado.", status: "success", duration: 3000 });
       }
       modal.onClose();
       await loadUsers();
     } catch (err) {
-      toast({ title: err.message || "Erro ao salvar.", status: "error", duration: 5000 });
+      toast({  title: err.message || "Erro ao salvar.", status: "error", duration: 5000 });
     } finally {
       setSaving(false);
     }
@@ -145,10 +145,10 @@ const UsersManagement = () => {
     if (!window.confirm(`Excluir o usuário "${user.name}"?`)) return;
     try {
       await deleteUser(user.id);
-      toast({ title: "Usuário excluído.", status: "success", duration: 3000 });
+      toast({  title: "Usuário excluído.", status: "success", duration: 3000 });
       await loadUsers();
     } catch (err) {
-      toast({ title: err.message || "Erro ao excluir.", status: "error", duration: 5000 });
+      toast({  title: err.message || "Erro ao excluir.", status: "error", duration: 5000 });
     }
   };
 

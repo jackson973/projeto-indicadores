@@ -3,12 +3,13 @@ import {
   Box, Flex, Text, VStack, HStack, Grid, Select, Input,
   InputGroup, InputLeftElement, Badge, Image, Spinner, Stat,
   StatLabel, StatNumber, StatHelpText, Tooltip, Button,
-  Divider, Collapse, useColorModeValue, useToast, ButtonGroup,
+  Divider, Collapse, useColorModeValue, ButtonGroup,
 } from "@chakra-ui/react";
 import {
   SearchIcon, RepeatIcon, ChevronDownIcon, ChevronUpIcon, ExternalLinkIcon,
 } from "@chakra-ui/icons";
 import { fetchStoresManagement, fetchAnuncios, fetchMarketComparison } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -909,7 +910,7 @@ export default function AnunciosDashboard() {
   const [sortBy, setSortBy]               = useState("revenue");
   const [period, setPeriod]               = useState("30d");
 
-  const toast      = useToast();
+  const toast = useAppToast();
   const bg         = useColorModeValue("gray.50", "gray.800");
   const mutedColor = useColorModeValue("gray.500", "gray.400");
   const periodBtnActive   = useColorModeValue("blue.500", "blue.300");
@@ -939,7 +940,7 @@ export default function AnunciosDashboard() {
       const data = await fetchAnuncios(selectedStore);
       setItems(data.items || []);
     } catch (err) {
-      toast({ title: err.message, status: "error", duration: 6000 });
+      toast({  title: err.message, status: "error", duration: 6000 });
     } finally {
       setLoading(false);
     }

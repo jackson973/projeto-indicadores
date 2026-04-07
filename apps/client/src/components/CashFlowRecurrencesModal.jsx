@@ -30,7 +30,6 @@ import {
   Checkbox,
   Divider,
   Text,
-  useToast,
   useColorModeValue
 } from "@chakra-ui/react";
 import { AddIcon, EditIcon, DeleteIcon } from "@chakra-ui/icons";
@@ -40,6 +39,7 @@ import {
   updateCashflowRecurrence,
   deleteCashflowRecurrence
 } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const formatBRL = (value) =>
   (value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -62,7 +62,7 @@ const CashFlowRecurrencesModal = ({ isOpen, onClose, categories, boxId }) => {
   const [editingId, setEditingId] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const toast = useToast();
+  const toast = useAppToast();
   const headerBg = useColorModeValue("gray.50", "gray.700");
 
   const load = async () => {
@@ -70,7 +70,7 @@ const CashFlowRecurrencesModal = ({ isOpen, onClose, categories, boxId }) => {
       const data = await fetchCashflowRecurrences(boxId);
       setRecurrences(data);
     } catch (err) {
-      toast({ title: "Erro ao carregar recorrências.", status: "error", duration: 3000 });
+      toast({  title: "Erro ao carregar recorrências.", status: "error", duration: 3000 });
     }
   };
 
@@ -125,8 +125,7 @@ const CashFlowRecurrencesModal = ({ isOpen, onClose, categories, boxId }) => {
       toast({
         title: `Preencha: ${errors.join(", ")}.`,
         status: "warning",
-        duration: 4000
-      });
+        duration: 4000 });
       return;
     }
 
@@ -152,7 +151,7 @@ const CashFlowRecurrencesModal = ({ isOpen, onClose, categories, boxId }) => {
       setShowForm(false);
       await load();
     } catch (err) {
-      toast({ title: err.message || "Erro ao salvar.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao salvar.", status: "error", duration: 3000 });
     } finally {
       setSaving(false);
     }
@@ -163,7 +162,7 @@ const CashFlowRecurrencesModal = ({ isOpen, onClose, categories, boxId }) => {
       await deleteCashflowRecurrence(id);
       await load();
     } catch (err) {
-      toast({ title: err.message || "Erro ao excluir.", status: "error", duration: 3000 });
+      toast({  title: err.message || "Erro ao excluir.", status: "error", duration: 3000 });
     }
   };
 

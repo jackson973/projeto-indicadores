@@ -16,18 +16,18 @@ import {
   Text,
   VStack,
   useColorModeValue,
-  useDisclosure,
-  useToast
+  useDisclosure
 } from "@chakra-ui/react";
 import { WarningIcon, DeleteIcon } from "@chakra-ui/icons";
 import { clearSalesData, clearCashflowData } from "../api";
+import useAppToast from "../hooks/useAppToast";
 
 const DatabaseMaintenance = () => {
   const [actionType, setActionType] = useState(null); // 'sales' or 'cashflow'
   const [loading, setLoading] = useState(false);
   const alertDialog = useDisclosure();
   const cancelRef = useRef();
-  const toast = useToast();
+  const toast = useAppToast();
 
   const panelBg = useColorModeValue("white", "gray.800");
   const dangerBg = useColorModeValue("red.50", "red.900");
@@ -43,29 +43,26 @@ const DatabaseMaintenance = () => {
     try {
       if (actionType === 'sales') {
         await clearSalesData();
-        toast({
+        toast({ 
           title: "Dados de vendas excluídos",
           description: "Todos os registros de vendas foram removidos.",
           status: "success",
-          duration: 4000
-        });
+          duration: 4000 });
       } else if (actionType === 'cashflow') {
         await clearCashflowData();
-        toast({
+        toast({ 
           title: "Dados financeiros excluídos",
           description: "Todos os lançamentos de fluxo de caixa foram removidos.",
           status: "success",
-          duration: 4000
-        });
+          duration: 4000 });
       }
       alertDialog.onClose();
     } catch (err) {
-      toast({
+      toast({ 
         title: "Erro ao excluir dados",
         description: err.message || "Não foi possível realizar a operação.",
         status: "error",
-        duration: 5000
-      });
+        duration: 5000 });
     } finally {
       setLoading(false);
     }
