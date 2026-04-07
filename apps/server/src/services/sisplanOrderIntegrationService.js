@@ -646,11 +646,9 @@ async function syncOrdersFromERP() {
         const updateFields = ['total = $2', 'updated_at = NOW()'];
         const updateParams = [order.id, Math.round(total * 100) / 100];
 
-        // Atualizar notes se veio do ERP
-        if (header.obs) {
-          updateParams.push(header.obs);
-          updateFields.push(`notes = $${updateParams.length}`);
-        }
+        // Atualizar notes do ERP (sempre sobrescrever, inclusive para limpar lixo)
+        updateParams.push(header.obs || '');
+        updateFields.push(`notes = $${updateParams.length}`);
 
         // Atualizar payment_condition_erp
         if (header.pgto) {
