@@ -38,7 +38,10 @@ function resolveBlobValue(blobFn, transaction) {
       const chunks = [];
       eventEmitter.on('data', (chunk) => chunks.push(chunk));
       eventEmitter.on('end', () => {
-        resolve(Buffer.concat(chunks).toString('latin1'));
+        const buf = Buffer.concat(chunks);
+        // Try UTF-8 first; if invalid sequences appear, fall back to latin1
+        const utf8 = buf.toString('utf-8');
+        resolve(utf8.includes('\uFFFD') ? buf.toString('latin1') : utf8);
       });
       eventEmitter.on('error', (e) => reject(e));
     };
