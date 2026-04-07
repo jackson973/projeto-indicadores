@@ -439,6 +439,7 @@ async function loadOrderData(orderId, userId) {
 
 function toStr(val) {
   if (val === null || val === undefined) return '';
+  if (typeof val === 'function') return ''; // unresolved Firebird BLOB callback
   if (typeof val === 'string') return val.trim();
   if (Buffer.isBuffer(val)) return val.toString('utf-8').trim();
   return String(val).trim();
@@ -467,7 +468,7 @@ function buildErpOrderItemsQuery(numeros) {
       cliente.nome AS "clientName",
       cliente.codcli AS "codcli",
       cliente.cnpj AS "cnpj",
-      pedidos.OBS AS "obs",
+      (SELECT p2.OBS FROM PEDIDO_001 p2 WHERE p2.NUMERO = pedidos.NUMERO) AS "obs",
       pedidos.PGTO AS "pgto",
       pedidos.CODREP AS "codrep"
     FROM PED_ITEN_001 itens
@@ -485,7 +486,7 @@ function buildErpOrderItemsQuery(numeros) {
       pedidos.DESC_ITEN_TOTAL, pedidos.PER_DESC, pedidos.COM1,
       itens.QTDE, itens.QTDE_F, itens.QTDE_CANC,
       cliente.FANTASIA, cliente.nome, cliente.codcli, cliente.cnpj,
-      pedidos.OBS, pedidos.PGTO, pedidos.CODREP
+      pedidos.PGTO, pedidos.CODREP
   `;
 }
 
