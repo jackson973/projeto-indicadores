@@ -993,6 +993,7 @@ router.post('/find-prices', async (req, res) => {
         productCode: item.productCode,
         parte: item.parte,
         cor: item.cor,
+        tamanho: item.tamanho || null,
         ...priceInfo
       });
     }

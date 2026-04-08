@@ -401,16 +401,16 @@ const TerceirosSettlement = () => {
       setEditUnsettledOfs(data);
       setEditSelectedOfs(new Set());
       if (data.length > 0) {
-        const items = data.map((of) => ({ productCode: of.fac_codigo_produto, parte: of.fac_parte, cor: of.fac_cor, etapa: of.fac_codsetor || null }));
+        const items = data.map((of) => ({ productCode: of.fac_codigo_produto, parte: of.fac_parte, cor: of.fac_cor, etapa: of.fac_codsetor || null, tamanho: of.fac_tam || null }));
         try {
           const prices = await fetchTerceirosPricesForOfs(codcli, items);
           const pm = {};
           if (Array.isArray(prices)) {
-            prices.forEach((p) => { pm[`${p.productCode}|${p.parte}|${p.cor}`] = { price: p.price }; });
+            prices.forEach((p) => { pm[`${p.productCode}|${p.parte}|${p.cor}|${p.tamanho || ''}`] = { price: p.price }; });
           }
           setEditOfPrices(pm);
           const auto = new Set();
-          data.forEach((of, idx) => { if (pm[`${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`]?.price != null) auto.add(idx); });
+          data.forEach((of, idx) => { if (pm[`${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`]?.price != null) auto.add(idx); });
           setEditSelectedOfs(auto);
         } catch { setEditOfPrices({}); }
       } else { setEditOfPrices({}); }
@@ -423,7 +423,7 @@ const TerceirosSettlement = () => {
     const ofsToAdd = editUnsettledOfs
       .filter((_, idx) => editSelectedOfs.has(idx))
       .map((of) => {
-        const price = editOfPrices[`${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`]?.price ?? 0;
+        const price = editOfPrices[`${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`]?.price ?? 0;
         return { ofId: of.id, quantity: parseFloat(of.fac_quant) || 0, unitPrice: price, priceSource: "table" };
       });
     try {
@@ -573,13 +573,14 @@ const TerceirosSettlement = () => {
             productCode: of.fac_codigo_produto,
             parte: of.fac_parte,
             cor: of.fac_cor,
-            etapa: of.fac_codsetor || null
+            etapa: of.fac_codsetor || null,
+            tamanho: of.fac_tam || null
           }));
           try {
             const prices = await fetchTerceirosPricesForOfs(supplierCode, items);
             if (Array.isArray(prices)) {
               prices.forEach((p) => {
-                const key = `${supplierCode}|${p.productCode}|${p.parte}|${p.cor}`;
+                const key = `${supplierCode}|${p.productCode}|${p.parte}|${p.cor}|${p.tamanho || ''}`;
                 priceMap[key] = {
                   price: p.price,
                   source: p.source,
@@ -596,8 +597,8 @@ const TerceirosSettlement = () => {
         // Also store with original key format for getOfPriceInfo
         const legacyPriceMap = {};
         data.forEach((of) => {
-          const newKey = `${of.fac_codcli}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
-          const legacyKey = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+          const newKey = `${of.fac_codcli}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`;
+          const legacyKey = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`;
           if (priceMap[newKey]) {
             legacyPriceMap[legacyKey] = priceMap[newKey];
           }
@@ -640,7 +641,7 @@ const TerceirosSettlement = () => {
 
   // ── OF price helper ───────────────────────────────────────────────────────
   const getOfPriceInfo = useCallback((of) => {
-    const key = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+    const key = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`;
     return ofPrices[key] || null;
   }, [ofPrices]);
 
@@ -933,19 +934,20 @@ const TerceirosSettlement = () => {
           productCode: of.fac_codigo_produto,
           parte: of.fac_parte,
           cor: of.fac_cor,
-          etapa: of.fac_codsetor || null
+          etapa: of.fac_codsetor || null,
+          tamanho: of.fac_tam || null
         }));
         try {
           const prices = await fetchTerceirosPricesForOfs(draft.codcli, items);
           const legacyPriceMap = {};
           if (Array.isArray(prices)) {
             prices.forEach((p) => {
-              const key = `${p.productCode}|${p.parte}|${p.cor}`;
+              const key = `${p.productCode}|${p.parte}|${p.cor}|${p.tamanho || ''}`;
               legacyPriceMap[key] = { price: p.price, source: p.source, error: p.error || null, groupName: p.groupName || null };
             });
             if (restored.size === 0) {
               data.forEach((of, idx) => {
-                const key = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+                const key = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`;
                 if (legacyPriceMap[key]?.price != null) restored.add(idx);
               });
             }
@@ -1940,7 +1942,7 @@ const TerceirosSettlement = () => {
               </Flex>
               <VStack align="stretch" spacing={1} maxH="220px" overflowY="auto">
                 {editUnsettledOfs.map((of, idx) => {
-                  const priceKey = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+                  const priceKey = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`;
                   const price = editOfPrices[priceKey]?.price;
                   const isSelected = editSelectedOfs.has(idx);
                   return (
