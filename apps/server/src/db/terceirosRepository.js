@@ -1289,6 +1289,8 @@ async function getOFRastreio(ofNumero) {
   const first = result.rows[0];
   return {
     fac_numero: first.fac_numero,
+    fac_codcli: first.fac_codcli,
+    cliente_nome: first.cliente_fantasia || first.cliente_nome || null,
     dt_abertura,
     dt_ultimo_lancto,
     ultima_etapa,

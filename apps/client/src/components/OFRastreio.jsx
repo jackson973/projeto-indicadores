@@ -126,6 +126,15 @@ export default function OFRastreio() {
             <Badge colorScheme="blue" fontSize="md" px={3} py={1} borderRadius="md">
               OF {data.fac_numero}
             </Badge>
+            {data.cliente_nome && (
+              <>
+                <Box w="1px" h="28px" bg="gray.200" />
+                <HStack spacing={1} fontSize="sm">
+                  <Text color="gray.500">Terceirizado:</Text>
+                  <Text fontWeight="medium" color="gray.700">{data.cliente_nome}</Text>
+                </HStack>
+              </>
+            )}
             <Box w="1px" h="28px" bg="gray.200" />
             <HStack spacing={1} fontSize="sm">
               <Text color="gray.500">Abertura:</Text>
