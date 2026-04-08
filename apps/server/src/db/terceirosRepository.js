@@ -118,6 +118,7 @@ async function upsertOfBatch(batch) {
         fac_descparte = EXCLUDED.fac_descparte,
         fac_desc_produto = EXCLUDED.fac_desc_produto,
         produto_unidade = EXCLUDED.produto_unidade,
+        fac_codcli = EXCLUDED.fac_codcli,
         cliente_nome = EXCLUDED.cliente_nome,
         ddd_fone = EXCLUDED.ddd_fone,
         cliente_fone = EXCLUDED.cliente_fone,
