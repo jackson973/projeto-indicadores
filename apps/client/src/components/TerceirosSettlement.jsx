@@ -2341,6 +2341,8 @@ const TerceirosSettlement = () => {
                 let ofGroupTotal = 0;
                 let ofGroupAllSelected = true;
                 let ofGroupSomeSelected = false;
+                let hasMissingPrice = false;
+                let missingPriceError = null;
                 const allOfIndices = [];
 
                 ofGroup.colorGroups.forEach((group) => {
@@ -2354,6 +2356,10 @@ const TerceirosSettlement = () => {
                     : tablePriceVal != null
                       ? tablePriceVal
                       : (manualVal !== undefined && manualVal !== "" ? parseFloat(manualVal) || 0 : null);
+                  if (effectivePrice == null) {
+                    hasMissingPrice = true;
+                    if (!missingPriceError && group.priceInfo?.error) missingPriceError = group.priceInfo.error;
+                  }
 
                   group.sizes.forEach((sz) => {
                     allOfIndices.push(sz.index);
@@ -2432,6 +2438,14 @@ const TerceirosSettlement = () => {
                           <Text color="gray.500">Parte: {ofGroup.facParte}{ofGroup.facDescparte && ofGroup.facDescparte !== ofGroup.facParte ? ` - ${ofGroup.facDescparte}` : ""}</Text>
                         )}
                       </HStack>
+                      {hasMissingPrice && (
+                        <Tooltip label={missingPriceError || "Sem preço definido para este item"} hasArrow>
+                          <Badge colorScheme="red" variant="subtle" display="flex" alignItems="center" gap={1}>
+                            <WarningIcon boxSize={3} />
+                            Sem preço
+                          </Badge>
+                        </Tooltip>
+                      )}
                       <HStack spacing={4} flex="0 0 auto" fontSize="sm">
                         <Badge colorScheme="gray" variant="subtle">{ofGroup.colorGroups.length} {ofGroup.colorGroups.length === 1 ? "cor" : "cores"}</Badge>
                         <Text fontWeight="medium" color="gray.600">{ofGroupQty} pcs</Text>
