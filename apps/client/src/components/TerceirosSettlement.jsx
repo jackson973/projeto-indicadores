@@ -410,7 +410,7 @@ const TerceirosSettlement = () => {
           }
           setEditOfPrices(pm);
           const auto = new Set();
-          data.forEach((of, idx) => { if (pm[`${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`]?.price != null) auto.add(idx); });
+          data.forEach((of, idx) => { if (!of.settlementId && pm[`${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`]?.price != null) auto.add(idx); });
           setEditSelectedOfs(auto);
         } catch { setEditOfPrices({}); }
       } else { setEditOfPrices({}); }
@@ -547,6 +547,7 @@ const TerceirosSettlement = () => {
       // Re-select the previously selected OFs in the merged list
       const newSelectedSet = new Set();
       merged.forEach((of, idx) => {
+        if (of.settlementId) return; // skip already-settled OFs
         const key = `${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
         if (prevSelectedKeys.has(key)) {
           newSelectedSet.add(idx);
@@ -690,7 +691,7 @@ const TerceirosSettlement = () => {
 
   // ── Select All / Deselect All ─────────────────────────────────────────────
   const handleSelectAll = useCallback(() => {
-    const allIndices = new Set(filteredUnsettledOfs.map((of) => unsettledOfs.indexOf(of)));
+    const allIndices = new Set(filteredUnsettledOfs.filter((of) => !of.settlementId).map((of) => unsettledOfs.indexOf(of)));
     setSelectedOfs(allIndices);
   }, [filteredUnsettledOfs, unsettledOfs]);
 
@@ -1748,7 +1749,10 @@ const TerceirosSettlement = () => {
         index: globalIndex,
         tam: of.fac_tam,
         qty: parseFloat(of.fac_quant) || 0,
-        ofId: of.id
+        ofId: of.id,
+        settlementId: of.settlementId || null,
+        settlementMonth: of.settlementMonth || null,
+        settlementYear: of.settlementYear || null,
       });
       g.indices.push(globalIndex);
     });
@@ -1835,12 +1839,29 @@ const TerceirosSettlement = () => {
           facParte: cg.facParte,
           facDescparte: cg.facDescparte,
           facDescProduto: cg.facDescProduto || cg.facCodigoProduto,
-          colorGroups: []
+          colorGroups: [],
+          isSettled: false,
+          settlementMonth: null,
+          settlementYear: null,
         };
         map.set(key, g);
         result.push(g);
       }
       map.get(key).colorGroups.push(cg);
+    }
+    // Detect settled OFs from size-level settlement info
+    for (const g of result) {
+      for (const cg of g.colorGroups) {
+        for (const sz of cg.sizes) {
+          if (sz.settlementId) {
+            g.isSettled = true;
+            g.settlementMonth = sz.settlementMonth;
+            g.settlementYear = sz.settlementYear;
+            break;
+          }
+        }
+        if (g.isSettled) break;
+      }
     }
     return result;
   }, []);
@@ -1945,24 +1966,36 @@ const TerceirosSettlement = () => {
                   const priceKey = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`;
                   const price = editOfPrices[priceKey]?.price;
                   const isSelected = editSelectedOfs.has(idx);
+                  const isSettled = !!of.settlementId;
                   return (
                     <Flex key={of.id} align="center" gap={2} px={2} py={1}
-                      borderWidth="1px" borderColor={isSelected ? "blue.300" : borderColor}
-                      borderRadius="md" bg={isSelected ? "blue.50" : "transparent"}
-                      cursor="pointer"
-                      onClick={() => setEditSelectedOfs(prev => {
+                      borderWidth="1px" borderColor={isSettled ? "orange.300" : isSelected ? "blue.300" : borderColor}
+                      borderRadius="md" bg={isSettled ? "orange.50" : isSelected ? "blue.50" : "transparent"}
+                      cursor={isSettled ? "default" : "pointer"}
+                      opacity={isSettled ? 0.7 : 1}
+                      onClick={() => { if (isSettled) return; setEditSelectedOfs(prev => {
                         const next = new Set(prev);
                         if (next.has(idx)) next.delete(idx); else next.add(idx);
                         return next;
-                      })}>
-                      <Checkbox size="sm" isChecked={isSelected} onChange={() => {}} pointerEvents="none" />
+                      }); }}>
+                      {isSettled ? (
+                        <WarningIcon boxSize={3} color="orange.500" />
+                      ) : (
+                        <Checkbox size="sm" isChecked={isSelected} onChange={() => {}} pointerEvents="none" />
+                      )}
                       <Text fontSize="xs" fontWeight="bold" flexShrink={0}>OF {of.fac_numero}</Text>
                       <Text fontSize="xs" flex="1" noOfLines={1}>{of.fac_desc_produto || of.fac_codigo_produto}</Text>
                       <Text fontSize="xs" color="gray.500" flexShrink={0}>{of.fac_parte}</Text>
-                      <Text fontSize="xs" fontWeight="semibold" flexShrink={0}
-                        color={price != null ? "green.600" : "red.500"}>
-                        {price != null ? formatUnitPrice(price) : "Sem preço"}
-                      </Text>
+                      {isSettled ? (
+                        <Badge colorScheme="orange" variant="solid" fontSize="2xs" flexShrink={0}>
+                          Pago {monthNames[(of.settlementMonth || 1) - 1]}/{of.settlementYear}
+                        </Badge>
+                      ) : (
+                        <Text fontSize="xs" fontWeight="semibold" flexShrink={0}
+                          color={price != null ? "green.600" : "red.500"}>
+                          {price != null ? formatUnitPrice(price) : "Sem preço"}
+                        </Text>
+                      )}
                     </Flex>
                   );
                 })}
@@ -2396,10 +2429,11 @@ const TerceirosSettlement = () => {
                   <Box
                     key={ofGroup.key}
                     borderWidth="1px"
-                    borderColor={ofGroupSomeSelected ? "blue.300" : borderColor}
+                    borderColor={ofGroup.isSettled ? "orange.300" : ofGroupSomeSelected ? "blue.300" : borderColor}
                     borderRadius="md"
                     overflow="hidden"
                     transition="all 0.15s"
+                    opacity={ofGroup.isSettled ? 0.7 : 1}
                   >
                     {/* Accordion header */}
                     <Flex
@@ -2407,11 +2441,18 @@ const TerceirosSettlement = () => {
                       gap={3}
                       px={3}
                       py={2}
-                      bg={ofGroupAllSelected ? selectedRowBg : headerBg}
+                      bg={ofGroup.isSettled ? "orange.50" : ofGroupAllSelected ? selectedRowBg : headerBg}
                       cursor="pointer"
-                      _hover={{ bg: ofGroupAllSelected ? selectedRowBg : hoverBg }}
+                      _hover={{ bg: ofGroup.isSettled ? "orange.100" : ofGroupAllSelected ? selectedRowBg : hoverBg }}
                       onClick={() => toggleOfGroup(ofGroup.key, setExpandedOfGroups)}
                     >
+                      {ofGroup.isSettled ? (
+                        <Tooltip label="Esta OF já foi paga em um fechamento anterior" hasArrow>
+                          <Box flex="0 0 auto" pl={1} pr={1}>
+                            <WarningIcon boxSize={4} color="orange.500" />
+                          </Box>
+                        </Tooltip>
+                      ) : (
                       <Checkbox
                         isChecked={ofGroupAllSelected}
                         isIndeterminate={ofGroupSomeSelected && !ofGroupAllSelected}
@@ -2420,6 +2461,7 @@ const TerceirosSettlement = () => {
                         flex="0 0 auto"
                         onClick={(e) => e.stopPropagation()}
                       />
+                      )}
                       <Box
                         as={ChevronRightIcon}
                         transform={isExpanded ? "rotate(90deg)" : "rotate(0deg)"}
@@ -2438,7 +2480,13 @@ const TerceirosSettlement = () => {
                           <Text color="gray.500">Parte: {ofGroup.facParte}{ofGroup.facDescparte && ofGroup.facDescparte !== ofGroup.facParte ? ` - ${ofGroup.facDescparte}` : ""}</Text>
                         )}
                       </HStack>
-                      {hasMissingPrice && (
+                      {ofGroup.isSettled && (
+                        <Badge colorScheme="orange" variant="solid" display="flex" alignItems="center" gap={1} whiteSpace="nowrap">
+                          <WarningIcon boxSize={3} />
+                          Pago em {monthNames[(ofGroup.settlementMonth || 1) - 1]}/{ofGroup.settlementYear}
+                        </Badge>
+                      )}
+                      {hasMissingPrice && !ofGroup.isSettled && (
                         <Tooltip label={missingPriceError || "Sem preço definido para este item"} hasArrow>
                           <Badge colorScheme="red" variant="subtle" display="flex" alignItems="center" gap={1}>
                             <WarningIcon boxSize={3} />
@@ -2448,8 +2496,10 @@ const TerceirosSettlement = () => {
                       )}
                       <HStack spacing={4} flex="0 0 auto" fontSize="sm">
                         <Badge colorScheme="gray" variant="subtle">{ofGroup.colorGroups.length} {ofGroup.colorGroups.length === 1 ? "cor" : "cores"}</Badge>
+                        {!ofGroup.isSettled && <>
                         <Text fontWeight="medium" color="gray.600">{ofGroupQty} pcs</Text>
                         <Text fontWeight="bold" color="blue.600">{formatCurrency(ofGroupTotal)}</Text>
+                        </>}
                       </HStack>
                     </Flex>
 

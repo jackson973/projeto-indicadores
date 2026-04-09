@@ -191,16 +191,22 @@ async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, unsett
       params.push(...ofNumbers);
     }
   }
-  if (unsettledOnly === true || unsettledOnly === 'true') {
-    conditions.push('o.settlement_id IS NULL');
-  }
+  // When unsettledOnly, still return settled OFs but mark them so UI can show a warning
+  const settledJoin = (unsettledOnly === true || unsettledOnly === 'true')
+    ? `LEFT JOIN terceiros_settlements s ON s.id = o.settlement_id`
+    : '';
+  const settledColumns = (unsettledOnly === true || unsettledOnly === 'true')
+    ? `, s.reference_month AS "settlementMonth", s.reference_year AS "settlementYear", s.id AS "settlementId"`
+    : '';
 
   const countResult = await db.query(
     `SELECT COUNT(*)::int AS total FROM terceiros_ofs o WHERE ${conditions.join(' AND ')}`,
     params
   );
 
-  const orderBy = 'ORDER BY o.fac_numero, o.fac_codigo_produto';
+  const orderBy = (unsettledOnly === true || unsettledOnly === 'true')
+    ? 'ORDER BY (o.settlement_id IS NOT NULL), o.fac_numero, o.fac_codigo_produto'
+    : 'ORDER BY o.fac_numero, o.fac_codigo_produto';
   let limitClause = '';
   if (limit) {
     limitClause = ` LIMIT $${idx++} OFFSET $${idx++}`;
@@ -211,9 +217,11 @@ async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, unsett
     `SELECT o.*,
             gp.group_id AS "groupId",
             pg.name AS "groupName"
+            ${settledColumns}
      FROM terceiros_ofs o
      LEFT JOIN terceiros_group_products gp ON gp.product_code = o.fac_codigo_produto
      LEFT JOIN terceiros_product_groups pg ON pg.id = gp.group_id AND pg.active = true
+     ${settledJoin}
      WHERE ${conditions.join(' AND ')}
      ${orderBy}${limitClause}`,
     params
