@@ -690,7 +690,7 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
 // ─── Sisplan Integration ────────────────────────────────────────────────────
 
 // Dry-run: gera SQLs sem executar
-router.post('/:id/integrate/dry-run', requireAdmin, async (req, res) => {
+router.post('/:id/integrate/dry-run', async (req, res) => {
   try {
     const result = await sisplanOrderIntegration.integrateOrderDryRun(
       Number(req.params.id),
@@ -704,7 +704,7 @@ router.post('/:id/integrate/dry-run', requireAdmin, async (req, res) => {
 });
 
 // Execução real: grava no Firebird com transaction
-router.post('/:id/integrate', requireAdmin, async (req, res) => {
+router.post('/:id/integrate', async (req, res) => {
   try {
     const result = await sisplanOrderIntegration.integrateOrderExecute(
       Number(req.params.id),
