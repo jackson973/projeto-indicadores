@@ -1841,6 +1841,7 @@ const TerceirosSettlement = () => {
           facDescProduto: cg.facDescProduto || cg.facCodigoProduto,
           colorGroups: [],
           isSettled: false,
+          isPartiallySettled: false,
           settlementMonth: null,
           settlementYear: null,
         };
@@ -1851,16 +1852,27 @@ const TerceirosSettlement = () => {
     }
     // Detect settled OFs from size-level settlement info
     for (const g of result) {
+      let settledCount = 0;
+      let totalCount = 0;
       for (const cg of g.colorGroups) {
         for (const sz of cg.sizes) {
+          totalCount++;
           if (sz.settlementId) {
-            g.isSettled = true;
-            g.settlementMonth = sz.settlementMonth;
-            g.settlementYear = sz.settlementYear;
-            break;
+            settledCount++;
+            // Store the first settlement reference found
+            if (!g.settlementMonth) {
+              g.settlementMonth = sz.settlementMonth;
+              g.settlementYear = sz.settlementYear;
+            }
           }
         }
-        if (g.isSettled) break;
+      }
+      if (settledCount > 0 && settledCount >= totalCount) {
+        g.isSettled = true;
+        g.isPartiallySettled = false;
+      } else if (settledCount > 0) {
+        g.isSettled = false;
+        g.isPartiallySettled = true;
       }
     }
     return result;
@@ -2395,6 +2407,7 @@ const TerceirosSettlement = () => {
                   }
 
                   group.sizes.forEach((sz) => {
+                    if (sz.settlementId) return; // skip already-settled sizes
                     allOfIndices.push(sz.index);
                     const isSelected = selectedOfs.has(sz.index);
                     if (isSelected) {
@@ -2429,7 +2442,7 @@ const TerceirosSettlement = () => {
                   <Box
                     key={ofGroup.key}
                     borderWidth="1px"
-                    borderColor={ofGroup.isSettled ? "orange.300" : ofGroupSomeSelected ? "blue.300" : borderColor}
+                    borderColor={ofGroup.isSettled ? "orange.300" : ofGroup.isPartiallySettled ? "orange.200" : ofGroupSomeSelected ? "blue.300" : borderColor}
                     borderRadius="md"
                     overflow="hidden"
                     transition="all 0.15s"
@@ -2486,6 +2499,12 @@ const TerceirosSettlement = () => {
                           Pago em {monthNames[(ofGroup.settlementMonth || 1) - 1]}/{ofGroup.settlementYear}
                         </Badge>
                       )}
+                      {ofGroup.isPartiallySettled && (
+                        <Badge colorScheme="orange" variant="subtle" display="flex" alignItems="center" gap={1} whiteSpace="nowrap">
+                          <WarningIcon boxSize={3} />
+                          Pago parcial em {monthNames[(ofGroup.settlementMonth || 1) - 1]}/{ofGroup.settlementYear}
+                        </Badge>
+                      )}
                       {hasMissingPrice && !ofGroup.isSettled && (
                         <Tooltip label={missingPriceError || "Sem preço definido para este item"} hasArrow>
                           <Badge colorScheme="red" variant="subtle" display="flex" alignItems="center" gap={1}>
@@ -2507,8 +2526,9 @@ const TerceirosSettlement = () => {
                     {isExpanded && (
                       <VStack align="stretch" spacing={0} p={2} pt={1}>
                         {ofGroup.colorGroups.map((group) => {
-                const allSelected = group.indices.every((i) => selectedOfs.has(i));
-                const someSelected = group.indices.some((i) => selectedOfs.has(i));
+                const selectableIndices = group.indices.filter((i) => !group.sizes.find(sz => sz.index === i)?.settlementId);
+                const allSelected = selectableIndices.length > 0 && selectableIndices.every((i) => selectedOfs.has(i));
+                const someSelected = selectableIndices.some((i) => selectedOfs.has(i));
                 const hasError = group.priceInfo && !group.priceInfo.price && group.priceInfo.error;
                 const firstIndex = group.indices[0];
                 const manualVal = manualPrices[`${firstIndex}`];
@@ -2532,13 +2552,15 @@ const TerceirosSettlement = () => {
                   }, 0);
                 const groupTotal = effectivePrice != null ? effectivePrice * selectedQty : 0;
 
+                const allSettledInGroup = selectableIndices.length === 0;
                 const toggleGroup = () => {
+                  if (allSettledInGroup) return;
                   setSelectedOfs((prev) => {
                     const next = new Set(prev);
                     if (allSelected) {
-                      group.indices.forEach((i) => next.delete(i));
+                      selectableIndices.forEach((i) => next.delete(i));
                     } else {
-                      group.indices.forEach((i) => next.add(i));
+                      selectableIndices.forEach((i) => next.add(i));
                     }
                     return next;
                   });
@@ -2565,6 +2587,7 @@ const TerceirosSettlement = () => {
                         colorScheme="blue"
                         flex="0 0 auto"
                         alignSelf="flex-start"
+                        isDisabled={allSettledInGroup}
                       />
 
                       {/* Left: Cor info */}
@@ -2590,28 +2613,40 @@ const TerceirosSettlement = () => {
                       {/* Center: Sizes grid - click to edit qty, X to exclude */}
                       <Flex wrap="wrap" gap={1} flex={{ base: "1 1 100%", md: "1 1 auto" }} justify={{ base: "flex-start", md: "center" }}>
                         {group.sizes.map((sz) => {
-                          const isSelected = selectedOfs.has(sz.index);
-                          const isEditing = editingSize === sz.index;
+                          const isSizeSettled = !!sz.settlementId;
+                          const isSelected = !isSizeSettled && selectedOfs.has(sz.index);
+                          const isEditing = !isSizeSettled && editingSize === sz.index;
                           const editedQty = editedQuantities[sz.index];
                           const displayQty = editedQty !== undefined ? parseFloat(editedQty) || 0 : sz.qty;
                           const isQtyEdited = editedQty !== undefined && parseFloat(editedQty) !== sz.qty;
                           return (
+                            <Tooltip key={sz.index} label={isSizeSettled ? `Pago em ${monthNames[(sz.settlementMonth || 1) - 1]}/${sz.settlementYear}` : ""} isDisabled={!isSizeSettled} hasArrow>
                             <Box
-                              key={sz.index}
                               textAlign="center"
                               minW="52px"
-                              borderWidth={isQtyEdited ? "2px" : "1px"}
-                              borderColor={!isSelected ? "gray.200" : isQtyEdited ? "orange.400" : "blue.400"}
+                              borderWidth={isSizeSettled ? "2px" : isQtyEdited ? "2px" : "1px"}
+                              borderColor={isSizeSettled ? "orange.400" : !isSelected ? "gray.200" : isQtyEdited ? "orange.400" : "blue.400"}
                               borderRadius="md"
                               px={2}
                               py={1}
-                              bg={!isSelected ? "gray.50" : isQtyEdited ? "orange.50" : "blue.50"}
-                              opacity={isSelected ? 1 : 0.4}
+                              bg={isSizeSettled ? "orange.50" : !isSelected ? "gray.50" : isQtyEdited ? "orange.50" : "blue.50"}
+                              opacity={isSizeSettled ? 0.6 : isSelected ? 1 : 0.4}
                               position="relative"
                               transition="all 0.15s"
                             >
+                              {/* Settled indicator */}
+                              {isSizeSettled && (
+                                <Box
+                                  position="absolute"
+                                  top="-6px"
+                                  right="-6px"
+                                  zIndex={1}
+                                >
+                                  <CheckIcon boxSize={2.5} color="orange.500" />
+                                </Box>
+                              )}
                               {/* X button to exclude size */}
-                              {isSelected && (
+                              {!isSizeSettled && isSelected && (
                                 <Box
                                   position="absolute"
                                   top="-6px"
@@ -2633,7 +2668,7 @@ const TerceirosSettlement = () => {
                                 </Box>
                               )}
                               {/* Re-include excluded size */}
-                              {!isSelected && (
+                              {!isSizeSettled && !isSelected && (
                                 <Box
                                   position="absolute"
                                   top="-6px"
@@ -2654,7 +2689,7 @@ const TerceirosSettlement = () => {
                                   +
                                 </Box>
                               )}
-                              <Text fontSize="xs" fontWeight="bold" color={isSelected ? "blue.700" : "gray.400"}>{sz.tam}</Text>
+                              <Text fontSize="xs" fontWeight="bold" color={isSizeSettled ? "orange.600" : isSelected ? "blue.700" : "gray.400"}>{sz.tam}</Text>
                               {isEditing ? (
                                 <Input
                                   size="xs"
@@ -2690,6 +2725,7 @@ const TerceirosSettlement = () => {
                                 <Text fontSize="8px" color="orange.500" lineHeight="1">{sz.qty}</Text>
                               )}
                             </Box>
+                            </Tooltip>
                           );
                         })}
                       </Flex>
