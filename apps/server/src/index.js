@@ -89,7 +89,13 @@ async function start() {
   app.use("/api/upseller", upsellerRouter);
   app.use("/api/terceiros", terceirosRouter);
   app.use("/api/settings", settingsRouter);
-  app.use("/api/database", authenticate, requireAdmin, databaseRouter);
+  // Allow token via query string (needed for backup download via <a href>, bypasses service worker)
+  app.use("/api/database", (req, res, next) => {
+    if (req.query.token && !req.headers.authorization) {
+      req.headers.authorization = `Bearer ${req.query.token}`;
+    }
+    next();
+  }, authenticate, requireAdmin, databaseRouter);
   app.use("/api/lojas", storesRouter);
   app.use("/api/anuncios", anunciosRouter);
   app.use("/api/products", productsRouter);

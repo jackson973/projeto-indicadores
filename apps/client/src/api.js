@@ -552,21 +552,18 @@ export const restoreDatabase = async (file) => {
 };
 
 export const downloadDatabaseBackup = async () => {
-  const response = await authFetch("/api/database/backup");
-  if (!response.ok) {
-    const data = await response.json().catch(() => ({}));
-    throw new Error(data.message || "Erro ao gerar backup.");
+  // Use direct <a> navigation with token in query to bypass the service worker,
+  // which would otherwise intercept the fetch and fail on large streamed responses.
+  const token = getToken();
+  if (!token) {
+    throw new Error("Sessão expirada. Faça login novamente.");
   }
-  const disposition = response.headers.get("Content-Disposition") || "";
-  const match = disposition.match(/filename="([^"]+)"/);
-  const filename = match ? match[1] : "backup.sql.gz";
-  const blob = await response.blob();
-  const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
+  a.href = `/api/database/backup?token=${encodeURIComponent(token)}`;
+  a.rel = "noopener";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  document.body.removeChild(a);
 };
 
 // Database Maintenance API (Admin Only)
