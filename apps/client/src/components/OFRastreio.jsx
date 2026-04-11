@@ -79,7 +79,7 @@ export default function OFRastreio() {
   const selectedEtapa = selectedIdx !== null && data ? data.etapas[selectedIdx] : null;
 
   return (
-    <Box p={6} maxW="1400px" mx="auto">
+    <Box p={{ base: 3, md: 6 }} maxW="1400px" mx="auto">
       <Heading size="md" mb={5} color="gray.700">
         Rastreio de OF
       </Heading>
@@ -122,38 +122,50 @@ export default function OFRastreio() {
       {data && !loading && (
         <Box>
           {/* OF Header */}
-          <Flex align="center" gap={5} mb={5} flexWrap="wrap" bg="white" p={4} borderRadius="lg" border="1px solid" borderColor="gray.200" boxShadow="sm">
-            <Badge colorScheme="blue" fontSize="md" px={3} py={1} borderRadius="md">
-              OF {data.fac_numero}
-            </Badge>
-            {data.cliente_nome && (
-              <>
-                <Box w="1px" h="28px" bg="gray.200" />
-                <HStack spacing={1} fontSize="sm">
-                  <Text color="gray.500">Terceirizado:</Text>
-                  <Text fontWeight="medium" color="gray.700">{data.cliente_nome}</Text>
-                </HStack>
-              </>
-            )}
-            <Box w="1px" h="28px" bg="gray.200" />
-            <HStack spacing={1} fontSize="sm">
-              <Text color="gray.500">Abertura:</Text>
-              <Text fontWeight="medium" color="gray.700">{formatDate(data.dt_abertura)}</Text>
-            </HStack>
-            <Text color="gray.300">·</Text>
-            <HStack spacing={1} fontSize="sm">
-              <Text color="gray.500">Último lançto:</Text>
-              <Text fontWeight="medium" color="gray.700">{formatDate(data.dt_ultimo_lancto)}</Text>
-            </HStack>
-            <Text color="gray.300">·</Text>
-            <HStack spacing={1} fontSize="sm">
-              <Text color="gray.500">Última movimentação:</Text>
-              <Text fontWeight="medium" color="blue.600">{data.ultima_etapa || "—"}</Text>
-            </HStack>
-            <Box ml="auto">
-              <Text fontSize="xs" color="gray.400">{data.etapas.length} etapa{data.etapas.length !== 1 ? "s" : ""}</Text>
-            </Box>
-          </Flex>
+          <Box mb={5} bg="white" p={{ base: 3, md: 4 }} borderRadius="lg" border="1px solid" borderColor="gray.200" boxShadow="sm">
+            <Flex align="center" justify="space-between" gap={2} mb={{ base: 3, md: 0 }} flexWrap="wrap">
+              <Flex align="center" gap={{ base: 3, md: 5 }} flexWrap="wrap" flex="1" minW={0}>
+                <Badge colorScheme="blue" fontSize="md" px={3} py={1} borderRadius="md">
+                  OF {data.fac_numero}
+                </Badge>
+                {data.cliente_nome && (
+                  <>
+                    <Box w="1px" h="28px" bg="gray.200" display={{ base: "none", md: "block" }} />
+                    <HStack spacing={1} fontSize="sm" minW={0}>
+                      <Text color="gray.500" flexShrink={0}>Terceirizado:</Text>
+                      <Text fontWeight="medium" color="gray.700" isTruncated>{data.cliente_nome}</Text>
+                    </HStack>
+                  </>
+                )}
+              </Flex>
+              <Text fontSize="xs" color="gray.400" flexShrink={0}>
+                {data.etapas.length} etapa{data.etapas.length !== 1 ? "s" : ""}
+              </Text>
+            </Flex>
+
+            <Flex
+              mt={{ base: 2, md: 3 }}
+              gap={{ base: 1, md: 3 }}
+              direction={{ base: "column", md: "row" }}
+              align={{ base: "stretch", md: "center" }}
+              flexWrap="wrap"
+            >
+              <HStack spacing={1} fontSize="sm">
+                <Text color="gray.500">Abertura:</Text>
+                <Text fontWeight="medium" color="gray.700">{formatDate(data.dt_abertura)}</Text>
+              </HStack>
+              <Text color="gray.300" display={{ base: "none", md: "block" }}>·</Text>
+              <HStack spacing={1} fontSize="sm">
+                <Text color="gray.500">Último lançto:</Text>
+                <Text fontWeight="medium" color="gray.700">{formatDate(data.dt_ultimo_lancto)}</Text>
+              </HStack>
+              <Text color="gray.300" display={{ base: "none", md: "block" }}>·</Text>
+              <HStack spacing={1} fontSize="sm" minW={0}>
+                <Text color="gray.500" flexShrink={0}>Última movimentação:</Text>
+                <Text fontWeight="medium" color="blue.600" isTruncated>{data.ultima_etapa || "—"}</Text>
+              </HStack>
+            </Flex>
+          </Box>
 
           {/* Horizontal Timeline */}
           <Box overflowX="auto" pb={4}>
@@ -291,10 +303,16 @@ export default function OFRastreio() {
               border="1px solid"
               borderColor="blue.200"
               borderRadius="lg"
-              p={5}
+              p={{ base: 3, md: 5 }}
               boxShadow="md"
             >
-              <Flex align="center" justify="space-between" mb={4}>
+              <Flex
+                align={{ base: "flex-start", md: "center" }}
+                justify="space-between"
+                mb={4}
+                direction={{ base: "column", md: "row" }}
+                gap={3}
+              >
                 <Flex align="center" gap={3}>
                   <Badge colorScheme="blue" px={2} py={1} borderRadius="md">
                     Etapa {selectedIdx + 1}
@@ -303,7 +321,12 @@ export default function OFRastreio() {
                     {selectedEtapa.descsetor}
                   </Heading>
                 </Flex>
-                <Flex gap={6} fontSize="sm">
+                <Flex
+                  gap={{ base: 2, md: 6 }}
+                  fontSize="sm"
+                  direction={{ base: "column", md: "row" }}
+                  w={{ base: "100%", md: "auto" }}
+                >
                   <HStack spacing={1}>
                     <Text color="gray.500">Entrada:</Text>
                     <Text fontWeight="medium">{formatDate(selectedEtapa.dt_entrada)}</Text>
@@ -319,6 +342,7 @@ export default function OFRastreio() {
                 </Flex>
               </Flex>
 
+              <Box overflowX="auto" mx={{ base: -3, md: 0 }}>
               <Table size="sm" variant="simple">
                 <Thead bg="gray.50">
                   <Tr>
@@ -369,6 +393,7 @@ export default function OFRastreio() {
                   })}
                 </Tbody>
               </Table>
+              </Box>
 
               {/* Detail totals */}
               <Box className="css-zgubbz" mt={3} pt={3} borderTop="1px solid" borderColor="gray.100" display="flex" justifyContent="flex-end" gap={6} fontSize="sm">
