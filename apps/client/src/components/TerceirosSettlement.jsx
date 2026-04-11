@@ -440,6 +440,31 @@ const TerceirosSettlement = () => {
     } catch { toast({  title: "Erro ao adicionar OFs.", status: "error", duration: 3000 }); }
   }, [editingSettlement, editSelectedOfs, editUnsettledOfs, editOfPrices, loadSettlements, toast]);
 
+  // Group raw OF rows by OF+etapa+produto+cor+parte so multi-size OFs render once.
+  const editUnsettledOfsGrouped = useMemo(() => {
+    const map = new Map();
+    const groups = [];
+    editUnsettledOfs.forEach((of, idx) => {
+      const key = `${of.fac_numero}|${of.fac_codsetor || ''}|${of.fac_codigo_produto}|${of.fac_cor}|${of.fac_parte}`;
+      if (!map.has(key)) {
+        const g = {
+          key,
+          facNumero: of.fac_numero,
+          facCodigoProduto: of.fac_codigo_produto,
+          facDescProduto: of.fac_desc_produto,
+          facParte: of.fac_parte,
+          facCor: of.fac_cor,
+          facDesccor: of.fac_desccor,
+          sizes: [],
+        };
+        map.set(key, g);
+        groups.push(g);
+      }
+      map.get(key).sizes.push({ index: idx, of, tam: of.fac_tam, qty: parseFloat(of.fac_quant) || 0 });
+    });
+    return groups;
+  }, [editUnsettledOfs]);
+
   // ── Export helper ─────────────────────────────────────────────────────────
   const buildExportFilename = useCallback((settlement, ext) => {
     const m = String(settlement.referenceMonth || 1).padStart(2, "0");
@@ -1964,48 +1989,87 @@ const TerceirosSettlement = () => {
               Buscar
             </Button>
           </Flex>
-          {editUnsettledOfs.length > 0 && (
+          {editUnsettledOfsGrouped.length > 0 && (() => {
+            const selectedGroupCount = editUnsettledOfsGrouped.reduce((n, g) => {
+              const hasSel = g.sizes.some(sz => !sz.of.settlementId && editSelectedOfs.has(sz.index));
+              return n + (hasSel ? 1 : 0);
+            }, 0);
+            return (
             <Box>
               <Flex justify="space-between" align="center" mb={2}>
-                <Text fontSize="xs" color="gray.500">{editUnsettledOfs.length} OF(s) encontrada(s)</Text>
+                <Text fontSize="xs" color="gray.500">{editUnsettledOfsGrouped.length} OF(s) encontrada(s)</Text>
                 <Button size="xs" colorScheme="blue" onClick={handleAddSelectedEditOfs}
-                  isDisabled={editSelectedOfs.size === 0}>
-                  Adicionar{editSelectedOfs.size > 0 ? ` (${editSelectedOfs.size})` : ""} Selecionadas
+                  isDisabled={selectedGroupCount === 0}>
+                  Adicionar{selectedGroupCount > 0 ? ` (${selectedGroupCount})` : ""} Selecionadas
                 </Button>
               </Flex>
               <VStack align="stretch" spacing={1} maxH="220px" overflowY="auto">
-                {editUnsettledOfs.map((of, idx) => {
-                  const priceKey = `${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`;
-                  const price = editOfPrices[priceKey]?.price;
-                  const isSelected = editSelectedOfs.has(idx);
-                  const isSettled = !!of.settlementId;
+                {editUnsettledOfsGrouped.map((g) => {
+                  let totalQty = 0;
+                  let totalPrice = 0;
+                  let hasMissingPrice = false;
+                  let settledCount = 0;
+                  let firstSettlement = null;
+                  const nonSettledIndices = [];
+                  for (const sz of g.sizes) {
+                    if (sz.of.settlementId) {
+                      settledCount++;
+                      if (!firstSettlement) firstSettlement = { month: sz.of.settlementMonth, year: sz.of.settlementYear };
+                      continue;
+                    }
+                    nonSettledIndices.push(sz.index);
+                    const priceKey = `${sz.of.fac_codigo_produto}|${sz.of.fac_parte}|${sz.of.fac_cor}|${sz.of.fac_tam || ''}`;
+                    const price = editOfPrices[priceKey]?.price;
+                    totalQty += sz.qty;
+                    if (price != null) totalPrice += price * sz.qty;
+                    else hasMissingPrice = true;
+                  }
+                  const allSettled = settledCount === g.sizes.length;
+                  const partiallySettled = settledCount > 0 && !allSettled;
+                  const selectedCount = nonSettledIndices.filter(i => editSelectedOfs.has(i)).length;
+                  const allSelected = nonSettledIndices.length > 0 && selectedCount === nonSettledIndices.length;
+                  const someSelected = selectedCount > 0;
+                  const toggleGroup = () => {
+                    if (allSettled) return;
+                    setEditSelectedOfs(prev => {
+                      const next = new Set(prev);
+                      if (allSelected) nonSettledIndices.forEach(i => next.delete(i));
+                      else nonSettledIndices.forEach(i => next.add(i));
+                      return next;
+                    });
+                  };
                   return (
-                    <Flex key={of.id} align="center" gap={2} px={2} py={1}
-                      borderWidth="1px" borderColor={isSettled ? "orange.300" : isSelected ? "blue.300" : borderColor}
-                      borderRadius="md" bg={isSettled ? "orange.50" : isSelected ? "blue.50" : "transparent"}
-                      cursor={isSettled ? "default" : "pointer"}
-                      opacity={isSettled ? 0.7 : 1}
-                      onClick={() => { if (isSettled) return; setEditSelectedOfs(prev => {
-                        const next = new Set(prev);
-                        if (next.has(idx)) next.delete(idx); else next.add(idx);
-                        return next;
-                      }); }}>
-                      {isSettled ? (
+                    <Flex key={g.key} align="center" gap={2} px={2} py={1}
+                      borderWidth="1px"
+                      borderColor={allSettled ? "orange.300" : partiallySettled ? "orange.200" : someSelected ? "blue.300" : borderColor}
+                      borderRadius="md"
+                      bg={allSettled || partiallySettled ? "orange.50" : someSelected ? "blue.50" : "transparent"}
+                      cursor={allSettled ? "default" : "pointer"}
+                      opacity={allSettled ? 0.7 : 1}
+                      onClick={toggleGroup}>
+                      {allSettled ? (
                         <WarningIcon boxSize={3} color="orange.500" />
                       ) : (
-                        <Checkbox size="sm" isChecked={isSelected} onChange={() => {}} pointerEvents="none" />
+                        <Checkbox size="sm" isChecked={allSelected}
+                          isIndeterminate={someSelected && !allSelected}
+                          onChange={() => {}} pointerEvents="none" />
                       )}
-                      <Text fontSize="xs" fontWeight="bold" flexShrink={0}>OF {of.fac_numero}</Text>
-                      <Text fontSize="xs" flex="1" noOfLines={1}>{of.fac_desc_produto || of.fac_codigo_produto}</Text>
-                      <Text fontSize="xs" color="gray.500" flexShrink={0}>{of.fac_parte}</Text>
-                      {isSettled ? (
+                      <Text fontSize="xs" fontWeight="bold" flexShrink={0}>OF {g.facNumero}</Text>
+                      <Text fontSize="xs" flex="1" noOfLines={1}>{g.facDescProduto || g.facCodigoProduto}</Text>
+                      {g.facParte && <Text fontSize="xs" color="gray.500" flexShrink={0}>{g.facParte}</Text>}
+                      <Text fontSize="2xs" color="gray.500" flexShrink={0}>{g.sizes.length} tam · {totalQty} pcs</Text>
+                      {allSettled ? (
                         <Badge colorScheme="orange" variant="solid" fontSize="2xs" flexShrink={0}>
-                          Pago {monthNames[(of.settlementMonth || 1) - 1]}/{of.settlementYear}
+                          Pago {monthNames[(firstSettlement?.month || 1) - 1]}/{firstSettlement?.year}
+                        </Badge>
+                      ) : partiallySettled ? (
+                        <Badge colorScheme="orange" variant="subtle" fontSize="2xs" flexShrink={0}>
+                          Parcial {monthNames[(firstSettlement?.month || 1) - 1]}/{firstSettlement?.year}
                         </Badge>
                       ) : (
                         <Text fontSize="xs" fontWeight="semibold" flexShrink={0}
-                          color={price != null ? "green.600" : "red.500"}>
-                          {price != null ? formatUnitPrice(price) : "Sem preço"}
+                          color={!hasMissingPrice ? "green.600" : "red.500"}>
+                          {!hasMissingPrice ? formatCurrency(totalPrice) : "Sem preço"}
                         </Text>
                       )}
                     </Flex>
@@ -2013,7 +2077,8 @@ const TerceirosSettlement = () => {
                 })}
               </VStack>
             </Box>
-          )}
+            );
+          })()}
           {!loadingEditOfs && editUnsettledOfs.length === 0 && (editDateFrom || editDateTo || editOfSearchInput) && (
             <Text fontSize="xs" color="gray.500" mt={1}>Nenhuma OF encontrada para os filtros informados.</Text>
           )}
