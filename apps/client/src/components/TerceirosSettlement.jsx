@@ -145,6 +145,7 @@ const TerceirosSettlement = () => {
   const [editDateFrom, setEditDateFrom] = useState("");
   const [editDateTo, setEditDateTo] = useState("");
   const [editOfSearchInput, setEditOfSearchInput] = useState("");
+  const [editItemsFilter, setEditItemsFilter] = useState("");
   const editOfSearchRef = useRef(null);
   const [editUnsettledOfs, setEditUnsettledOfs] = useState([]);
   const [editSelectedOfs, setEditSelectedOfs] = useState(new Set());
@@ -375,6 +376,7 @@ const TerceirosSettlement = () => {
     setEditDateFrom("");
     setEditDateTo("");
     setEditOfSearchInput("");
+    setEditItemsFilter("");
     setEditUnsettledOfs([]);
     setEditSelectedOfs(new Set());
     setEditOfPrices({});
@@ -2090,7 +2092,32 @@ const TerceirosSettlement = () => {
           </Box>
         ) : (
           <VStack spacing={3} align="stretch">
-            {groupByOfParte(groups).map((ofGroup) => {
+            <InputGroup size="sm">
+              <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" /></InputLeftElement>
+              <Input
+                placeholder="Filtrar OFs já adicionadas (número ou descrição)"
+                value={editItemsFilter}
+                onChange={(e) => setEditItemsFilter(e.target.value)}
+              />
+            </InputGroup>
+            {(() => {
+              const allGroups = groupByOfParte(groups);
+              const term = editItemsFilter.trim().toLowerCase();
+              const filteredGroups = term
+                ? allGroups.filter((g) =>
+                    String(g.facNumero || "").toLowerCase().includes(term) ||
+                    String(g.facCodigoProduto || "").toLowerCase().includes(term) ||
+                    String(g.facDescProduto || "").toLowerCase().includes(term)
+                  )
+                : allGroups;
+              if (filteredGroups.length === 0) {
+                return (
+                  <Box py={4} textAlign="center">
+                    <Text color="gray.500" fontSize="sm">Nenhuma OF corresponde ao filtro.</Text>
+                  </Box>
+                );
+              }
+              return filteredGroups.map((ofGroup) => {
               const ofQty = ofGroup.colorGroups.reduce((s, g) => s + g.sizes.filter(sz => !sz.missing).reduce((ss, sz) => ss + sz.qty, 0), 0);
               const ofTotal = ofGroup.colorGroups.reduce((s, g) => s + g.sizes.filter(sz => !sz.missing).reduce((ss, sz) => ss + sz.total, 0), 0);
               const isExpanded = expandedEditGroups.has(ofGroup.key);
@@ -2144,7 +2171,8 @@ const TerceirosSettlement = () => {
                   )}
                 </Box>
               );
-            })}
+            });
+            })()}
           </VStack>
         )}
 
