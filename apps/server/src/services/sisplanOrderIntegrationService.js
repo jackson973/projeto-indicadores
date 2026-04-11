@@ -429,9 +429,21 @@ async function loadOrderData(orderId, userId) {
     }
   }
 
-  const { rows: [user] } = await db.query('SELECT rep_code FROM users WHERE id = $1', [userId]);
-  if (!user) throw new Error(`Usuário ${userId} não encontrado`);
+  const { rows: [currentUser] } = await db.query('SELECT rep_code FROM users WHERE id = $1', [userId]);
+  if (!currentUser) throw new Error(`Usuário ${userId} não encontrado`);
 
+  let creatorRepCode = null;
+  if (order.created_by) {
+    const { rows: [creator] } = await db.query('SELECT rep_code FROM users WHERE id = $1', [order.created_by]);
+    creatorRepCode = creator?.rep_code || null;
+  }
+
+  const repCode = creatorRepCode || currentUser.rep_code || null;
+  if (!repCode) {
+    throw new Error('Nenhum rep_code disponível: configure o código de representante no usuário que criou o pedido ou no usuário atual (cadastro de usuários)');
+  }
+
+  const user = { rep_code: repCode };
   return { order, items, customer, user };
 }
 
