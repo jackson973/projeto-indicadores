@@ -505,6 +505,25 @@ router.get('/ofs/export/pdf', async (req, res) => {
     if (paymentStatus === 'paid') rows = rows.filter((of) => !!of.settlementId);
     else if (paymentStatus === 'open') rows = rows.filter((of) => !of.settlementId);
 
+    // Lookup prices per distinct (codcli, productCode, parte, etapa, tamanho)
+    const today = new Date().toISOString().slice(0, 10);
+    const priceCache = new Map();
+    for (const of of rows) {
+      const rowCodcli = of.fac_codcli || codcli;
+      if (!rowCodcli || !of.fac_codigo_produto) continue;
+      const cacheKey = `${rowCodcli}|${of.fac_codigo_produto}|${of.fac_parte || ''}|${of.fac_codsetor || ''}|${of.fac_tam || ''}`;
+      if (priceCache.has(cacheKey)) continue;
+      try {
+        const info = await repo.findPrice(
+          rowCodcli, of.fac_codigo_produto, of.fac_parte,
+          today, of.fac_codsetor || null, of.fac_tam || null
+        );
+        priceCache.set(cacheKey, info);
+      } catch (err) {
+        priceCache.set(cacheKey, { price: null, source: 'error', error: err.message });
+      }
+    }
+
     // Group by OF + Parte
     const groups = new Map();
     for (const of of rows) {
@@ -521,6 +540,10 @@ router.get('/ofs/export/pdf', async (req, res) => {
           cor: of.fac_desccor || of.fac_cor || '',
           supplierName: of.cliente_fantasia || of.cliente_nome || '',
           qty: 0,
+          unitPrice: null,
+          priceVaries: false,
+          hasMissingPrice: false,
+          totalValue: 0,
           settled: fullySettledKeys.has(key),
           partial: partialKeys.has(key),
           settlementMonth: partKeyStats.get(key)?.settlementMonth || null,
@@ -528,7 +551,20 @@ router.get('/ofs/export/pdf', async (req, res) => {
         });
       }
       const g = groups.get(key);
-      g.qty += parseFloat(of.fac_quant) || 0;
+      const qty = parseFloat(of.fac_quant) || 0;
+      g.qty += qty;
+
+      const rowCodcli = of.fac_codcli || codcli;
+      const cacheKey = `${rowCodcli}|${of.fac_codigo_produto}|${of.fac_parte || ''}|${of.fac_codsetor || ''}|${of.fac_tam || ''}`;
+      const priceInfo = priceCache.get(cacheKey);
+      const price = priceInfo?.price != null ? parseFloat(priceInfo.price) : null;
+      if (price != null) {
+        g.totalValue += price * qty;
+        if (g.unitPrice == null) g.unitPrice = price;
+        else if (Math.abs(g.unitPrice - price) > 0.0001) g.priceVaries = true;
+      } else {
+        g.hasMissingPrice = true;
+      }
     }
 
     // Supplier + logo
@@ -554,8 +590,13 @@ router.get('/ofs/export/pdf', async (req, res) => {
     const statusLabel = paymentStatus === 'paid' ? 'Pagas' : paymentStatus === 'open' ? 'Em Aberto' : 'Todas';
 
     let totalQty = 0;
+    let grandTotal = 0;
+    let anyMissingPrice = false;
     const rowsHtml = [...groups.values()].map((g) => {
       totalQty += g.qty;
+      if (!g.hasMissingPrice) grandTotal += g.totalValue;
+      else anyMissingPrice = true;
+
       let statusHtml = '';
       if (g.settled) {
         const mm = g.settlementMonth ? `${monthNames[g.settlementMonth]}/${g.settlementYear}` : '';
@@ -566,12 +607,28 @@ router.get('/ofs/export/pdf', async (req, res) => {
       } else {
         statusHtml = `<span class="tag tag-open">Em aberto</span>`;
       }
+
+      let priceHtml = '';
+      let totalHtml = '';
+      if (g.hasMissingPrice) {
+        priceHtml = `<span class="no-price">Sem preco definido</span>`;
+        totalHtml = `<span class="no-price">—</span>`;
+      } else if (g.priceVaries) {
+        priceHtml = `<span class="price-varies">Varia</span>`;
+        totalHtml = `R$ ${formatCur(g.totalValue)}`;
+      } else {
+        priceHtml = `R$ ${formatPriceCur(g.unitPrice || 0)}`;
+        totalHtml = `R$ ${formatCur(g.totalValue)}`;
+      }
+
       return `<tr>
         <td class="center">${g.ofNum || ''}</td>
         <td>${g.codigoProduto ? g.codigoProduto + ' - ' : ''}${g.desc}</td>
         <td>${g.parte}</td>
         <td>${g.etapa ? g.etapa + (g.descEtapa ? ' - ' + g.descEtapa : '') : ''}</td>
         <td class="center">${formatNum(g.qty)}</td>
+        <td class="right">${priceHtml}</td>
+        <td class="right">${totalHtml}</td>
         <td>${statusHtml}</td>
       </tr>`;
     }).join('');
@@ -600,7 +657,10 @@ router.get('/ofs/export/pdf', async (req, res) => {
   .tag-paid { background: #fed7aa; color: #9a3412; }
   .tag-partial { background: #fef3c7; color: #92400e; border: 1px dashed #d97706; }
   .tag-open { background: #d1fae5; color: #065f46; }
+  .no-price { color: #dc2626; font-weight: bold; font-size: 9px; font-style: italic; }
+  .price-varies { color: #92400e; font-weight: bold; font-size: 9px; font-style: italic; }
   .total-row td { border-top: 2px solid #333; font-weight: bold; font-size: 11px; background: #f0f4ff !important; }
+  .missing-note { margin-top: 6px; font-size: 9px; color: #dc2626; font-style: italic; }
   .footer { margin-top: 20px; font-size: 9px; color: #666; text-align: center; }
 </style></head><body>
   <div class="header">
@@ -626,18 +686,23 @@ router.get('/ofs/export/pdf', async (req, res) => {
         <th style="text-align:left;">Parte</th>
         <th style="text-align:left;">Etapa</th>
         <th>Quant.</th>
+        <th style="text-align:right;">Preco Unit.</th>
+        <th style="text-align:right;">Total (R$)</th>
         <th style="text-align:left;">Status</th>
       </tr>
     </thead>
     <tbody>
-      ${rowsHtml || '<tr><td colspan="6" style="text-align:center;padding:20px;">Nenhuma OF encontrada.</td></tr>'}
+      ${rowsHtml || '<tr><td colspan="8" style="text-align:center;padding:20px;">Nenhuma OF encontrada.</td></tr>'}
       ${groups.size > 0 ? `<tr class="total-row">
         <td colspan="4" class="right">Total</td>
         <td class="center">${formatNum(totalQty)}</td>
         <td></td>
+        <td class="right">R$ ${formatCur(grandTotal)}</td>
+        <td></td>
       </tr>` : ''}
     </tbody>
   </table>
+  ${anyMissingPrice ? `<div class="missing-note">* Itens marcados como "Sem preco definido" nao foram somados ao total geral.</div>` : ''}
   <div class="footer">Gerado pelo sistema Indicadores</div>
 </body></html>`;
 
