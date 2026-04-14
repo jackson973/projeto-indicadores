@@ -462,6 +462,202 @@ router.get('/ofs', async (req, res) => {
   }
 });
 
+router.get('/ofs/export/pdf', async (req, res) => {
+  try {
+    const { codcli, dateFrom, dateTo, facNumero, etapa, paymentStatus } = req.query;
+    // Always load with unsettledOnly=true so settlement metadata comes with the rows
+    const result = await repo.getOfs({
+      codcli: codcli || null,
+      month: null, year: null,
+      dateFrom: dateFrom || null,
+      dateTo: dateTo || null,
+      facNumero: facNumero || null,
+      unsettledOnly: 'true',
+      limit: null, offset: 0
+    });
+    const allRows = result.rows || [];
+
+    // Compute partial settlement keys from the FULL unfiltered dataset
+    const partKeyStats = new Map();
+    for (const of of allRows) {
+      const key = `${of.fac_numero}|${of.fac_parte || ''}`;
+      const entry = partKeyStats.get(key) || { settled: 0, total: 0, settlementMonth: null, settlementYear: null };
+      entry.total++;
+      if (of.settlementId) {
+        entry.settled++;
+        if (!entry.settlementMonth) {
+          entry.settlementMonth = of.settlementMonth;
+          entry.settlementYear = of.settlementYear;
+        }
+      }
+      partKeyStats.set(key, entry);
+    }
+    const partialKeys = new Set();
+    const fullySettledKeys = new Set();
+    for (const [key, { settled, total }] of partKeyStats) {
+      if (settled > 0 && settled < total) partialKeys.add(key);
+      else if (settled > 0 && settled >= total) fullySettledKeys.add(key);
+    }
+
+    // Apply user filters
+    let rows = allRows;
+    if (etapa) rows = rows.filter((of) => of.fac_codsetor === etapa);
+    if (paymentStatus === 'paid') rows = rows.filter((of) => !!of.settlementId);
+    else if (paymentStatus === 'open') rows = rows.filter((of) => !of.settlementId);
+
+    // Group by OF + Parte
+    const groups = new Map();
+    for (const of of rows) {
+      const key = `${of.fac_numero}|${of.fac_parte || ''}`;
+      if (!groups.has(key)) {
+        groups.set(key, {
+          key,
+          ofNum: of.fac_numero,
+          desc: of.fac_desc_produto || of.fac_codigo_produto || '',
+          codigoProduto: of.fac_codigo_produto || '',
+          parte: of.fac_descparte || of.fac_parte || '',
+          etapa: of.fac_codsetor || '',
+          descEtapa: of.fac_descsetor || '',
+          cor: of.fac_desccor || of.fac_cor || '',
+          supplierName: of.cliente_fantasia || of.cliente_nome || '',
+          qty: 0,
+          settled: fullySettledKeys.has(key),
+          partial: partialKeys.has(key),
+          settlementMonth: partKeyStats.get(key)?.settlementMonth || null,
+          settlementYear: partKeyStats.get(key)?.settlementYear || null,
+        });
+      }
+      const g = groups.get(key);
+      g.qty += parseFloat(of.fac_quant) || 0;
+    }
+
+    // Supplier + logo
+    const db = require('../db/connection');
+    const settingsResult = await db.query('SELECT logo_path, company_name FROM system_settings WHERE id = 1');
+    const sysSettings = settingsResult.rows[0] || {};
+    let logoHtml = '';
+    if (sysSettings.logo_path) {
+      const logoFullPath = require('path').resolve(__dirname, '../../uploads', sysSettings.logo_path);
+      if (fs.existsSync(logoFullPath)) {
+        const logoBuffer = fs.readFileSync(logoFullPath);
+        const ext = require('path').extname(sysSettings.logo_path).toLowerCase();
+        const mimeMap = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.svg': 'image/svg+xml', '.webp': 'image/webp' };
+        const mime = mimeMap[ext] || 'image/png';
+        logoHtml = `<img src="data:${mime};base64,${logoBuffer.toString('base64')}" style="max-height:60px;max-width:200px;" />`;
+      }
+    }
+    const companyName = sysSettings.company_name || '';
+
+    const supplierName = [...groups.values()][0]?.supplierName || '';
+    const monthNames = ['', 'Janeiro', 'Fevereiro', 'Marco', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const statusLabel = paymentStatus === 'paid' ? 'Pagas' : paymentStatus === 'open' ? 'Em Aberto' : 'Todas';
+
+    let totalQty = 0;
+    const rowsHtml = [...groups.values()].map((g) => {
+      totalQty += g.qty;
+      let statusHtml = '';
+      if (g.settled) {
+        const mm = g.settlementMonth ? `${monthNames[g.settlementMonth]}/${g.settlementYear}` : '';
+        statusHtml = `<span class="tag tag-paid">Pago${mm ? ' em ' + mm : ''}</span>`;
+      } else if (g.partial) {
+        const mm = g.settlementMonth ? `${monthNames[g.settlementMonth]}/${g.settlementYear}` : '';
+        statusHtml = `<span class="tag tag-partial">Pagto parcial${mm ? ' em ' + mm : ''}</span>`;
+      } else {
+        statusHtml = `<span class="tag tag-open">Em aberto</span>`;
+      }
+      return `<tr>
+        <td class="center">${g.ofNum || ''}</td>
+        <td>${g.codigoProduto ? g.codigoProduto + ' - ' : ''}${g.desc}</td>
+        <td>${g.parte}</td>
+        <td>${g.etapa ? g.etapa + (g.descEtapa ? ' - ' + g.descEtapa : '') : ''}</td>
+        <td class="center">${formatNum(g.qty)}</td>
+        <td>${statusHtml}</td>
+      </tr>`;
+    }).join('');
+
+    const filterInfo = [];
+    if (dateFrom) filterInfo.push(`De: ${formatDateBR(dateFrom)}`);
+    if (dateTo) filterInfo.push(`Ate: ${formatDateBR(dateTo)}`);
+    if (facNumero) filterInfo.push(`OFs: ${facNumero}`);
+    if (etapa) filterInfo.push(`Etapa: ${etapa}`);
+
+    const html = `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><style>
+  body { font-family: Arial, sans-serif; font-size: 11px; margin: 20px; color: #333; }
+  .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #333; padding-bottom: 10px; }
+  .header-left { display: flex; align-items: center; gap: 15px; }
+  .title { font-size: 16px; font-weight: bold; text-align: center; margin-bottom: 15px; }
+  .info { margin-bottom: 15px; background: #f9f9f9; padding: 10px; border-radius: 4px; }
+  .info p { margin: 2px 0; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #2d3748; color: #fff; padding: 6px 8px; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 5px 8px; font-size: 10px; border-bottom: 1px solid #e2e8f0; }
+  tr:nth-child(even) td { background: #f7fafc; }
+  .center { text-align: center; }
+  .right { text-align: right; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 9px; font-weight: bold; }
+  .tag-paid { background: #fed7aa; color: #9a3412; }
+  .tag-partial { background: #fef3c7; color: #92400e; border: 1px dashed #d97706; }
+  .tag-open { background: #d1fae5; color: #065f46; }
+  .total-row td { border-top: 2px solid #333; font-weight: bold; font-size: 11px; background: #f0f4ff !important; }
+  .footer { margin-top: 20px; font-size: 9px; color: #666; text-align: center; }
+</style></head><body>
+  <div class="header">
+    <div class="header-left">
+      ${logoHtml}
+      <div><strong>${companyName}</strong></div>
+    </div>
+    <div style="text-align:right;font-size:9px;color:#666;">
+      ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}
+    </div>
+  </div>
+  <div class="title">Relatorio de OFs - ${statusLabel}</div>
+  <div class="info">
+    ${codcli ? `<p><strong>Fornecedor:</strong> ${codcli}${supplierName ? ' - ' + supplierName : ''}</p>` : ''}
+    ${filterInfo.length ? `<p><strong>Filtros:</strong> ${filterInfo.join(' | ')}</p>` : ''}
+    <p><strong>Total de OFs:</strong> ${groups.size}</p>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>OF</th>
+        <th style="text-align:left;">Descricao</th>
+        <th style="text-align:left;">Parte</th>
+        <th style="text-align:left;">Etapa</th>
+        <th>Quant.</th>
+        <th style="text-align:left;">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rowsHtml || '<tr><td colspan="6" style="text-align:center;padding:20px;">Nenhuma OF encontrada.</td></tr>'}
+      ${groups.size > 0 ? `<tr class="total-row">
+        <td colspan="4" class="right">Total</td>
+        <td class="center">${formatNum(totalQty)}</td>
+        <td></td>
+      </tr>` : ''}
+    </tbody>
+  </table>
+  <div class="footer">Gerado pelo sistema Indicadores</div>
+</body></html>`;
+
+    const puppeteer = require('puppeteer');
+    const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-setuid-sandbox'] });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdf = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' } });
+    await browser.close();
+
+    const filename = `ofs_${(supplierName || codcli || 'relatorio').replace(/[^a-zA-Z0-9]/g, '_')}_${statusLabel.toLowerCase().replace(/\s/g, '_')}.pdf`;
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/pdf');
+    return res.send(Buffer.from(pdf));
+  } catch (error) {
+    console.error('Export OFs PDF error:', error);
+    return res.status(500).json({ message: 'Erro ao exportar PDF.' });
+  }
+});
+
 router.get('/ofs/suppliers', async (req, res) => {
   try {
     const suppliers = await repo.getDistinctSuppliers();

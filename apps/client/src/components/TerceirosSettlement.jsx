@@ -172,6 +172,8 @@ const TerceirosSettlement = () => {
   const [newDiscAmount, setNewDiscAmount] = useState("");
   const [ofSearchNew, setOfSearchNew] = useState("");
   const [etapaFilter, setEtapaFilter] = useState("");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
+  const [exportingOfsPdf, setExportingOfsPdf] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editedQuantities, setEditedQuantities] = useState({});
   const [editedGroupPrices, setEditedGroupPrices] = useState({});
@@ -496,6 +498,42 @@ const TerceirosSettlement = () => {
     }
   }, [toast, buildExportFilename]);
 
+  // ── Export OFs (pending settlement) PDF ──────────────────────────────────
+  const handleExportOfsPdf = useCallback(async () => {
+    try {
+      setExportingOfsPdf(true);
+      const params = new URLSearchParams();
+      if (newSupplier) params.append("codcli", newSupplier);
+      if (dateFrom) params.append("dateFrom", dateFrom);
+      if (dateTo) params.append("dateTo", dateTo);
+      const ofNumbers = ofSearchNewRef.current?.value || ofSearchNew;
+      if (ofNumbers && ofNumbers.trim()) params.append("facNumero", ofNumbers.trim());
+      if (etapaFilter) params.append("etapa", etapaFilter);
+      if (paymentStatusFilter) params.append("paymentStatus", paymentStatusFilter);
+      const token = getToken();
+      const response = await fetch(`/api/terceiros/ofs/export/pdf?${params.toString()}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error("Erro ao exportar PDF.");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const supplierName = (suppliers.find((s) => s.codcli === newSupplier)?.nome || newSupplier || "ofs")
+        .replace(/[^a-zA-Z0-9]/g, "_");
+      const statusLabel = paymentStatusFilter === "paid" ? "pagas" : paymentStatusFilter === "open" ? "em_aberto" : "todas";
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `ofs_${supplierName}_${statusLabel}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err) {
+      toast({ title: "Erro ao exportar PDF.", status: "error", duration: 3000 });
+    } finally {
+      setExportingOfsPdf(false);
+    }
+  }, [newSupplier, dateFrom, dateTo, ofSearchNew, etapaFilter, paymentStatusFilter, suppliers, toast]);
+
   // ── Export Excel ──────────────────────────────────────────────────────────
   const handleExportExcel = useCallback(async (settlement) => {
     try {
@@ -712,9 +750,30 @@ const TerceirosSettlement = () => {
   }, [unsettledOfs]);
 
   const filteredUnsettledOfs = useMemo(() => {
-    if (!etapaFilter) return unsettledOfs;
-    return unsettledOfs.filter((of) => of.fac_codsetor === etapaFilter);
-  }, [unsettledOfs, etapaFilter]);
+    let rows = unsettledOfs;
+    if (etapaFilter) rows = rows.filter((of) => of.fac_codsetor === etapaFilter);
+    if (paymentStatusFilter === "paid") rows = rows.filter((of) => !!of.settlementId);
+    else if (paymentStatusFilter === "open") rows = rows.filter((of) => !of.settlementId);
+    return rows;
+  }, [unsettledOfs, etapaFilter, paymentStatusFilter]);
+
+  // Set of OF+Parte keys that are partially settled in the FULL unfiltered list,
+  // so the PARCIAL badge keeps showing even when the filter hides half of the rows.
+  const partialOfPartKeys = useMemo(() => {
+    const countMap = new Map();
+    for (const of of unsettledOfs) {
+      const key = `${of.fac_numero}|${of.fac_parte || ''}`;
+      const entry = countMap.get(key) || { settled: 0, total: 0 };
+      entry.total++;
+      if (of.settlementId) entry.settled++;
+      countMap.set(key, entry);
+    }
+    const partial = new Set();
+    for (const [key, { settled, total }] of countMap) {
+      if (settled > 0 && settled < total) partial.add(key);
+    }
+    return partial;
+  }, [unsettledOfs]);
 
   // ── Select All / Deselect All ─────────────────────────────────────────────
   const handleSelectAll = useCallback(() => {
@@ -2440,6 +2499,36 @@ const TerceirosSettlement = () => {
           </Flex>
         )}
 
+        {/* Payment status filter + Export PDF */}
+        {unsettledOfs.length > 0 && (
+          <Flex gap={3} mb={3} align="center" wrap="wrap">
+            <Text fontSize="xs" color="gray.500" whiteSpace="nowrap">Status:</Text>
+            <Select
+              size="sm"
+              value={paymentStatusFilter}
+              onChange={(e) => setPaymentStatusFilter(e.target.value)}
+              w={isMobile ? "100%" : "200px"}
+            >
+              <option value="all">Todas as OFs</option>
+              <option value="paid">Pagas</option>
+              <option value="open">Em aberto</option>
+            </Select>
+            <Box flex="1" />
+            <Tooltip label="Exportar resultado filtrado em PDF">
+              <Button
+                size="sm"
+                variant="outline"
+                colorScheme="red"
+                leftIcon={<PdfIcon boxSize={4} />}
+                onClick={handleExportOfsPdf}
+                isLoading={exportingOfsPdf}
+              >
+                Exportar PDF
+              </Button>
+            </Tooltip>
+          </Flex>
+        )}
+
         {/* Unsettled OFs table */}
         {loadingOfs ? (
           <Center py={6}><Spinner size="md" color="blue.500" /></Center>
@@ -2474,6 +2563,11 @@ const TerceirosSettlement = () => {
 
             <VStack align="stretch" spacing={2}>
               {groupByOfParte(groupUnsettledOfs(filteredUnsettledOfs, unsettledOfs)).map((ofGroup) => {
+                // Override partial status using the FULL unfiltered dataset so the
+                // "pago parcial" indication persists after the payment-status filter
+                // narrows the visible rows to only paid or only open.
+                const ofPartKey = `${ofGroup.facNumero}|${ofGroup.facParte || ''}`;
+                const isPartial = partialOfPartKeys.has(ofPartKey);
                 // Compute OF/Parte-level totals
                 let ofGroupQty = 0;
                 let ofGroupTotal = 0;
@@ -2535,7 +2629,7 @@ const TerceirosSettlement = () => {
                   <Box
                     key={ofGroup.key}
                     borderWidth="1px"
-                    borderColor={ofGroup.isSettled ? "orange.300" : ofGroup.isPartiallySettled ? "orange.200" : ofGroupSomeSelected ? "blue.300" : borderColor}
+                    borderColor={ofGroup.isSettled ? "orange.300" : isPartial ? "orange.200" : ofGroupSomeSelected ? "blue.300" : borderColor}
                     borderRadius="md"
                     overflow="hidden"
                     transition="all 0.15s"
@@ -2592,7 +2686,7 @@ const TerceirosSettlement = () => {
                           Pago em {monthNames[(ofGroup.settlementMonth || 1) - 1]}/{ofGroup.settlementYear}
                         </Badge>
                       )}
-                      {ofGroup.isPartiallySettled && (
+                      {isPartial && !ofGroup.isSettled && (
                         <Badge colorScheme="orange" variant="subtle" display="flex" alignItems="center" gap={1} whiteSpace="nowrap">
                           <WarningIcon boxSize={3} />
                           Pago parcial em {monthNames[(ofGroup.settlementMonth || 1) - 1]}/{ofGroup.settlementYear}
