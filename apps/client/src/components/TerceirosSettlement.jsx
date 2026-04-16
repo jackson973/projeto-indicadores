@@ -151,6 +151,10 @@ const TerceirosSettlement = () => {
   const [editSelectedOfs, setEditSelectedOfs] = useState(new Set());
   const [editOfPrices, setEditOfPrices] = useState({});
   const [loadingEditOfs, setLoadingEditOfs] = useState(false);
+  // OF IDs added during the current edit session, most-recent first. Used to
+  // float newly-added items to the top of the items table so the user doesn't
+  // have to scroll to verify the addition.
+  const [recentlyAddedEditOfIds, setRecentlyAddedEditOfIds] = useState([]);
 
   // ── New settlement creation ───────────────────────────────────────────────
   const [creating, setCreating] = useState(false);
@@ -301,6 +305,7 @@ const TerceirosSettlement = () => {
       setEditNotes(data.notes || "");
       setEditMonth(data.referenceMonth || data.reference_month || 1);
       setEditYear(data.referenceYear || data.reference_year || getSaoPauloYear());
+      setRecentlyAddedEditOfIds([]);
     } catch (err) {
       toast({  title: "Erro ao carregar fechamento.", status: "error", duration: 3000 });
     } finally {
@@ -382,6 +387,7 @@ const TerceirosSettlement = () => {
     setEditUnsettledOfs([]);
     setEditSelectedOfs(new Set());
     setEditOfPrices({});
+    setRecentlyAddedEditOfIds([]);
   }, []);
 
   // ── Edit: load unsettled OFs for adding to settlement ────────────────────
@@ -435,6 +441,8 @@ const TerceirosSettlement = () => {
       toast({ title: `${ofsToAdd.length} OF(s) adicionada(s).`, status: "success", duration: 2000 });
       const updated = await fetchTerceirosSettlement(editingSettlement.id);
       setEditingSettlement(updated);
+      const addedIds = ofsToAdd.map((x) => x.ofId);
+      setRecentlyAddedEditOfIds((prev) => [...addedIds, ...prev.filter((id) => !addedIds.includes(id))]);
       setEditUnsettledOfs([]);
       setEditSelectedOfs(new Set());
       setEditDateFrom(""); setEditDateTo("");
@@ -606,7 +614,9 @@ const TerceirosSettlement = () => {
         }
       });
 
-      const merged = [...prevSelectedOfs, ...data];
+      // New search results go first so the just-added OFs appear at the top,
+      // avoiding scroll when the list grows long.
+      const merged = [...data, ...prevSelectedOfs];
       setUnsettledOfs(merged);
 
       // Re-select the previously selected OFs in the merged list
@@ -1979,7 +1989,18 @@ const TerceirosSettlement = () => {
     const items = editingSettlement.items || [];
     const missingOfs = editingSettlement.missingOfs || [];
     const total = parseFloat(editingSettlement.totalAmount) || items.reduce((sum, item) => sum + (parseFloat(item.totalPrice) || 0), 0);
-    const groups = groupSettlementItems(items, missingOfs);
+    // Float items whose OF was just added to the top so the group they belong
+    // to is the first one rendered (groupSettlementItems preserves insertion
+    // order of first occurrence per group key).
+    const recentIndex = new Map(recentlyAddedEditOfIds.map((id, i) => [id, i]));
+    const sortedItems = recentIndex.size === 0
+      ? items
+      : [...items].sort((a, b) => {
+          const ai = recentIndex.has(a.ofId) ? recentIndex.get(a.ofId) : Infinity;
+          const bi = recentIndex.has(b.ofId) ? recentIndex.get(b.ofId) : Infinity;
+          return ai - bi;
+        });
+    const groups = groupSettlementItems(sortedItems, missingOfs);
 
     return (
       <Modal isOpen={!!editingSettlement} onClose={handleCancelEdit} size="5xl" scrollBehavior="inside">
