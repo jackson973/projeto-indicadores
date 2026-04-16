@@ -716,6 +716,11 @@ const TerceirosSettlement = () => {
   }, [newSupplier, dateFrom, dateTo, loadUnsettledOfs, toast]);
 
   useEffect(() => {
+    // Skip while a draft is being restored — restoring sets dateFrom/dateTo
+    // from draft_data, and this effect would race against handleRestoreDraft's
+    // id-based fetch, intermittently overwriting unsettledOfs with an empty
+    // or wrong result (happens on slower machines where the fetch here wins).
+    if (restoringDraft) return;
     if (newSupplier) {
       loadUnsettledOfs({ codcli: newSupplier, ofNumbers: ofSearchNew });
     }
