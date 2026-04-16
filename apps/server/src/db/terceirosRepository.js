@@ -153,10 +153,20 @@ async function upsertOfBatch(batch) {
   }
 }
 
-async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, unsettledOnly, limit, offset }) {
+async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, ids, unsettledOnly, limit, offset }) {
   const conditions = ['1=1'];
   const params = [];
   let idx = 1;
+
+  if (ids) {
+    const idList = String(ids).split(',').map((n) => parseInt(n, 10)).filter((n) => Number.isFinite(n));
+    if (idList.length === 0) {
+      return { rows: [], total: 0 };
+    }
+    const placeholders = idList.map(() => `$${idx++}`);
+    conditions.push(`o.id IN (${placeholders.join(', ')})`);
+    params.push(...idList);
+  }
 
   if (codcli) {
     conditions.push(`o.fac_codcli = $${idx++}`);

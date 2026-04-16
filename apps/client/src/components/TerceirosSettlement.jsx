@@ -1107,15 +1107,21 @@ const TerceirosSettlement = () => {
       setNotes(draft.notes || "");
       setNewDiscounts(dd.newDiscounts || []);
 
-      // Reload OFs from server. Intentionally do NOT pass dd.ofSearchNew as
-      // a facNumero filter here: the user may have built the draft by running
-      // several sequential searches, and each selectedOfId could belong to a
-      // different search. Filtering would drop selections from earlier searches.
+      // Reload OFs from server. Fetch EXACTLY the OFs saved in the draft (by id)
+      // so the modal shows just the user's selection — not the full unsettled
+      // list of the supplier, which could be thousands of rows.
+      const savedIds = Array.isArray(dd.selectedOfIds) ? dd.selectedOfIds : [];
       const params = new URLSearchParams();
-      if (draft.codcli) params.append("codcli", draft.codcli);
       params.append("unsettledOnly", "true");
-      if (dd.dateFrom) params.append("dateFrom", dd.dateFrom);
-      if (dd.dateTo) params.append("dateTo", dd.dateTo);
+      if (savedIds.length > 0) {
+        params.append("ids", savedIds.join(","));
+      } else {
+        // Empty draft (no selection yet) — fall back to supplier + dates so
+        // the user at least has a starting list.
+        if (draft.codcli) params.append("codcli", draft.codcli);
+        if (dd.dateFrom) params.append("dateFrom", dd.dateFrom);
+        if (dd.dateTo) params.append("dateTo", dd.dateTo);
+      }
 
       setLoadingOfs(true);
       const result = await fetchTerceirosOfs(params.toString());

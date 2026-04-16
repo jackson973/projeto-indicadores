@@ -446,12 +446,12 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
 
 router.get('/ofs', async (req, res) => {
   try {
-    const { codcli, month, year, dateFrom, dateTo, facNumero, unsettledOnly, limit, offset } = req.query;
+    const { codcli, month, year, dateFrom, dateTo, facNumero, ids, unsettledOnly, limit, offset } = req.query;
     const result = await repo.getOfs({
       codcli, month: month ? parseInt(month) : null,
       year: year ? parseInt(year) : null,
       dateFrom: dateFrom || null, dateTo: dateTo || null,
-      facNumero, unsettledOnly,
+      facNumero, ids, unsettledOnly,
       limit: limit ? parseInt(limit) : null,
       offset: offset ? parseInt(offset) : 0
     });
