@@ -186,6 +186,11 @@ const TerceirosSettlement = () => {
   const [savingDraft, setSavingDraft] = useState(false);
   const [restoringDraft, setRestoringDraft] = useState(false);
   const [activeDraftId, setActiveDraftId] = useState(null);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState(null);
+  const autoSaveTimerRef = useRef(null);
+  const pendingAutoSaveRef = useRef(false);
+  const activeDraftIdRef = useRef(null);
   const [expandedOfGroups, setExpandedOfGroups] = useState(new Set());
   const [expandedEditGroups, setExpandedEditGroups] = useState(new Set());
 
@@ -194,6 +199,7 @@ const TerceirosSettlement = () => {
   // Keep refs in sync with state for use in loadUnsettledOfs
   useEffect(() => { unsettledOfsRef.current = unsettledOfs; }, [unsettledOfs]);
   useEffect(() => { selectedOfsRef.current = selectedOfs; }, [selectedOfs]);
+  useEffect(() => { activeDraftIdRef.current = activeDraftId; }, [activeDraftId]);
 
   const toast = useAppToast();
   const isMobile = useBreakpointValue({ base: true, md: false });
@@ -900,6 +906,13 @@ const TerceirosSettlement = () => {
     const supplierName = supplierObj ? supplierObj.nome || codcli : (unsettledOfs.find(o => o.fac_codcli === codcli)?.cliente_nome || codcli);
 
     setSubmitting(true);
+    // Cancel any pending auto-save so it doesn't recreate an empty draft after
+    // state resets below.
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    pendingAutoSaveRef.current = false;
     try {
       await createTerceirosSettlement({
         codcli,
@@ -913,6 +926,8 @@ const TerceirosSettlement = () => {
       });
       toast({  title: "Fechamento criado com sucesso.", status: "success", duration: 3000 });
       setActiveDraftId(null);
+      activeDraftIdRef.current = null;
+      setLastSavedAt(null);
       setCreating(false);
       setNewSupplier("");
       setOfSearchNew("");
@@ -937,6 +952,89 @@ const TerceirosSettlement = () => {
       setSubmitting(false);
     }
   }, [newSupplier, selectedOfs, unsettledOfs, getOfPrice, getOfPriceInfo, editedQuantities, editedGroupPrices, manualPrices, suppliers, newMonth, newYear, prevMonth, prevYear, notes, newDiscounts, loadSettlements, toast]);
+
+  // ── Draft auto-save ──────────────────────────────────────────────────────
+  // Background save triggered by state changes while the new-settlement modal
+  // is open. Reason: users build large drafts (20+ OFs) over long sessions and
+  // previously lost work if they forgot to click "Salvar Rascunho".
+  const persistDraft = useCallback(async () => {
+    if (!newSupplier) return;
+    if (selectedOfs.size === 0) return;
+
+    const ofIds = [];
+    selectedOfs.forEach((index) => {
+      const of = unsettledOfs[index];
+      if (of) ofIds.push(of.id);
+    });
+
+    const supplierObj = suppliers.find((s) => String(s.codcli) === String(newSupplier));
+    const supplierName = supplierObj ? supplierObj.nome || newSupplier : newSupplier;
+
+    const payload = {
+      codcli: newSupplier,
+      supplierName,
+      referenceMonth: newMonth,
+      referenceYear: newYear,
+      notes,
+      draftData: {
+        dateFrom, dateTo, ofSearchNew, etapaFilter,
+        newMonth, newYear,
+        selectedOfIds: ofIds,
+        manualPrices, editedQuantities, editedGroupPrices,
+        newDiscounts
+      }
+    };
+
+    setAutoSaving(true);
+    try {
+      const result = await saveTerceirosDraft(payload, activeDraftIdRef.current || undefined);
+      if (result?.id && result.id !== activeDraftIdRef.current) {
+        setActiveDraftId(result.id);
+        activeDraftIdRef.current = result.id;
+      }
+      setLastSavedAt(new Date());
+      pendingAutoSaveRef.current = false;
+    } catch {
+      // Silent — the next change will retry. Manual "Salvar Rascunho" remains as fallback.
+    } finally {
+      setAutoSaving(false);
+    }
+  }, [newSupplier, selectedOfs, unsettledOfs, suppliers, newMonth, newYear, notes,
+      dateFrom, dateTo, ofSearchNew, etapaFilter, manualPrices, editedQuantities,
+      editedGroupPrices, newDiscounts]);
+
+  const flushPendingAutoSave = useCallback(async () => {
+    if (autoSaveTimerRef.current) {
+      clearTimeout(autoSaveTimerRef.current);
+      autoSaveTimerRef.current = null;
+    }
+    if (pendingAutoSaveRef.current) {
+      await persistDraft();
+    }
+  }, [persistDraft]);
+
+  useEffect(() => {
+    if (!creating) return;
+    if (!newSupplier) return;
+    if (selectedOfs.size === 0) return;
+    if (submitting || restoringDraft || savingDraft) return;
+
+    pendingAutoSaveRef.current = true;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(() => {
+      autoSaveTimerRef.current = null;
+      persistDraft();
+    }, 1500);
+
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+        autoSaveTimerRef.current = null;
+      }
+    };
+  }, [creating, newSupplier, selectedOfs, unsettledOfs, manualPrices, editedQuantities,
+      editedGroupPrices, newDiscounts, notes, newMonth, newYear, dateFrom, dateTo,
+      ofSearchNew, etapaFilter, submitting, restoringDraft, savingDraft, persistDraft]);
 
   // ── Draft save/restore (persisted in DB) ─────────────────────────────────
   const handleSaveDraft = useCallback(async () => {
@@ -974,6 +1072,9 @@ const TerceirosSettlement = () => {
       }, activeDraftId || undefined);
 
       setActiveDraftId(result.id);
+      activeDraftIdRef.current = result.id;
+      setLastSavedAt(new Date());
+      pendingAutoSaveRef.current = false;
       toast({  title: "Rascunho salvo com sucesso.", status: "success", duration: 3000 });
       await loadSettlements();
     } catch (err) {
@@ -985,6 +1086,8 @@ const TerceirosSettlement = () => {
 
   const handleRestoreDraft = useCallback(async (draftId) => {
     setRestoringDraft(true);
+    setLastSavedAt(null);
+    pendingAutoSaveRef.current = false;
     try {
       const draft = await fetchTerceirosDraft(draftId);
       if (!draft) throw new Error("Rascunho não encontrado.");
@@ -1004,13 +1107,15 @@ const TerceirosSettlement = () => {
       setNotes(draft.notes || "");
       setNewDiscounts(dd.newDiscounts || []);
 
-      // Reload OFs from server
+      // Reload OFs from server. Intentionally do NOT pass dd.ofSearchNew as
+      // a facNumero filter here: the user may have built the draft by running
+      // several sequential searches, and each selectedOfId could belong to a
+      // different search. Filtering would drop selections from earlier searches.
       const params = new URLSearchParams();
       if (draft.codcli) params.append("codcli", draft.codcli);
       params.append("unsettledOnly", "true");
       if (dd.dateFrom) params.append("dateFrom", dd.dateFrom);
       if (dd.dateTo) params.append("dateTo", dd.dateTo);
-      if (dd.ofSearchNew) params.append("facNumero", dd.ofSearchNew.trim());
 
       setLoadingOfs(true);
       const result = await fetchTerceirosOfs(params.toString());
@@ -1070,9 +1175,14 @@ const TerceirosSettlement = () => {
   }, [toast]);
 
   // ── Cancel new settlement ─────────────────────────────────────────────────
-  const handleCancelCreate = useCallback(() => {
+  const handleCancelCreate = useCallback(async () => {
+    // Flush any pending auto-save so the last edits aren't lost when the user
+    // closes the modal within the 1.5s debounce window.
+    await flushPendingAutoSave();
     setCreating(false);
     setActiveDraftId(null);
+    activeDraftIdRef.current = null;
+    setLastSavedAt(null);
     setNewSupplier("");
     setOfSearchNew("");
     if (ofSearchNewRef.current) ofSearchNewRef.current.value = "";
@@ -1091,7 +1201,7 @@ const TerceirosSettlement = () => {
     setNewDiscounts([]);
     setNewDiscDesc("");
     setNewDiscAmount("");
-  }, []);
+  }, [flushPendingAutoSave]);
 
   // ── Discount handlers (create panel - local state) ──────────────────────
   const handleAddNewDiscount = useCallback(() => {
@@ -3135,25 +3245,34 @@ const TerceirosSettlement = () => {
 
           </ModalBody>
           <ModalFooter borderTopWidth="1px">
-            <HStack spacing={3}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleSaveDraft}
-                isLoading={savingDraft}
-                isDisabled={selectedOfs.size === 0}
-              >
-                Salvar Rascunho
-              </Button>
-              <Button
-                colorScheme="blue"
-                size="sm"
-                onClick={handleCreateSettlement}
-                isLoading={submitting}
-                loadingText="Criando..."
-              >
-                Criar Fechamento
-              </Button>
+            <HStack spacing={3} justify="space-between" w="100%">
+              <Text fontSize="xs" color="gray.500" minH="1.2em">
+                {autoSaving
+                  ? "Salvando rascunho…"
+                  : lastSavedAt
+                    ? `Rascunho salvo às ${lastSavedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`
+                    : ""}
+              </Text>
+              <HStack spacing={3}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveDraft}
+                  isLoading={savingDraft}
+                  isDisabled={selectedOfs.size === 0}
+                >
+                  Salvar Rascunho
+                </Button>
+                <Button
+                  colorScheme="blue"
+                  size="sm"
+                  onClick={handleCreateSettlement}
+                  isLoading={submitting}
+                  loadingText="Criando..."
+                >
+                  Criar Fechamento
+                </Button>
+              </HStack>
             </HStack>
           </ModalFooter>
         </ModalContent>
