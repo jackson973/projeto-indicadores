@@ -1110,22 +1110,36 @@ const TerceirosSettlement = () => {
       // Reload OFs from server. Fetch EXACTLY the OFs saved in the draft (by id)
       // so the modal shows just the user's selection — not the full unsettled
       // list of the supplier, which could be thousands of rows.
+      //
+      // IDs are chunked because the PK values are 10+ digits and a URL with
+      // thousands of them exceeds the 8KB request-URI limit (HTTP 414).
       const savedIds = Array.isArray(dd.selectedOfIds) ? dd.selectedOfIds : [];
-      const params = new URLSearchParams();
-      params.append("unsettledOnly", "true");
+      setLoadingOfs(true);
+      let data = [];
       if (savedIds.length > 0) {
-        params.append("ids", savedIds.join(","));
+        const CHUNK_SIZE = 150;
+        const chunks = [];
+        for (let i = 0; i < savedIds.length; i += CHUNK_SIZE) {
+          chunks.push(savedIds.slice(i, i + CHUNK_SIZE));
+        }
+        const chunkResults = await Promise.all(chunks.map((chunk) => {
+          const p = new URLSearchParams();
+          p.append("unsettledOnly", "true");
+          p.append("ids", chunk.join(","));
+          return fetchTerceirosOfs(p.toString());
+        }));
+        data = chunkResults.flatMap((r) => r.rows || r || []);
       } else {
         // Empty draft (no selection yet) — fall back to supplier + dates so
         // the user at least has a starting list.
+        const params = new URLSearchParams();
+        params.append("unsettledOnly", "true");
         if (draft.codcli) params.append("codcli", draft.codcli);
         if (dd.dateFrom) params.append("dateFrom", dd.dateFrom);
         if (dd.dateTo) params.append("dateTo", dd.dateTo);
+        const result = await fetchTerceirosOfs(params.toString());
+        data = result.rows || result || [];
       }
-
-      setLoadingOfs(true);
-      const result = await fetchTerceirosOfs(params.toString());
-      const data = result.rows || result || [];
       setUnsettledOfs(data);
 
       // Re-select OFs by id
