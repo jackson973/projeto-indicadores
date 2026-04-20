@@ -401,10 +401,13 @@ function mapOrdersToSales(orders) {
     // Use orderPayTime as date (matches UpSeller's timeType=1 "hora do pagamento" filter)
     const orderDate = order.orderPayTime || order.orderCreateTime || '';
 
+    const platformOrderId = order.platformOrderId || '';
+
     if (items.length === 0) {
       // Order without item detail - create single row
       sales.push({
         orderId: order.orderNumber || '',
+        platformOrderId,
         date: orderDate,
         store: order.shopName || '',
         product: 'Geral',
@@ -434,6 +437,7 @@ function mapOrdersToSales(orders) {
         const itemValue = (parseFloat(item.price) || 0) * (item.productCount || 1);
         sales.push({
           orderId: order.orderNumber || '',
+          platformOrderId,
           date: orderDate,
           store: order.shopName || '',
           product: item.productName || 'Geral',

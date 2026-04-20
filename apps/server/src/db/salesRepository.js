@@ -92,6 +92,7 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         sale.cnpjCpf || '',
         codStore,
         sale.productUrl || null,
+        sale.platformOrderId || null,
       ];
 
       values.push(
@@ -100,10 +101,10 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         `$${paramIndex+8}, $${paramIndex+9}, $${paramIndex+10}, $${paramIndex+11}, ` +
         `$${paramIndex+12}, $${paramIndex+13}, $${paramIndex+14}, $${paramIndex+15}, ` +
         `$${paramIndex+16}, $${paramIndex+17}, $${paramIndex+18}, $${paramIndex+19}, ` +
-        `$${paramIndex+20}, $${paramIndex+21}, $${paramIndex+22})`
+        `$${paramIndex+20}, $${paramIndex+21}, $${paramIndex+22}, $${paramIndex+23})`
       );
       params.push(...rowParams);
-      paramIndex += 23;
+      paramIndex += 24;
     });
 
     const query = `
@@ -111,7 +112,8 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         order_id, date, store, product, ad_name, variation, sku,
         quantity, total, unit_price, state, platform, status,
         cancel_by, cancel_reason, image, sale_channel,
-        client_name, codcli, nome_fantasia, cnpj_cpf, cod_store, product_url
+        client_name, codcli, nome_fantasia, cnpj_cpf, cod_store, product_url,
+        platform_order_id
       ) VALUES ${values.join(', ')}
       ON CONFLICT (order_id, COALESCE(NULLIF(sku, ''), product), COALESCE(variation, ''))
       DO UPDATE SET
@@ -136,6 +138,7 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         cnpj_cpf = EXCLUDED.cnpj_cpf,
         cod_store = EXCLUDED.cod_store,
         product_url = EXCLUDED.product_url,
+        platform_order_id = COALESCE(EXCLUDED.platform_order_id, sales.platform_order_id),
         updated_at = CURRENT_TIMESTAMP
       RETURNING (xmax = 0) AS inserted
     `;
@@ -236,6 +239,7 @@ async function getSales(filters = {}) {
     SELECT
       id,
       order_id as "orderId",
+      platform_order_id as "platformOrderId",
       date,
       store,
       product,

@@ -608,6 +608,7 @@ router.get("/sales-analytic-export", async (req, res) => {
     const rows = sales.map(s => ({
       "Data": formatDate(s.date),
       "Pedido": s.orderId || "",
+      "Nº Pedido Plataforma": s.platformOrderId || "",
       "Loja": s.store || "",
       "Plataforma": s.platform || "",
       "Canal": s.saleChannel || "",
@@ -629,6 +630,7 @@ router.get("/sales-analytic-export", async (req, res) => {
     rows.push({
       "Data": "",
       "Pedido": "",
+      "Nº Pedido Plataforma": "",
       "Loja": "",
       "Plataforma": "",
       "Canal": "",
@@ -647,16 +649,16 @@ router.get("/sales-analytic-export", async (req, res) => {
 
     const ws = xlsx.utils.json_to_sheet(rows);
     ws["!cols"] = [
-      { wch: 17 }, { wch: 18 }, { wch: 28 }, { wch: 14 }, { wch: 14 },
-      { wch: 14 }, { wch: 18 }, { wch: 42 }, { wch: 42 }, { wch: 22 },
-      { wch: 6 }, { wch: 28 }, { wch: 18 }, { wch: 8 }, { wch: 12 },
-      { wch: 12 }
+      { wch: 17 }, { wch: 18 }, { wch: 22 }, { wch: 28 }, { wch: 14 },
+      { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 42 }, { wch: 42 },
+      { wch: 22 }, { wch: 6 }, { wch: 28 }, { wch: 18 }, { wch: 8 },
+      { wch: 12 }, { wch: 12 }
     ];
 
     const currencyFmt = 'R$ #,##0.00;[Red]-R$ #,##0.00';
     const range = xlsx.utils.decode_range(ws["!ref"]);
     for (let R = 1; R <= range.e.r; R++) {
-      for (const C of [14, 15]) {
+      for (const C of [15, 16]) {
         const cell = ws[xlsx.utils.encode_cell({ r: R, c: C })];
         if (cell && typeof cell.v === "number") cell.z = currencyFmt;
       }
