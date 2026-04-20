@@ -93,6 +93,7 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         codStore,
         sale.productUrl || null,
         sale.platformOrderId || null,
+        sale.discount || 0,
       ];
 
       values.push(
@@ -101,10 +102,11 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         `$${paramIndex+8}, $${paramIndex+9}, $${paramIndex+10}, $${paramIndex+11}, ` +
         `$${paramIndex+12}, $${paramIndex+13}, $${paramIndex+14}, $${paramIndex+15}, ` +
         `$${paramIndex+16}, $${paramIndex+17}, $${paramIndex+18}, $${paramIndex+19}, ` +
-        `$${paramIndex+20}, $${paramIndex+21}, $${paramIndex+22}, $${paramIndex+23})`
+        `$${paramIndex+20}, $${paramIndex+21}, $${paramIndex+22}, $${paramIndex+23}, ` +
+        `$${paramIndex+24})`
       );
       params.push(...rowParams);
-      paramIndex += 24;
+      paramIndex += 25;
     });
 
     const query = `
@@ -113,7 +115,7 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         quantity, total, unit_price, state, platform, status,
         cancel_by, cancel_reason, image, sale_channel,
         client_name, codcli, nome_fantasia, cnpj_cpf, cod_store, product_url,
-        platform_order_id
+        platform_order_id, discount
       ) VALUES ${values.join(', ')}
       ON CONFLICT (order_id, COALESCE(NULLIF(sku, ''), product), COALESCE(variation, ''))
       DO UPDATE SET
@@ -125,6 +127,7 @@ async function upsertBatch(batch, saleChannel = 'online', storeMap = new Map()) 
         quantity = EXCLUDED.quantity,
         total = EXCLUDED.total,
         unit_price = EXCLUDED.unit_price,
+        discount = EXCLUDED.discount,
         state = EXCLUDED.state,
         platform = EXCLUDED.platform,
         status = EXCLUDED.status,
@@ -249,6 +252,7 @@ async function getSales(filters = {}) {
       quantity,
       total,
       unit_price as "unitPrice",
+      discount,
       state,
       platform,
       status,
@@ -272,7 +276,8 @@ async function getSales(filters = {}) {
     ...row,
     quantity: parseFloat(row.quantity) || 0,
     total: parseFloat(row.total) || 0,
-    unitPrice: parseFloat(row.unitPrice) || 0
+    unitPrice: parseFloat(row.unitPrice) || 0,
+    discount: parseFloat(row.discount) || 0
   }));
 }
 

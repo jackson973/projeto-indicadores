@@ -622,10 +622,12 @@ router.get("/sales-analytic-export", async (req, res) => {
       "CNPJ/CPF": s.cnpjCpf || "",
       "Qtd": Number(s.quantity) || 0,
       "Preço Unit.": Number(s.unitPrice) || 0,
+      "Desconto": Number(s.discount) || 0,
       "Total": Number(s.total) || 0
     }));
 
     const totalQuantity = rows.reduce((sum, r) => sum + r["Qtd"], 0);
+    const totalDiscount = rows.reduce((sum, r) => sum + r["Desconto"], 0);
     const totalRevenue = rows.reduce((sum, r) => sum + r["Total"], 0);
     rows.push({
       "Data": "",
@@ -644,6 +646,7 @@ router.get("/sales-analytic-export", async (req, res) => {
       "CNPJ/CPF": "TOTAL",
       "Qtd": totalQuantity,
       "Preço Unit.": "",
+      "Desconto": Number(totalDiscount.toFixed(2)),
       "Total": Number(totalRevenue.toFixed(2))
     });
 
@@ -652,13 +655,13 @@ router.get("/sales-analytic-export", async (req, res) => {
       { wch: 17 }, { wch: 18 }, { wch: 22 }, { wch: 28 }, { wch: 14 },
       { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 42 }, { wch: 42 },
       { wch: 22 }, { wch: 6 }, { wch: 28 }, { wch: 18 }, { wch: 8 },
-      { wch: 12 }, { wch: 12 }
+      { wch: 12 }, { wch: 12 }, { wch: 12 }
     ];
 
     const currencyFmt = 'R$ #,##0.00;[Red]-R$ #,##0.00';
     const range = xlsx.utils.decode_range(ws["!ref"]);
     for (let R = 1; R <= range.e.r; R++) {
-      for (const C of [15, 16]) {
+      for (const C of [15, 16, 17]) {
         const cell = ws[xlsx.utils.encode_cell({ r: R, c: C })];
         if (cell && typeof cell.v === "number") cell.z = currencyFmt;
       }

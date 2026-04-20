@@ -470,7 +470,11 @@ function mapOrdersToSales(orders) {
       }
 
       for (const item of items) {
-        const itemValue = (parseFloat(item.price) || 0) * (item.productCount || 1);
+        const rawPrice = parseFloat(item.price) || 0;
+        const qty = item.productCount || 1;
+        const itemValue = rawPrice * qty;
+        const netTotal = Number((itemValue * ratio).toFixed(2));
+        const discount = Number((itemValue - netTotal).toFixed(2));
         const row = {
           orderId: order.orderNumber || '',
           platformOrderId,
@@ -480,9 +484,10 @@ function mapOrdersToSales(orders) {
           adName: item.productName || 'Geral',
           variation: item.productAttr || '',
           sku: item.productSku || item.variationSku || '',
-          quantity: item.productCount || 1,
-          total: Number((itemValue * ratio).toFixed(2)),
-          unitPrice: Number(((parseFloat(item.price) || 0) * ratio).toFixed(2)),
+          quantity: qty,
+          total: netTotal,
+          unitPrice: rawPrice,
+          discount,
           state: '',
           platform: basePlatform,
           status: orderStatus,
@@ -500,7 +505,7 @@ function mapOrdersToSales(orders) {
             `[UpSeller][DEBUG]   item sku=${row.sku || '(empty)'} ` +
             `variation="${row.variation}" ` +
             `price_raw=${item.price} qty=${row.quantity} ` +
-            `→ unitPrice=${row.unitPrice} total=${row.total}`
+            `→ unitPrice=${row.unitPrice} total=${row.total} discount=${row.discount}`
           );
         }
         sales.push(row);
