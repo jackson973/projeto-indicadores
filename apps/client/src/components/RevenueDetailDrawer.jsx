@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo } from "react";
 import {
   Box,
+  Button,
   Drawer,
   DrawerBody,
   DrawerCloseButton,
@@ -18,6 +19,7 @@ import {
   Tooltip,
   useColorModeValue
 } from "@chakra-ui/react";
+import { DownloadIcon } from "@chakra-ui/icons";
 import {
   AreaChart,
   Area,
@@ -27,9 +29,10 @@ import {
   Tooltip as RechartsTooltip,
   ResponsiveContainer
 } from "recharts";
-import { fetchSalesByPeriod, fetchSalesByStore, fetchAbc } from "../api";
+import { fetchSalesByPeriod, fetchSalesByStore, fetchAbc, getToken } from "../api";
 import { formatCurrency, formatNumber } from "../utils/format";
 import { getPlatformMeta } from "../utils/platforms";
+import useAppToast from "../hooks/useAppToast";
 
 const extractPlatform = (storeName) => {
   const match = (storeName || "").match(/\(([^)]+)\)\s*$/);
@@ -80,7 +83,9 @@ const RevenueDetailDrawer = ({ isOpen, onClose, filters, summary }) => {
   const [storeRanking, setStoreRanking] = useState([]);
   const [productRanking, setProductRanking] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
+  const toast = useAppToast();
 
   const cardBg = useColorModeValue("white", "gray.800");
   const cardBorder = useColorModeValue("gray.200", "gray.700");
@@ -130,6 +135,42 @@ const RevenueDetailDrawer = ({ isOpen, onClose, filters, summary }) => {
     });
   }, [dailyData]);
 
+  const handleExportAnalytic = async () => {
+    if (!filters) return;
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("start", filters.start);
+      params.set("end", filters.end);
+      if (filters.store) params.set("store", filters.store);
+      if (filters.saleChannel) params.set("sale_channel", filters.saleChannel);
+
+      const token = getToken();
+      const response = await fetch(`/api/sales-analytic-export?${params}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) {
+        const msg = response.status === 404
+          ? "Sem vendas no período."
+          : "Erro ao exportar analítico.";
+        throw new Error(msg);
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `analitico-vendas-${filters.start}_a_${filters.end}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (err) {
+      toast({ title: err.message || "Erro ao exportar analítico.", status: "error", duration: 3000 });
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const CustomTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
     return (
@@ -149,7 +190,22 @@ const RevenueDetailDrawer = ({ isOpen, onClose, filters, summary }) => {
       <DrawerOverlay />
       <DrawerContent>
         <DrawerCloseButton />
-        <DrawerHeader pb={2}>Detalhamento do Faturamento</DrawerHeader>
+        <DrawerHeader pb={2}>
+          <Flex align="center" justify="space-between" gap={3} pr={8}>
+            <Text>Detalhamento do Faturamento</Text>
+            <Button
+              leftIcon={<DownloadIcon />}
+              colorScheme="green"
+              variant="outline"
+              size="sm"
+              onClick={handleExportAnalytic}
+              isLoading={exporting}
+              loadingText="Exportando..."
+            >
+              Exportar Analítico
+            </Button>
+          </Flex>
+        </DrawerHeader>
 
         <DrawerBody display="flex" flexDirection="column" gap={6} pb={8}>
           {loading && (
