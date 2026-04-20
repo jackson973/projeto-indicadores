@@ -34,8 +34,9 @@ import {
   useDisclosure,
   useColorModeValue
 } from "@chakra-ui/react";
-import { AddIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, SearchIcon, CloseIcon } from "@chakra-ui/icons";
+import { AddIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, SearchIcon, CloseIcon, DownloadIcon } from "@chakra-ui/icons";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
+import * as XLSX from "xlsx";
 import CashFlowEntryModal from "./CashFlowEntryModal";
 import CashFlowCategoriesModal from "./CashFlowCategoriesModal";
 import CashFlowRecurrencesModal from "./CashFlowRecurrencesModal";
@@ -265,6 +266,52 @@ const CashFlow = () => {
   const openEditEntry = (entry) => {
     setEditingEntry(entry);
     entryModal.onOpen();
+  };
+
+  const handleExportExcel = () => {
+    if (!entriesWithBalance.length) {
+      toast({ title: "Nenhum lançamento para exportar.", status: "warning", duration: 3000 });
+      return;
+    }
+
+    const monthLabel = monthNames[month - 1];
+    const openingBalance = summary?.openingBalance ?? 0;
+
+    const rows = [
+      ["Status", "Data", "Tipo", "Histórico", "Despesa", "Receita", "Saldo"],
+      ["", "", "", "SALDO ANTERIOR", "", "", openingBalance],
+      ...entriesWithBalance.map(e => {
+        const [y, m, d] = String(e.date).slice(0, 10).split("-");
+        return [
+          e.status === "ok" ? "OK" : "Pendente",
+          `${d}/${m}/${y}`,
+          e.categoryName || "",
+          e.description || "",
+          e.type === "expense" ? e.amount : "",
+          e.type === "income" ? e.amount : "",
+          e.runningBalance
+        ];
+      })
+    ];
+
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws["!cols"] = [
+      { wch: 10 }, { wch: 12 }, { wch: 22 }, { wch: 50 },
+      { wch: 14 }, { wch: 14 }, { wch: 14 }
+    ];
+
+    const currencyFmt = 'R$ #,##0.00;[Red]-R$ #,##0.00';
+    const range = XLSX.utils.decode_range(ws["!ref"]);
+    for (let R = 1; R <= range.e.r; R++) {
+      for (const C of [4, 5, 6]) {
+        const cell = ws[XLSX.utils.encode_cell({ r: R, c: C })];
+        if (cell && typeof cell.v === "number") cell.z = currencyFmt;
+      }
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `${monthLabel} ${year}`);
+    XLSX.writeFile(wb, `fluxo-caixa-${String(month).padStart(2, "0")}-${year}.xlsx`);
   };
 
   // Compute running balance for table and apply filters
@@ -679,9 +726,20 @@ const CashFlow = () => {
                 )}
               </InputGroup>
             </HStack>
-            <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openNewEntry}>
-              Novo lançamento
-            </Button>
+            <HStack spacing={2}>
+              <Button
+                leftIcon={<DownloadIcon />}
+                colorScheme="green"
+                variant="outline"
+                size="sm"
+                onClick={handleExportExcel}
+              >
+                Exportar Excel
+              </Button>
+              <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openNewEntry}>
+                Novo lançamento
+              </Button>
+            </HStack>
           </Flex>
 
           <TableContainer>
