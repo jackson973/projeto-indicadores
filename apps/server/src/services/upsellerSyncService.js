@@ -401,7 +401,12 @@ function mapOrdersToSales(orders) {
     // Use orderPayTime as date (matches UpSeller's timeType=1 "hora do pagamento" filter)
     const orderDate = order.orderPayTime || order.orderCreateTime || '';
 
-    const platformOrderId = order.platformOrderId || '';
+    // Platform-native order ID: /api/order/index uses `orderId`, legacy
+    // /api/profit-report/page uses `platformOrderId`. `orderNumber` is always
+    // the UpSeller internal code (already persisted as order_id).
+    const platformOrderId = String(
+      order.orderId || order.extendedId || order.platformOrderId || ''
+    );
 
     if (items.length === 0) {
       // Order without item detail - create single row
