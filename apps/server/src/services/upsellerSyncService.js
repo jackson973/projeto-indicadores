@@ -382,10 +382,34 @@ function mapOrdersToSales(orders) {
 
   const sales = [];
 
+  // Targeted debug: set UPSELLER_DEBUG_ORDER_IDS=id1,id2 (matches orderId,
+  // extendedId, platformOrderId or orderNumber) to dump the raw payload and
+  // the mapped sale rows for those orders.
+  const debugTargets = new Set(
+    (process.env.UPSELLER_DEBUG_ORDER_IDS || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+  );
+
   for (const order of orders) {
     const rawPlatform = (order.platform || '').toLowerCase().trim();
     const basePlatform = platformMap[rawPlatform] || order.platform || '';
     const items = order.orderItemList || [];
+
+    const isDebugOrder = debugTargets.size > 0 && [
+      order.orderId,
+      order.extendedId,
+      order.platformOrderId,
+      order.orderNumber
+    ].some(v => v != null && debugTargets.has(String(v)));
+
+    if (isDebugOrder) {
+      console.log(
+        `[UpSeller][DEBUG] Raw order payload for ${order.orderNumber || order.orderId}:\n` +
+        JSON.stringify(order, null, 2)
+      );
+    }
 
     // Derive status from orderStatePlatform (e.g. CANCELLED, cancelled_cancelled, cancelled_not_delivered_returned)
     // Orders with orderAmount=0 but items with prices are refunded orders (sale happened),
@@ -438,9 +462,16 @@ function mapOrdersToSales(orders) {
       // Distribute orderTotal proportionally across items
       const ratio = itemsSum > 0 ? orderTotal / itemsSum : 1;
 
+      if (isDebugOrder) {
+        console.log(
+          `[UpSeller][DEBUG] ${order.orderNumber}: ` +
+          `orderAmount=${rawOrderTotal}, itemsSum=${itemsSum}, ratio=${ratio}`
+        );
+      }
+
       for (const item of items) {
         const itemValue = (parseFloat(item.price) || 0) * (item.productCount || 1);
-        sales.push({
+        const row = {
           orderId: order.orderNumber || '',
           platformOrderId,
           date: orderDate,
@@ -463,7 +494,16 @@ function mapOrdersToSales(orders) {
           codcli: '',
           nomeFantasia: '',
           cnpjCpf: '',
-        });
+        };
+        if (isDebugOrder) {
+          console.log(
+            `[UpSeller][DEBUG]   item sku=${row.sku || '(empty)'} ` +
+            `variation="${row.variation}" ` +
+            `price_raw=${item.price} qty=${row.quantity} ` +
+            `→ unitPrice=${row.unitPrice} total=${row.total}`
+          );
+        }
+        sales.push(row);
       }
     }
   }
