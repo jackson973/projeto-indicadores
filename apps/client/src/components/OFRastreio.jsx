@@ -128,15 +128,6 @@ export default function OFRastreio() {
                 <Badge colorScheme="blue" fontSize="md" px={3} py={1} borderRadius="md">
                   OF {data.fac_numero}
                 </Badge>
-                {data.cliente_nome && (
-                  <>
-                    <Box w="1px" h="28px" bg="gray.200" display={{ base: "none", md: "block" }} />
-                    <HStack spacing={1} fontSize="sm" minW={0}>
-                      <Text color="gray.500" flexShrink={0}>Terceirizado:</Text>
-                      <Text fontWeight="medium" color="gray.700" isTruncated>{data.cliente_nome}</Text>
-                    </HStack>
-                  </>
-                )}
               </Flex>
               <Text fontSize="xs" color="gray.400" flexShrink={0}>
                 {data.etapas.length} etapa{data.etapas.length !== 1 ? "s" : ""}
@@ -236,13 +227,27 @@ export default function OFRastreio() {
                         fontWeight="bold"
                         fontSize="xs"
                         color={isSelected ? "blue.700" : "gray.700"}
-                        mb={2}
+                        mb={1}
                         textAlign="center"
                         textTransform="uppercase"
                         letterSpacing="wide"
                       >
                         {etapa.descsetor}
                       </Text>
+
+                      {/* Responsável (terceirizado) */}
+                      <Tooltip label={etapa.terceirizado_nome || "Sem responsável"} placement="top" hasArrow>
+                        <Text
+                          fontSize="10px"
+                          color={etapa.terceirizado_nome ? "gray.600" : "gray.400"}
+                          textAlign="center"
+                          mb={2}
+                          isTruncated
+                          fontStyle={etapa.terceirizado_nome ? "normal" : "italic"}
+                        >
+                          {etapa.terceirizado_nome || "—"}
+                        </Text>
+                      </Tooltip>
 
                       <Divider mb={2} />
 
@@ -313,13 +318,19 @@ export default function OFRastreio() {
                 direction={{ base: "column", md: "row" }}
                 gap={3}
               >
-                <Flex align="center" gap={3}>
+                <Flex align="center" gap={3} flexWrap="wrap">
                   <Badge colorScheme="blue" px={2} py={1} borderRadius="md">
                     Etapa {selectedIdx + 1}
                   </Badge>
                   <Heading size="sm" color="blue.700">
                     {selectedEtapa.descsetor}
                   </Heading>
+                  {selectedEtapa.terceirizado_nome && (
+                    <HStack spacing={1} fontSize="sm">
+                      <Text color="gray.500">Responsável:</Text>
+                      <Text fontWeight="medium" color="gray.700">{selectedEtapa.terceirizado_nome}</Text>
+                    </HStack>
+                  )}
                 </Flex>
                 <Flex
                   gap={{ base: 2, md: 6 }}

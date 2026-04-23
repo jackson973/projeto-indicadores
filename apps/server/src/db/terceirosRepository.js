@@ -1275,6 +1275,7 @@ async function getOFRastreio(ofNumero) {
         dt_entrada: row.fac_dt_s,
         dt_lancto: row.fac_dt_lan,
         dt_prev_ret: row.fac_dt_prev_ret,
+        terceirizadoSet: new Map(),
         produtoMap: new Map()
       });
     }
@@ -1285,6 +1286,17 @@ async function getOFRastreio(ofNumero) {
     }
     if (row.fac_dt_prev_ret && (!etapa.dt_prev_ret || row.fac_dt_prev_ret > etapa.dt_prev_ret)) {
       etapa.dt_prev_ret = row.fac_dt_prev_ret;
+    }
+    // Track terceirizados (responsáveis) per etapa, dedup by codcli
+    const terceirizadoNome = row.cliente_fantasia || row.cliente_nome || null;
+    if (terceirizadoNome || row.fac_codcli) {
+      const tKey = row.fac_codcli || terceirizadoNome;
+      if (!etapa.terceirizadoSet.has(tKey)) {
+        etapa.terceirizadoSet.set(tKey, {
+          codcli: row.fac_codcli,
+          nome: terceirizadoNome
+        });
+      }
     }
     // Group products by codigo+parte, summing quantities (ignore cor/tamanho)
     const prodKey = `${row.fac_codigo_produto}|${row.fac_parte || ''}`;
@@ -1313,11 +1325,17 @@ async function getOFRastreio(ofNumero) {
     dt_abertura,
     dt_ultimo_lancto,
     ultima_etapa,
-    etapas: Array.from(etapaMap.values()).map(e => ({
-      ...e,
-      produtos: Array.from(e.produtoMap.values()),
-      produtoMap: undefined
-    }))
+    etapas: Array.from(etapaMap.values()).map(e => {
+      const terceirizados = Array.from(e.terceirizadoSet.values());
+      return {
+        ...e,
+        terceirizados,
+        terceirizado_nome: terceirizados.map(t => t.nome).filter(Boolean).join(" / ") || null,
+        produtos: Array.from(e.produtoMap.values()),
+        produtoMap: undefined,
+        terceirizadoSet: undefined
+      };
+    })
   };
 }
 
