@@ -38,29 +38,6 @@ const sizeExpr = `
     ELSE NULL
   END`;
 
-// Ordem canônica de exibição: PRE → RN → PP → P → M → G → GG → XG... → idades
-const SIZE_ORDER = ["PRE", "RN", "PP", "P", "M", "G", "GG", "XG", "XGG", "EG", "EGG", "UN", "U"];
-
-// Normaliza rótulos: "1 ano"/"1 Ano"/"1 anos" → "1"; "GG (9 a 12 meses)" → "GG"; case-insensitive
-const normalizeSizeLabel = (raw) => {
-  const s = String(raw || "").trim();
-  if (!s) return "";
-  const yearMatch = s.match(/^(\d+)\s*anos?$/i);
-  if (yearMatch) return yearMatch[1];
-  const sizeMatch = s.match(/^(PRE|PP|P|M|GG|G|XGG|XG|EGG|EG|RN|UN|U)(\s*\(.*\))?$/i);
-  if (sizeMatch) return sizeMatch[1].toUpperCase();
-  return s;
-};
-
-const sizeOrderIndex = (label) => {
-  const idx = SIZE_ORDER.indexOf(label);
-  if (idx !== -1) return idx;
-  if (/^\d+$/.test(label)) return 100 + parseInt(label, 10);
-  const monthMatch = label.match(/^(\d+)\s*a\s*\d+\s*mes(es)?$/i);
-  if (monthMatch) return 50 + parseInt(monthMatch[1], 10);
-  return 1000;
-};
-
 /**
  * Lista produtos distintos da tabela sales, agrupados por cod_store + ad_name.
  * LEFT JOIN com products via store_variation_key para obter kit_qty.
@@ -748,20 +725,12 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
   const sizesByGroupKey = new Map();
   for (const row of byGroupSizeRes.rows) {
     const key = row.group_id === null || row.group_id === undefined ? '__ungrouped__' : String(row.group_id);
-    const normalized = normalizeSizeLabel(row.size_label);
-    if (!normalized) continue;
-    if (!sizesByGroupKey.has(key)) sizesByGroupKey.set(key, new Map());
-    const sizeMap = sizesByGroupKey.get(key);
-    sizeMap.set(normalized, (sizeMap.get(normalized) || 0) + (parseFloat(row.units) || 0));
+    if (!sizesByGroupKey.has(key)) sizesByGroupKey.set(key, []);
+    sizesByGroupKey.get(key).push({
+      size: row.size_label,
+      units: parseFloat(row.units) || 0,
+    });
   }
-
-  const getSortedSizes = (key) => {
-    const sizeMap = sizesByGroupKey.get(key);
-    if (!sizeMap) return [];
-    return Array.from(sizeMap.entries())
-      .map(([size, units]) => ({ size, units }))
-      .sort((a, b) => sizeOrderIndex(a.size) - sizeOrderIndex(b.size));
-  };
 
   return {
     summary: {
@@ -783,7 +752,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
         group_name: r.group_name,
         units: parseFloat(r.units) || 0,
         revenue: parseFloat(r.revenue) || 0,
-        sizes: getSortedSizes(key),
+        sizes: sizesByGroupKey.get(key) || [],
       };
     }),
     byProduct: byProductRes.rows.map((r) => ({

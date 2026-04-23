@@ -247,22 +247,16 @@ const ProductDashboard = () => {
     if (!active || !payload?.length) return null;
     const d = payload[0];
     const sizes = d.payload?.sizes || [];
-    const twoCols = sizes.length >= 4;
     return (
       <Box bg={panelBg} p={2} borderRadius="md" boxShadow="md" border="1px solid" borderColor={borderColor} fontSize="xs">
         <Text fontWeight="bold">{d.name}</Text>
         <Text>{fmt(d.value)} unidades</Text>
         {sizes.length > 0 && (
-          <SimpleGrid
-            mt={1} pt={1}
-            borderTop="1px solid" borderColor={borderColor}
-            columns={{ base: 1, sm: twoCols ? 2 : 1 }}
-            spacingX={3} spacingY={0}
-          >
+          <Box mt={1} pt={1} borderTop="1px solid" borderColor={borderColor}>
             {sizes.map((s, i) => (
               <Text key={i} color="gray.500">{s.size}: {fmt(s.units)} un</Text>
             ))}
-          </SimpleGrid>
+          </Box>
         )}
       </Box>
     );
