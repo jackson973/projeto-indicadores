@@ -68,6 +68,42 @@ function pickColumn(idx, aliases) {
 
 // ─── Parser do Income Report ────────────────────────────────────────────────
 
+// Converte a planilha em objetos, detectando automaticamente a linha de cabeçalho.
+// A Shopee às vezes insere linhas de título/metadata antes do header real.
+// `requiredAliases`: lista de aliases (já normalizados) que devem existir numa
+// linha para ser considerada o cabeçalho.
+function sheetToRows(sheet, requiredAliases) {
+  const matrix = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+  if (!matrix.length) return { headers: [], rows: [] };
+
+  let headerRowIdx = 0;
+  for (let i = 0; i < Math.min(matrix.length, 10); i++) {
+    const row = matrix[i] || [];
+    const normalized = row.map((c) => norm(c));
+    const hasAll = requiredAliases.every((alias) => {
+      const a = norm(alias);
+      return normalized.some((c) => c === a || (c && c.includes(a)));
+    });
+    if (hasAll) {
+      headerRowIdx = i;
+      break;
+    }
+  }
+
+  const headers = (matrix[headerRowIdx] || []).map((h) => String(h || '').trim());
+  const rows = [];
+  for (let i = headerRowIdx + 1; i < matrix.length; i++) {
+    const raw = matrix[i] || [];
+    if (raw.every((c) => c === '' || c == null)) continue;
+    const obj = {};
+    for (let c = 0; c < headers.length; c++) {
+      if (headers[c]) obj[headers[c]] = raw[c] ?? '';
+    }
+    rows.push(obj);
+  }
+  return { headers, rows };
+}
+
 function parseIncomeReport(buffer) {
   const workbook = xlsx.read(buffer, { type: 'buffer', cellDates: true });
 
@@ -86,21 +122,26 @@ function parseIncomeReport(buffer) {
   const shippingSheet = findSheet(['shipping fee discrepancy', 'shipping', 'frete']);
 
   if (!rendaSheet) {
-    throw new Error('Aba "Renda" (Income) não encontrada no arquivo. Abas disponíveis: ' + workbook.SheetNames.join(', '));
+    throw new Error('Aba "Renda" (Income) não encontrada. Abas no arquivo: ' + workbook.SheetNames.join(', '));
   }
 
-  const rendaRows = xlsx.utils.sheet_to_json(workbook.Sheets[rendaSheet], { defval: '' });
-  const sfdRows = sfdSheet ? xlsx.utils.sheet_to_json(workbook.Sheets[sfdSheet], { defval: '' }) : [];
-  const shippingRows = shippingSheet ? xlsx.utils.sheet_to_json(workbook.Sheets[shippingSheet], { defval: '' }) : [];
+  const { headers: rendaHeaders, rows: rendaRows } =
+    sheetToRows(workbook.Sheets[rendaSheet], ['id do pedido']);
+  const { rows: sfdRows } = sfdSheet
+    ? sheetToRows(workbook.Sheets[sfdSheet], ['id do pedido'])
+    : { rows: [] };
+  const { rows: shippingRows } = shippingSheet
+    ? sheetToRows(workbook.Sheets[shippingSheet], ['id do pedido'])
+    : { rows: [] };
 
-  const income = parseRenda(rendaRows);
+  const income = parseRenda(rendaRows, rendaHeaders);
   const sfd = parseServiceFee(sfdRows);
   const shipping = parseShipping(shippingRows);
 
   return { income, sfd, shipping };
 }
 
-function parseRenda(rows) {
+function parseRenda(rows, headers) {
   if (!rows.length) return new Map();
   const idx = buildColumnIndex(rows[0]);
 
@@ -120,7 +161,11 @@ function parseRenda(rows) {
   };
 
   if (!col.orderId) {
-    throw new Error('Coluna "ID do pedido" não encontrada na aba Renda.');
+    const available = (headers || Object.keys(rows[0] || {})).filter(Boolean);
+    throw new Error(
+      'Coluna "ID do pedido" não encontrada na aba Renda. ' +
+      'Colunas detectadas: ' + (available.length ? available.join(', ') : '(nenhuma)')
+    );
   }
 
   const grouped = new Map();
