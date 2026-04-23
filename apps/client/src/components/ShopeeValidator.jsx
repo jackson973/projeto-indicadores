@@ -1,11 +1,12 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Box, Flex, HStack, VStack, Text, Heading, Button, Input, Select,
+  Box, Flex, HStack, VStack, Text, Heading, Button, Input, InputGroup,
+  InputLeftElement, InputRightElement, Select,
   SimpleGrid, Table, Thead, Tbody, Tr, Th, Td, Badge, Spinner,
   FormControl, FormLabel, Alert, AlertIcon, AlertDescription,
   Tooltip, Divider, useColorModeValue, useBreakpointValue, IconButton,
 } from "@chakra-ui/react";
-import { AttachmentIcon, ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
+import { AttachmentIcon, ChevronDownIcon, ChevronUpIcon, SearchIcon, CloseIcon } from "@chakra-ui/icons";
 import { fetchValidadorShopeeStores, reconciliateShopee } from "../api";
 import useAppToast from "../hooks/useAppToast";
 
@@ -266,6 +267,7 @@ export default function ShopeeValidator() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [causaFilter, setCausaFilter] = useState("all");
+  const [search, setSearch] = useState("");
   const [expanded, setExpanded] = useState(null);
   const fileRef = useRef(null);
 
@@ -296,6 +298,7 @@ export default function ShopeeValidator() {
       const result = await reconciliateShopee({ start, end, store, incomeReport: file });
       setData(result);
       setCausaFilter("all");
+      setSearch("");
       setExpanded(null);
       toast({ title: `Reconciliação concluída: ${result.orders?.length || 0} pedidos.`, status: "success" });
     } catch (err) {
@@ -307,8 +310,15 @@ export default function ShopeeValidator() {
 
   const filtered = useMemo(() => {
     if (!data?.orders) return [];
-    return filterOrders(data.orders, causaFilter);
-  }, [data, causaFilter]);
+    const base = filterOrders(data.orders, causaFilter);
+    const q = search.trim().toLowerCase();
+    if (!q) return base;
+    return base.filter((o) => {
+      const pid = String(o.platformOrderId || "").toLowerCase();
+      const iid = String(o.internalOrderId || "").toLowerCase();
+      return pid.includes(q) || iid.includes(q);
+    });
+  }, [data, causaFilter, search]);
 
   return (
     <Flex direction="column" h={`calc(100dvh - ${viewportOffset})`} minH={0}>
@@ -427,24 +437,47 @@ export default function ShopeeValidator() {
             />
           </SimpleGrid>
 
-          {/* Filtros por causa */}
-          <HStack flexShrink={0} spacing={2} wrap="wrap" mb={3}>
-            {FILTERS.map((f) => {
-              const count = filterOrders(data.orders, f.key).length;
-              const active = causaFilter === f.key;
-              return (
-                <Button
-                  key={f.key}
-                  size="xs"
-                  variant={active ? "solid" : "outline"}
-                  colorScheme={active ? "blue" : "gray"}
-                  onClick={() => setCausaFilter(f.key)}
-                >
-                  {f.label} <Badge ml={2} colorScheme={active ? "whiteAlpha" : "gray"}>{count}</Badge>
-                </Button>
-              );
-            })}
-          </HStack>
+          {/* Busca + filtros por causa */}
+          <Flex flexShrink={0} gap={3} mb={3} align="center" wrap="wrap">
+            <InputGroup size="sm" maxW="260px" flexShrink={0}>
+              <InputLeftElement pointerEvents="none" h="32px">
+                <SearchIcon color="gray.400" boxSize={3} />
+              </InputLeftElement>
+              <Input
+                placeholder="Buscar Nº pedido (Shopee ou UpSeller)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <InputRightElement h="32px">
+                  <IconButton
+                    aria-label="Limpar busca"
+                    icon={<CloseIcon boxSize={2} />}
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setSearch("")}
+                  />
+                </InputRightElement>
+              )}
+            </InputGroup>
+            <HStack spacing={2} wrap="wrap">
+              {FILTERS.map((f) => {
+                const count = filterOrders(data.orders, f.key).length;
+                const active = causaFilter === f.key;
+                return (
+                  <Button
+                    key={f.key}
+                    size="xs"
+                    variant={active ? "solid" : "outline"}
+                    colorScheme={active ? "blue" : "gray"}
+                    onClick={() => setCausaFilter(f.key)}
+                  >
+                    {f.label} <Badge ml={2} colorScheme={active ? "whiteAlpha" : "gray"}>{count}</Badge>
+                  </Button>
+                );
+              })}
+            </HStack>
+          </Flex>
 
           {/* Tabela (scroll apenas desta área; cabeçalho da tabela fica sticky) */}
           <Box
