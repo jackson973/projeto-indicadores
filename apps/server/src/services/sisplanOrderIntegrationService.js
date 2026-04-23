@@ -189,7 +189,7 @@ function buildInsertPedido(numero, order, user) {
   const now = nowBR();
   const entrega = addDays(now, 2);
   const periodo = buildPeriodo(now);
-  const fatura = order.price_table === 'SN' ? '0' : order.price_table === 'MN' ? '50' : '100';
+  const fatura = order.price_table === 'SN' ? '100' : order.price_table === 'MN' ? '50' : null;
   const pgto = formatPgto(order.payment_condition_erp || order.payment_condition || '');
 
   const fields = {
@@ -278,7 +278,7 @@ async function integrateOrderDryRun(orderId, userId) {
     log.push(`INTEGRAÇÃO PEDIDO #${orderId} → SISPLAN (DRY-RUN)`);
     log.push(`Data: ${formatDateTime(nowBR())}`);
     log.push(`Cliente: ${order.customer_snapshot?.fantasy_name || order.customer_snapshot?.company_name} (Sisplan: ${customer.sisplan_id})`);
-    log.push(`Tabela de preço: ${order.price_table} | Fatura: ${order.price_table === 'SN' ? '0' : order.price_table === 'MN' ? '50' : '100'}`);
+    log.push(`Tabela de preço: ${order.price_table} | Fatura: ${order.price_table === 'SN' ? '100' : order.price_table === 'MN' ? '50' : 'NULL'}`);
     log.push('='.repeat(60));
 
     const numero = 'XXXXX';
