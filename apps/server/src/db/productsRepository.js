@@ -778,19 +778,12 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
     })),
     byGroup: byGroupRes.rows.map((r) => {
       const key = r.group_id === null || r.group_id === undefined ? '__ungrouped__' : String(r.group_id);
-      const totalUnits = parseFloat(r.units) || 0;
-      const sizes = getSortedSizes(key);
-      const identified = sizes.reduce((s, x) => s + x.units, 0);
-      const remainder = totalUnits - identified;
-      if (remainder > 0.5 && sizes.length > 0) {
-        sizes.push({ size: 'Sem tamanho', units: remainder });
-      }
       return {
         group_id: r.group_id,
         group_name: r.group_name,
-        units: totalUnits,
+        units: parseFloat(r.units) || 0,
         revenue: parseFloat(r.revenue) || 0,
-        sizes,
+        sizes: getSortedSizes(key),
       };
     }),
     byProduct: byProductRes.rows.map((r) => ({
