@@ -12,9 +12,30 @@ function round2(n) {
 function parseNumber(v) {
   if (v == null || v === '') return 0;
   if (typeof v === 'number') return v;
-  const s = String(v).trim().replace(/\s+/g, '').replace(/^R\$/i, '').replace(/\./g, '').replace(',', '.');
+  let s = String(v).trim();
+  if (!s) return 0;
+  s = s.replace(/\s+/g, '').replace(/R\$/gi, '');
+  const neg = /^-/.test(s);
+  if (neg) s = s.slice(1);
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+  if (hasComma && hasDot) {
+    // Ambos presentes: o último separador é o decimal.
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) {
+      // BR: 1.234,56
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      // EN: 1,234.56
+      s = s.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    // Apenas vírgula → decimal (BR)
+    s = s.replace(',', '.');
+  }
+  // Apenas ponto ou nenhum: deixa como está (ponto é decimal em EN)
   const n = parseFloat(s);
-  return isNaN(n) ? 0 : n;
+  if (isNaN(n)) return 0;
+  return neg ? -n : n;
 }
 
 function parseDateBR(v) {
@@ -73,7 +94,9 @@ function pickColumn(idx, aliases) {
 // `requiredAliases`: lista de aliases (já normalizados) que devem existir numa
 // linha para ser considerada o cabeçalho.
 function sheetToRows(sheet, requiredAliases) {
-  const matrix = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+  // raw: true preserva números como Number (evita inflação por formatação de
+  // célula em locale divergente — ex.: "38.90" string seria parseado errado).
+  const matrix = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: true });
   if (!matrix.length) return { headers: [], rows: [] };
 
   let headerRowIdx = 0;
