@@ -3,7 +3,7 @@ import {
   Box, Flex, HStack, VStack, Text, Heading, Button, Input, Select,
   SimpleGrid, Table, Thead, Tbody, Tr, Th, Td, Badge, Spinner,
   FormControl, FormLabel, Alert, AlertIcon, AlertDescription,
-  Tooltip, Divider, useColorModeValue, IconButton,
+  Tooltip, Divider, useColorModeValue, useBreakpointValue, IconButton,
 } from "@chakra-ui/react";
 import { AttachmentIcon, ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import { fetchValidadorShopeeStores, reconciliateShopee } from "../api";
@@ -249,6 +249,7 @@ export default function ShopeeValidator() {
   const rowHoverBg = useColorModeValue("gray.50", "gray.700");
   const borderColor = useColorModeValue("gray.200", "gray.600");
   const cardBg = useColorModeValue("white", "gray.700");
+  const viewportOffset = useBreakpointValue({ base: "72px", md: "48px" }) || "48px";
 
   useEffect(() => {
     fetchValidadorShopeeStores()
@@ -287,14 +288,16 @@ export default function ShopeeValidator() {
   }, [data, causaFilter]);
 
   return (
-    <Box>
-      <Heading size="lg" mb={1}>Validador de Taxas — Shopee</Heading>
-      <Text fontSize="sm" color="gray.500" mb={6}>
-        Cruzamento de pedidos do sistema (via UpSeller) com o Income Report da Shopee.
-      </Text>
+    <Flex direction="column" h={`calc(100dvh - ${viewportOffset})`} minH={0}>
+      <Box flexShrink={0}>
+        <Heading size="lg" mb={1}>Validador de Taxas — Shopee</Heading>
+        <Text fontSize="sm" color="gray.500" mb={4}>
+          Cruzamento de pedidos do sistema (via UpSeller) com o Income Report da Shopee.
+        </Text>
+      </Box>
 
       {/* Passo 1: filtros + upload */}
-      <Box p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor} bg={cardBg} mb={5}>
+      <Box flexShrink={0} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor} bg={cardBg} mb={4}>
         <Text fontSize="xs" color="gray.500" textTransform="uppercase" letterSpacing="wider" mb={3}>
           1. Selecione o período, a loja e envie o Income Report
         </Text>
@@ -360,7 +363,7 @@ export default function ShopeeValidator() {
       {data && (
         <>
           {/* Métricas */}
-          <SimpleGrid columns={{ base: 2, md: 4 }} spacing={3} mb={5}>
+          <SimpleGrid flexShrink={0} columns={{ base: 2, md: 4 }} spacing={3} mb={4}>
             <MetricCard
               label="Tudo certo"
               value={data.summary.ok}
@@ -391,7 +394,7 @@ export default function ShopeeValidator() {
           </SimpleGrid>
 
           {/* Filtros por causa */}
-          <HStack spacing={2} wrap="wrap" mb={3}>
+          <HStack flexShrink={0} spacing={2} wrap="wrap" mb={3}>
             {FILTERS.map((f) => {
               const count =
                 f.key === "all"
@@ -412,24 +415,31 @@ export default function ShopeeValidator() {
             })}
           </HStack>
 
-          {/* Tabela */}
-          <Box borderWidth="1px" borderColor={borderColor} borderRadius="lg" overflow="hidden" bg={cardBg}>
-            <Box overflowX="auto">
-              <Table size="sm" variant="simple">
-                <Thead bg={headerBg}>
-                  <Tr>
-                    <Th w="28px"></Th>
-                    <Th>Nº Pedido</Th>
-                    <Th>Data</Th>
-                    <Th>Produto</Th>
-                    <Th isNumeric>Preço Tabela</Th>
-                    <Th isNumeric>Liberado Esp.</Th>
-                    <Th isNumeric>Liberado Real</Th>
-                    <Th isNumeric>Diff</Th>
-                    <Th>Causa</Th>
-                  </Tr>
-                </Thead>
-                <Tbody>
+          {/* Tabela (scroll apenas desta área; cabeçalho da tabela fica sticky) */}
+          <Box
+            flex="1"
+            minH={0}
+            borderWidth="1px"
+            borderColor={borderColor}
+            borderRadius="lg"
+            overflow="auto"
+            bg={cardBg}
+          >
+            <Table size="sm" variant="simple">
+              <Thead>
+                <Tr>
+                  <Th w="28px" position="sticky" top={0} zIndex={2} bg={headerBg}></Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg}>Nº Pedido</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg}>Data</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg}>Produto</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric>Preço Tabela</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric>Liberado Esp.</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric>Liberado Real</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric>Diff</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg}>Causa</Th>
+                </Tr>
+              </Thead>
+              <Tbody>
                   {filtered.length === 0 && (
                     <Tr>
                       <Td colSpan={9}>
@@ -490,10 +500,9 @@ export default function ShopeeValidator() {
                 </Tbody>
               </Table>
             </Box>
-          </Box>
 
           {data.incomeWithoutAnalitico?.length > 0 && (
-            <Alert status="warning" mt={4} borderRadius="md">
+            <Alert flexShrink={0} status="warning" mt={3} borderRadius="md">
               <AlertIcon />
               <AlertDescription fontSize="sm">
                 <b>{data.incomeWithoutAnalitico.length}</b> pedido(s) aparecem no Income Report mas não foram
@@ -504,6 +513,6 @@ export default function ShopeeValidator() {
           )}
         </>
       )}
-    </Box>
+    </Flex>
   );
 }
