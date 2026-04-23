@@ -35,16 +35,25 @@ const CAUSA_STYLE = {
 };
 
 const FILTERS = [
-  { key: "all",            label: "Todos"            },
-  { key: "ok",             label: "OK"               },
-  { key: "em_aberto",      label: "Em aberto"        },
-  { key: "taxa_adicional", label: "Taxa adicional"   },
-  { key: "peso_divergente",label: "Peso divergente"  },
-  { key: "afiliado",       label: "Afiliado"         },
-  { key: "multi_item",     label: "Multi-item"       },
-  { key: "investigar",     label: "Investigar"       },
-  { key: "cancelado",      label: "Cancelado"        },
+  { key: "all",             label: "Todos"            },
+  { key: "ok",              label: "OK"               },
+  { key: "em_aberto",       label: "Em aberto"        },
+  { key: "requerem_acao",   label: "Requerem ação"    },
+  { key: "taxa_adicional",  label: "Taxa adicional"   },
+  { key: "peso_divergente", label: "Peso divergente"  },
+  { key: "afiliado",        label: "Afiliado"         },
+  { key: "multi_item",      label: "Multi-item"       },
+  { key: "investigar",      label: "Investigar"       },
+  { key: "cancelado",       label: "Cancelado"        },
 ];
+
+const ACAO_KEYS = new Set(["taxa_adicional", "peso_divergente", "afiliado", "investigar"]);
+
+const filterOrders = (orders, key) => {
+  if (key === "all") return orders;
+  if (key === "requerem_acao") return orders.filter((o) => ACAO_KEYS.has(o.causaKey));
+  return orders.filter((o) => o.causaKey === key);
+};
 
 const today = new Date();
 const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
@@ -73,21 +82,28 @@ function CausaPill({ causaKey, causaLabel }) {
 
 // ── Métricas Cards ────────────────────────────────────────────────────────────
 
-function MetricCard({ label, value, color, sub }) {
+function MetricCard({ label, value, color, sub, onClick, active }) {
   const borderColor = useColorModeValue("gray.200", "gray.600");
   const cardBg = useColorModeValue("white", "gray.700");
+  const activeRing = useColorModeValue("blue.300", "blue.400");
+  const clickable = typeof onClick === "function";
   return (
     <Box
-      p={4}
+      p={3}
       borderRadius="lg"
       borderWidth="1px"
-      borderColor={borderColor}
+      borderColor={active ? activeRing : borderColor}
       borderLeftWidth="4px"
       borderLeftColor={color}
       bg={cardBg}
+      cursor={clickable ? "pointer" : "default"}
+      transition="transform 0.1s ease, box-shadow 0.1s ease"
+      _hover={clickable ? { transform: "translateY(-1px)", boxShadow: "sm" } : undefined}
+      onClick={clickable ? onClick : undefined}
+      boxShadow={active ? "0 0 0 2px var(--chakra-colors-blue-300)" : undefined}
     >
       <Text fontSize="xs" color="gray.500" textTransform="uppercase" letterSpacing="wider">{label}</Text>
-      <Text fontSize="2xl" fontWeight="bold" mt={1}>{value}</Text>
+      <Text fontSize="2xl" fontWeight="bold" mt={1} lineHeight="1.1">{value}</Text>
       {sub && <Text fontSize="xs" color="gray.500" mt={1}>{sub}</Text>}
     </Box>
   );
@@ -113,19 +129,27 @@ function OrderDetail({ row }) {
   );
 
   const hasIncome = row.valorLiberado != null;
+  const hasCalc = row.liberadoEsperado != null;
+  const precoCalc = row.precoIncome ?? row.precoTabela;
+  const voucherCalc = row.voucher ?? row.descontoSeller ?? 0;
 
   return (
     <Box p={4} bg={wrapperBg} borderRadius="md" mt={2}>
       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4}>
         {/* Coluna esquerda — Como calculamos */}
         <Box p={3} bg={leftBg} borderRadius="md">
-          <Text fontSize="sm" fontWeight="700" mb={2} color="gray.600" textTransform="uppercase" letterSpacing="wider">
-            Como calculamos
-          </Text>
-          {hasIncome ? (
+          <HStack justify="space-between" mb={2}>
+            <Text fontSize="sm" fontWeight="700" color="gray.600" textTransform="uppercase" letterSpacing="wider">
+              Como calculamos
+            </Text>
+            {row.liberadoEsperadoProjecao && (
+              <Badge colorScheme="yellow" fontSize="xx-small">Projeção</Badge>
+            )}
+          </HStack>
+          {hasCalc ? (
             <VStack align="stretch" spacing={0}>
-              <LineItem label={`Preço de venda${row.faixaLabel ? ` (${row.faixaLabel})` : ""}`} value={fmtBRL(row.precoIncome)} />
-              <LineItem label={`(–) Voucher seller${row.cupom ? ` [${row.cupom}]` : ""}`} value={`– ${fmtBRL(row.voucher)}`} negative />
+              <LineItem label={`Preço de venda${row.faixaLabel ? ` (${row.faixaLabel})` : ""}`} value={fmtBRL(precoCalc)} />
+              <LineItem label={`(–) Voucher seller${row.cupom ? ` [${row.cupom}]` : ""}`} value={`– ${fmtBRL(voucherCalc)}`} negative />
               <Divider my={1} />
               <LineItem label="Base de cálculo" value={fmtBRL(row.baseCalculo)} bold highlight />
               <LineItem
@@ -145,7 +169,7 @@ function OrderDetail({ row }) {
               <LineItem label="Liberado esperado" value={fmtBRL(row.liberadoEsperado)} bold highlight />
             </VStack>
           ) : (
-            <Text fontSize="sm" color="gray.500">Sem dados do Income Report para este pedido.</Text>
+            <Text fontSize="sm" color="gray.500">Pedido cancelado — não aplicável.</Text>
           )}
         </Box>
 
@@ -283,8 +307,7 @@ export default function ShopeeValidator() {
 
   const filtered = useMemo(() => {
     if (!data?.orders) return [];
-    if (causaFilter === "all") return data.orders;
-    return data.orders.filter((o) => o.causaKey === causaFilter);
+    return filterOrders(data.orders, causaFilter);
   }, [data, causaFilter]);
 
   return (
@@ -296,51 +319,56 @@ export default function ShopeeValidator() {
         </Text>
       </Box>
 
-      {/* Passo 1: filtros + upload */}
-      <Box flexShrink={0} p={4} borderRadius="lg" borderWidth="1px" borderColor={borderColor} bg={cardBg} mb={4}>
-        <Text fontSize="xs" color="gray.500" textTransform="uppercase" letterSpacing="wider" mb={3}>
-          1. Selecione o período, a loja e envie o Income Report
-        </Text>
-        <SimpleGrid columns={{ base: 1, md: 4 }} spacing={3} mb={3}>
-          <FormControl>
-            <FormLabel fontSize="xs" mb={1}>De</FormLabel>
-            <Input size="sm" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-          </FormControl>
-          <FormControl>
-            <FormLabel fontSize="xs" mb={1}>Até</FormLabel>
-            <Input size="sm" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
-          </FormControl>
-          <FormControl>
-            <FormLabel fontSize="xs" mb={1}>Loja Shopee</FormLabel>
-            <Select size="sm" value={store} onChange={(e) => setStore(e.target.value)} placeholder="Todas as lojas Shopee">
-              {stores.map((s) => <option key={s} value={s}>{s}</option>)}
-            </Select>
-          </FormControl>
-          <FormControl>
-            <FormLabel fontSize="xs" mb={1}>Income Report (.xlsx)</FormLabel>
-            <Input
-              ref={fileRef}
-              size="sm"
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              p={1}
-            />
-          </FormControl>
-        </SimpleGrid>
-        <HStack justify="flex-end">
-          <Button
-            leftIcon={<AttachmentIcon />}
-            colorScheme="blue"
+      {/* Passo 1: filtros + upload (linha única) */}
+      <Flex
+        flexShrink={0}
+        p={3}
+        borderRadius="lg"
+        borderWidth="1px"
+        borderColor={borderColor}
+        bg={cardBg}
+        mb={3}
+        gap={3}
+        align="flex-end"
+        wrap={{ base: "wrap", lg: "nowrap" }}
+      >
+        <FormControl flex="0 0 auto" w="135px">
+          <FormLabel fontSize="xs" mb={1}>De</FormLabel>
+          <Input size="sm" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
+        </FormControl>
+        <FormControl flex="0 0 auto" w="135px">
+          <FormLabel fontSize="xs" mb={1}>Até</FormLabel>
+          <Input size="sm" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
+        </FormControl>
+        <FormControl flex="1 1 180px" minW="180px">
+          <FormLabel fontSize="xs" mb={1}>Loja Shopee</FormLabel>
+          <Select size="sm" value={store} onChange={(e) => setStore(e.target.value)} placeholder="Todas">
+            {stores.map((s) => <option key={s} value={s}>{s}</option>)}
+          </Select>
+        </FormControl>
+        <FormControl flex="1 1 220px" minW="220px">
+          <FormLabel fontSize="xs" mb={1}>Income Report (.xlsx)</FormLabel>
+          <Input
+            ref={fileRef}
             size="sm"
-            onClick={handleUpload}
-            isLoading={loading}
-            isDisabled={!file}
-          >
-            Processar reconciliação
-          </Button>
-        </HStack>
-      </Box>
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            p={1}
+          />
+        </FormControl>
+        <Button
+          flexShrink={0}
+          leftIcon={<AttachmentIcon />}
+          colorScheme="blue"
+          size="sm"
+          onClick={handleUpload}
+          isLoading={loading}
+          isDisabled={!file}
+        >
+          Processar
+        </Button>
+      </Flex>
 
       {loading && (
         <Flex justify="center" py={10}>
@@ -362,19 +390,23 @@ export default function ShopeeValidator() {
 
       {data && (
         <>
-          {/* Métricas */}
-          <SimpleGrid flexShrink={0} columns={{ base: 2, md: 4 }} spacing={3} mb={4}>
+          {/* Métricas — clicáveis para filtrar a tabela */}
+          <SimpleGrid flexShrink={0} columns={{ base: 2, md: 4 }} spacing={3} mb={3}>
             <MetricCard
               label="Tudo certo"
               value={data.summary.ok}
               color="green.400"
               sub={`Total liberado: ${fmtBRL(data.summary.totalLiberado)}`}
+              active={causaFilter === "ok"}
+              onClick={() => setCausaFilter(causaFilter === "ok" ? "all" : "ok")}
             />
             <MetricCard
               label="Em aberto"
               value={data.summary.emAberto}
               color="yellow.400"
-              sub="Aguardando liberação"
+              sub={`A receber: ${fmtBRL(data.summary.totalLiberadoEsperadoEmAberto)}`}
+              active={causaFilter === "em_aberto"}
+              onClick={() => setCausaFilter(causaFilter === "em_aberto" ? "all" : "em_aberto")}
             />
             <MetricCard
               label="Requerem ação"
@@ -384,6 +416,8 @@ export default function ShopeeValidator() {
               }
               color="red.400"
               sub={`Investigar: ${data.summary.investigar} · Taxa adic.: ${data.summary.taxaAdicional}`}
+              active={causaFilter === "requerem_acao"}
+              onClick={() => setCausaFilter(causaFilter === "requerem_acao" ? "all" : "requerem_acao")}
             />
             <MetricCard
               label="Impacto financeiro"
@@ -396,10 +430,7 @@ export default function ShopeeValidator() {
           {/* Filtros por causa */}
           <HStack flexShrink={0} spacing={2} wrap="wrap" mb={3}>
             {FILTERS.map((f) => {
-              const count =
-                f.key === "all"
-                  ? data.orders.length
-                  : data.orders.filter((o) => o.causaKey === f.key).length;
+              const count = filterOrders(data.orders, f.key).length;
               const active = causaFilter === f.key;
               return (
                 <Button
@@ -425,18 +456,18 @@ export default function ShopeeValidator() {
             overflow="auto"
             bg={cardBg}
           >
-            <Table size="sm" variant="simple">
+            <Table size="sm" variant="simple" sx={{ tableLayout: "auto", minWidth: "900px" }}>
               <Thead>
                 <Tr>
                   <Th w="28px" position="sticky" top={0} zIndex={2} bg={headerBg}></Th>
-                  <Th position="sticky" top={0} zIndex={2} bg={headerBg}>Nº Pedido</Th>
-                  <Th position="sticky" top={0} zIndex={2} bg={headerBg}>Data</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} whiteSpace="nowrap">Nº Pedido</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} whiteSpace="nowrap">Data</Th>
                   <Th position="sticky" top={0} zIndex={2} bg={headerBg}>Produto</Th>
-                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric>Preço Tabela</Th>
-                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric>Liberado Esp.</Th>
-                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric>Liberado Real</Th>
-                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric>Diff</Th>
-                  <Th position="sticky" top={0} zIndex={2} bg={headerBg}>Causa</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric whiteSpace="nowrap">Preço Tabela</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric whiteSpace="nowrap">Liberado Esp.</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric whiteSpace="nowrap">Liberado Real</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} isNumeric whiteSpace="nowrap">Diff</Th>
+                  <Th position="sticky" top={0} zIndex={2} bg={headerBg} whiteSpace="nowrap">Causa</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -472,20 +503,20 @@ export default function ShopeeValidator() {
                               icon={isExpanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
                             />
                           </Td>
-                          <Td fontFamily="mono" fontSize="xs">{row.platformOrderId || row.internalOrderId}</Td>
-                          <Td fontSize="xs">{fmtDate(row.date)}</Td>
+                          <Td fontFamily="mono" fontSize="xs" whiteSpace="nowrap">{row.platformOrderId || row.internalOrderId}</Td>
+                          <Td fontSize="xs" whiteSpace="nowrap">{fmtDate(row.date)}</Td>
                           <Td>
                             <Tooltip label={row.produto}>
                               <Text maxW="240px" noOfLines={1} fontSize="sm">{row.produto}</Text>
                             </Tooltip>
                           </Td>
-                          <Td isNumeric fontSize="sm">{fmtBRL(row.precoTabela)}</Td>
-                          <Td isNumeric fontSize="sm">{fmtBRL(row.liberadoEsperado)}</Td>
-                          <Td isNumeric fontSize="sm">{fmtBRL(row.valorLiberado)}</Td>
-                          <Td isNumeric fontSize="sm" color={diffColor} fontWeight="600">
+                          <Td isNumeric fontSize="sm" whiteSpace="nowrap">{fmtBRL(row.precoTabela)}</Td>
+                          <Td isNumeric fontSize="sm" whiteSpace="nowrap">{fmtBRL(row.liberadoEsperado)}</Td>
+                          <Td isNumeric fontSize="sm" whiteSpace="nowrap">{fmtBRL(row.valorLiberado)}</Td>
+                          <Td isNumeric fontSize="sm" color={diffColor} fontWeight="600" whiteSpace="nowrap">
                             {row.diff == null ? "—" : fmtBRL(row.diff)}
                           </Td>
-                          <Td><CausaPill causaKey={row.causaKey} causaLabel={row.causaLabel} /></Td>
+                          <Td whiteSpace="nowrap"><CausaPill causaKey={row.causaKey} causaLabel={row.causaLabel} /></Td>
                         </Tr>
                         {isExpanded && (
                           <Tr>

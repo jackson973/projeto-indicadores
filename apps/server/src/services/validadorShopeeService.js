@@ -509,6 +509,7 @@ async function processReconciliation({ start, end, store }, incomeBuffer) {
     let calc = null;
     let diff = null;
     let statusPagamento = 'Em aberto';
+    let calcProjecao = false;
 
     if ((pedido.status || '').toLowerCase() === 'cancelado') {
       statusPagamento = 'Cancelado';
@@ -521,6 +522,17 @@ async function processReconciliation({ start, end, store }, incomeBuffer) {
       );
       diff = round2(incomeData.quantiaLiberada - calc.liberado);
       statusPagamento = incomeData.dataPagamento ? 'Pago' : 'Em aberto';
+    } else {
+      // Sem income → projetar liberado esperado a partir do analítico.
+      // precoTabela = unit × qty do analítico; descontoSeller é o voucher
+      // positivo; itens distintos = linhas agregadas no sales.
+      const projectedPreco = pedido.precoTabela;
+      const projectedVoucher = pedido.descontoSeller;
+      const projectedNItens = Math.max(1, pedido.items.length);
+      if (projectedPreco > 0) {
+        calc = calcularLiberadoEsperado(projectedPreco, projectedVoucher, projectedNItens, 0);
+        calcProjecao = true;
+      }
     }
 
     const cat = categorizar({
@@ -567,6 +579,7 @@ async function processReconciliation({ start, end, store }, incomeBuffer) {
       nItens: incomeData?.nItens ?? pedido.items.length,
       totalFixoEsperado: calc?.totalFixo ?? null,
       liberadoEsperado: calc?.liberado ?? null,
+      liberadoEsperadoProjecao: calcProjecao,
 
       // Resultado
       diff,
@@ -620,6 +633,11 @@ async function processReconciliation({ start, end, store }, incomeBuffer) {
     ),
     totalLiberadoEsperado: round2(
       results.filter(r => r.liberadoEsperado != null).reduce((s, r) => s + r.liberadoEsperado, 0)
+    ),
+    totalLiberadoEsperadoEmAberto: round2(
+      results
+        .filter(r => r.causaKey === 'em_aberto' && r.liberadoEsperado != null)
+        .reduce((s, r) => s + r.liberadoEsperado, 0)
     ),
     incomeOrphanCount: incomeWithoutAnalitico.length,
   };
