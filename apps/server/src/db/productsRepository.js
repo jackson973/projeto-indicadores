@@ -23,6 +23,21 @@ const variationPrefixExpr = `
     ELSE TRIM(SPLIT_PART(s.variation, ',', 1))
   END`;
 
+// Regex SQL que identifica padrão de tamanho (P, M, GG, 10 anos, 9 a 12 meses, 42, etc.)
+const SIZE_REGEX = `^((PP|P|M|G|GG|XG|XGG|EG|EGG|RN|UN|U)(\\s*\\(.*\\))?|\\d+\\s*a\\s*\\d+\\s*mes(es)?|\\d+\\s*anos?|\\d{1,3})$`;
+
+// Extrai o tamanho de s.variation; retorna NULL se nenhuma parte casar com o padrão
+const sizeExpr = `
+  CASE
+    WHEN s.variation LIKE '%,%' AND TRIM(SPLIT_PART(s.variation, ',', 1)) ~* '${SIZE_REGEX}'
+      THEN TRIM(SPLIT_PART(s.variation, ',', 1))
+    WHEN s.variation LIKE '%,%' AND TRIM(SUBSTRING(s.variation FROM POSITION(',' IN s.variation) + 1)) ~* '${SIZE_REGEX}'
+      THEN TRIM(SUBSTRING(s.variation FROM POSITION(',' IN s.variation) + 1))
+    WHEN s.variation IS NOT NULL AND s.variation NOT LIKE '%,%' AND TRIM(s.variation) ~* '${SIZE_REGEX}'
+      THEN TRIM(s.variation)
+    ELSE NULL
+  END`;
+
 /**
  * Lista produtos distintos da tabela sales, agrupados por cod_store + ad_name.
  * LEFT JOIN com products via store_variation_key para obter kit_qty.
@@ -539,6 +554,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
         s.store,
         s.cod_store,
         ${variationPrefixExpr} AS variation_prefix,
+        ${sizeExpr} AS size_label,
         CASE
           WHEN s.variation IS NOT NULL AND TRIM(s.variation) != ''
           THEN COALESCE(s.cod_store::text, s.store) || '|||' || TRIM(s.ad_name) || '|||' || ${variationPrefixExpr}
@@ -619,6 +635,40 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
     params
   );
 
+  // By group + size (breakdown de tamanhos dentro de cada grupo)
+  const avulsosSizesUnion = byGroupIdsClause ? '' : `
+     UNION ALL
+     SELECT
+       NULL AS group_id,
+       r.size_label AS size_label,
+       COALESCE(SUM(r.quantity * r.kit_qty), 0) AS units
+     FROM resolved r
+     WHERE r.size_label IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM product_group_items gi2
+         WHERE gi2.ad_name = r.svk
+           AND (gi2.variation_filter IS NULL OR r.variation_prefix = gi2.variation_filter)
+       )
+     GROUP BY r.size_label
+     HAVING SUM(r.quantity * r.kit_qty) > 0`;
+
+  const byGroupSizeQ = db.query(
+    `${cte}
+     SELECT
+       g.id AS group_id,
+       r.size_label AS size_label,
+       COALESCE(SUM(r.quantity * r.kit_qty), 0) AS units
+     FROM resolved r
+     INNER JOIN product_group_items gi ON gi.ad_name = r.svk
+       AND (gi.variation_filter IS NULL OR r.variation_prefix = gi.variation_filter)
+     INNER JOIN product_groups g ON g.id = gi.group_id
+     WHERE r.size_label IS NOT NULL ${byGroupIdsClause}
+     GROUP BY g.id, r.size_label
+     ${avulsosSizesUnion}
+     ORDER BY units DESC`,
+    params
+  );
+
   // By product
   const byProductQ = db.query(
     `${cte}
@@ -666,11 +716,21 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
     params
   );
 
-  const [summaryRes, byDateRes, byGroupRes, byProductRes] = await Promise.all([summaryQ, byDateQ, byGroupQ, byProductQ]);
+  const [summaryRes, byDateRes, byGroupRes, byProductRes, byGroupSizeRes] = await Promise.all([summaryQ, byDateQ, byGroupQ, byProductQ, byGroupSizeQ]);
 
   const s = summaryRes.rows[0];
   const totalRevenue = parseFloat(s.total_revenue) || 0;
   const totalOrders = parseInt(s.total_orders) || 0;
+
+  const sizesByGroupKey = new Map();
+  for (const row of byGroupSizeRes.rows) {
+    const key = row.group_id === null || row.group_id === undefined ? '__ungrouped__' : String(row.group_id);
+    if (!sizesByGroupKey.has(key)) sizesByGroupKey.set(key, []);
+    sizesByGroupKey.get(key).push({
+      size: row.size_label,
+      units: parseFloat(row.units) || 0,
+    });
+  }
 
   return {
     summary: {
@@ -685,12 +745,16 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
       revenue: parseFloat(r.revenue) || 0,
       orders: parseInt(r.orders) || 0,
     })),
-    byGroup: byGroupRes.rows.map((r) => ({
-      group_id: r.group_id,
-      group_name: r.group_name,
-      units: parseFloat(r.units) || 0,
-      revenue: parseFloat(r.revenue) || 0,
-    })),
+    byGroup: byGroupRes.rows.map((r) => {
+      const key = r.group_id === null || r.group_id === undefined ? '__ungrouped__' : String(r.group_id);
+      return {
+        group_id: r.group_id,
+        group_name: r.group_name,
+        units: parseFloat(r.units) || 0,
+        revenue: parseFloat(r.revenue) || 0,
+        sizes: sizesByGroupKey.get(key) || [],
+      };
+    }),
     byProduct: byProductRes.rows.map((r) => ({
       store_variation_key: r.store_variation_key,
       ad_name: r.ad_name,
