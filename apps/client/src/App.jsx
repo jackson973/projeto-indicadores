@@ -75,6 +75,7 @@ import NewOrder from "./components/NewOrder";
 import OrdersList from "./components/OrdersList";
 import ProductDashboard from "./components/ProductDashboard";
 import ProductGroups from "./components/ProductGroups";
+import ShopeeValidator from "./components/ShopeeValidator";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import RevenueDetailDrawer from "./components/RevenueDetailDrawer";
 import { getSaoPauloDate, getSaoPauloYear, getSaoPauloMonth } from "./utils/timezone";
@@ -200,6 +201,13 @@ const AdsIcon = (props) => (
 const OrderIcon = (props) => (
   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
     <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z" />
+  </svg>
+);
+
+const ValidatorIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" />
+    <path d="M2 4h7v2H2zM2 8h5v2H2zM2 12h3v2H2z" />
   </svg>
 );
 
@@ -489,6 +497,14 @@ const App = () => {
       submenu: [
         { label: "Anúncios", view: "anuncios" },
         { label: "Gerenc. de Lojas", view: "stores-management" },
+      ],
+    },
+    {
+      label: "Validador de Pedidos",
+      icon: <ValidatorIcon />,
+      show: user?.role === "admin",
+      submenu: [
+        { label: "Shopee", view: "validador-shopee" },
       ],
     },
     {
@@ -925,6 +941,10 @@ const App = () => {
 
         {activeView === "orders-conditions" && user?.role === "admin" && (
           <PaymentConditionsConfig />
+        )}
+
+        {activeView === "validador-shopee" && user?.role === "admin" && (
+          <ShopeeValidator />
         )}
 
         {hasData && activeView === "dashboard" && (

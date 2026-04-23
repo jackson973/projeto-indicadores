@@ -1289,6 +1289,26 @@ export const getOrderPdfUrl = (order) => {
   return `/api/orders/${order.id}/pdf/${filename}?token=${token}`;
 };
 
+// ── Validador de Pedidos: Shopee ─────────────────────────────────────────────
+
+export const fetchValidadorShopeeStores = async () => {
+  const r = await authFetch('/api/validador/shopee/stores');
+  return handleResponse(r);
+};
+
+export const reconciliateShopee = async ({ start, end, store, incomeReport }) => {
+  const form = new FormData();
+  form.append('start', start);
+  form.append('end', end);
+  if (store) form.append('store', store);
+  form.append('incomeReport', incomeReport);
+  const r = await authFetch('/api/validador/shopee/reconciliate', {
+    method: 'POST',
+    body: form,
+  });
+  return handleResponse(r);
+};
+
 export const downloadOrderPdf = async (order) => {
   const url = getOrderPdfUrl(order);
   const d = new Date(order.created_at);
