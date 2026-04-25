@@ -14,11 +14,12 @@ let isFetching = false;
 
 async function fetchPerHourData(cookies) {
   const today = getSaoPauloDate(); // YYYY-MM-DD
-  const { data } = await axios.post(PER_HOUR_URL, {
+  const requestBody = {
     topFlag: true,
     currencyTime: today,
     reqTime: Date.now(),
-  }, {
+  };
+  const { data } = await axios.post(PER_HOUR_URL, requestBody, {
     headers: {
       Cookie: cookies,
       'User-Agent': USER_AGENT,
@@ -30,6 +31,8 @@ async function fetchPerHourData(cookies) {
   });
 
   if (data.code !== 0) {
+    console.error('[UpSeller Analytics] DEBUG request body:', JSON.stringify(requestBody));
+    console.error('[UpSeller Analytics] DEBUG full response:', JSON.stringify(data));
     throw new Error(`per-hour API error: code=${data.code} msg=${data.msg}`);
   }
 
