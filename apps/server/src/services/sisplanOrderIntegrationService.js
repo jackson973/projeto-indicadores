@@ -62,6 +62,26 @@ function formatPgto(paymentConditionErp) {
   return paymentConditionErp.replace(/\//g, ' ').trim();
 }
 
+function buildObsErp(order) {
+  const baseNotes = (order.notes || '').trim();
+  const blocks = [];
+  for (const po of order.product_observations || []) {
+    const obs = (po?.observation || '').toString().trim();
+    if (!obs) continue;
+    const code = (po.reference_codigo || po.sisplan_sku || '').toString().trim();
+    const name = (po.product_name || '').toString().trim();
+    const header = [code, name].filter(Boolean).join(' - ');
+    blocks.push(
+      '----------------------------------------------\n' +
+      `${header} obs: ${obs}\n` +
+      '----------------------------------------------'
+    );
+  }
+  if (blocks.length === 0) return baseNotes;
+  const combined = [baseNotes, ...blocks].filter(Boolean).join('\n');
+  return combined.slice(0, 2000);
+}
+
 // ─── Firebird transaction helpers ─────────────────────────────────────────────
 
 function firebirdAttach(options) {
@@ -226,7 +246,7 @@ function buildInsertPedido(numero, order, user) {
     codrep:      escapeFirebird(user.rep_code || ''),
     tab_pre:     escapeFirebird('999'),
     pgto:        escapeFirebird(pgto),
-    obs:         escapeFirebird(order.notes || ''),
+    obs:         escapeFirebird(buildObsErp(order)),
     dtdigita:    escapeFirebird(formatDate(order.created_at)),
     dt_emissao:  escapeFirebird(formatDate(order.created_at)),
     hr_emissao:  escapeFirebird(formatDateTime(order.updated_at || now)),
@@ -653,14 +673,13 @@ async function syncOrdersFromERP() {
           );
         }
 
-        // Atualizar header do pedido (notes, payment_condition_erp, customer_snapshot parcial, total)
+        // Atualizar header do pedido (payment_condition_erp, customer_snapshot parcial, total)
+        // notes NÃO é sobrescrito: o app pode gravar no ERP um bloco concatenado com obs
+        // por produto, e re-importar isso no notes do app deixaria o textarea sujo e
+        // causaria duplicação a cada re-integração.
         const header = erpData.header;
         const updateFields = ['total = $2', 'updated_at = NOW()'];
         const updateParams = [order.id, Math.round(total * 100) / 100];
-
-        // Atualizar notes do ERP (sempre sobrescrever, inclusive para limpar lixo)
-        updateParams.push(header.obs || '');
-        updateFields.push(`notes = $${updateParams.length}`);
 
         // Atualizar payment_condition_erp
         if (header.pgto) {

@@ -91,6 +91,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
   const [productSearch, setProductSearch]           = useState("");
   const [submitting, setSubmitting]                 = useState(false);
   const [cart, setCart]                             = useState({});
+  const [productObservations, setProductObservations] = useState({});
   const [openProduct, setOpenProduct]               = useState(null);
   const [scannerOpen, setScannerOpen]               = useState(false);
   const [autoSavedOrderId, setAutoSavedOrderId]     = useState(null);
@@ -158,6 +159,14 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
       newCart[k] = { product, size, qty: item.qty, unitPrice: Number(item.unit_price) };
     }
     setCart(newCart);
+
+    const obsMap = {};
+    for (const po of initialOrder.product_observations || []) {
+      if (po?.catalog_product_id && po?.observation) {
+        obsMap[String(po.catalog_product_id)] = po.observation;
+      }
+    }
+    setProductObservations(obsMap);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialOrder, catalog]);
 
@@ -223,6 +232,39 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
       Object.keys(next).forEach(k => { if (k.startsWith(`${productId}:`)) delete next[k]; });
       return next;
     });
+    setProductObservations(prev => {
+      if (!(String(productId) in prev)) return prev;
+      const next = { ...prev };
+      delete next[String(productId)];
+      return next;
+    });
+  }
+
+  function getObservation(productId) {
+    return productObservations[String(productId)] || "";
+  }
+
+  function setObservation(productId, text) {
+    const key = String(productId);
+    const trimmed = (text || "").trim();
+    setProductObservations(prev => {
+      const current = prev[key] || "";
+      if (current === trimmed) return prev;
+      const next = { ...prev };
+      if (trimmed) next[key] = trimmed; else delete next[key];
+      return next;
+    });
+    autoSavePendingRef.current = true;
+  }
+
+  function buildProductObservationsPayload() {
+    const inCart = new Set(Object.values(cart).map(i => String(i.product.id)));
+    return Object.entries(productObservations)
+      .filter(([pid, obs]) => obs && obs.trim() && inCart.has(pid))
+      .map(([pid, observation]) => ({
+        catalog_product_id: Number(pid),
+        observation: observation.trim(),
+      }));
   }
 
   async function handleSyncCustomers() {
@@ -323,6 +365,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
       payment_condition_erp: condObj?.erp_code || null,
       notes,
       items: orderItems,
+      product_observations: buildProductObservationsPayload(),
     };
 
     (async () => {
@@ -337,7 +380,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
         console.warn("[AutoSave] Erro ao salvar pedido:", err.message);
       }
     })();
-  }, [cart]);
+  }, [cart, productObservations]);
 
   async function handleSubmit(type) {
     if (!selectedCustomer) {
@@ -368,6 +411,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
       qty:                item.qty,
       unit_price:         item.unitPrice,
     }));
+    const product_observations = buildProductObservationsPayload();
 
     setSubmitting(true);
     try {
@@ -383,6 +427,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
           payment_condition_erp: condObj?.erp_code || null,
           notes,
           items,
+          product_observations,
         };
         // Quando é finalização de rascunho auto-salvo, envia type e status
         if (isFinalizing) {
@@ -398,6 +443,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
             duration: 3000 });
           cartDrawer.onClose();
           setCart({});
+          setProductObservations({});
           setSelectedCustomer(null);
           setPriceTable("");
           setSelectedCondition(null);
@@ -411,7 +457,7 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
           if (onSaved) onSaved(order);
         }
       } else {
-        order = await apiCreateOrder({ type, customer_id: selectedCustomer.id, customer_snapshot, price_table: priceTable, payment_condition: condObj?.name || null, payment_condition_erp: condObj?.erp_code || null, notes, items });
+        order = await apiCreateOrder({ type, customer_id: selectedCustomer.id, customer_snapshot, price_table: priceTable, payment_condition: condObj?.name || null, payment_condition_erp: condObj?.erp_code || null, notes, items, product_observations });
         setAutoSavedOrderId(order.id);
         toast({
           status: "success",
@@ -645,6 +691,8 @@ export default function NewOrder({ initialOrder = null, onSaved = null }) {
           getQty={getQty}
           setQty={setQty}
           clearProduct={clearProduct}
+          getObservation={getObservation}
+          setObservation={setObservation}
         />
       </Box>
 
@@ -1030,11 +1078,12 @@ function ProductThumb({ product, totalInCart, cartTotal, cartUnitPrice, priceTab
 }
 
 // ---- Product Detail Drawer (full screen) ----
-function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, setQty, clearProduct }) {
+function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, setQty, clearProduct, getObservation, setObservation }) {
   const [selectedSizes, setSelectedSizes] = useState(new Set());
   const [addQty, setAddQty] = useState(1);
   const [mode, setMode] = useState("grade");
   const [totalInput, setTotalInput] = useState("");
+  const [obsInput, setObsInput] = useState("");
 
   const mutedColor  = useColorModeValue("gray.500", "gray.400");
   const borderColor = useColorModeValue("gray.200", "gray.600");
@@ -1059,6 +1108,7 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
       setMode("grade");
       setTotalInput("");
       setPriceInput(basePrice(priceTable, product).toFixed(2));
+      setObsInput(getObservation ? getObservation(product.id) : "");
     }
   }, [product, priceTable]);
 
@@ -1086,6 +1136,9 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
     const v = parseFloat(priceInput);
     if (!isNaN(v) && v > 0) {
       applyPriceToCart(v);
+    }
+    if (setObservation && product) {
+      setObservation(product.id, obsInput);
     }
     onClose();
   }
@@ -1300,6 +1353,19 @@ function ProductDetailDrawer({ product, isOpen, onClose, priceTable, getQty, set
           >
             {mode === "grade" ? "ou distribuir total de peças" : "voltar para grade x N"}
           </Text>
+
+          {/* Observação por produto */}
+          <Text fontSize="sm" fontWeight="bold" mb={2} color={mutedColor}>Observação</Text>
+          <Textarea
+            value={obsInput}
+            onChange={e => setObsInput(e.target.value)}
+            placeholder="Ex: enviar com etiqueta XYZ"
+            size="sm"
+            rows={2}
+            borderRadius="lg"
+            mb={4}
+            resize="vertical"
+          />
 
           {/* Cart summary for this product */}
           {totalInCart > 0 && (

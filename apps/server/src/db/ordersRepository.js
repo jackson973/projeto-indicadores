@@ -217,34 +217,48 @@ async function getOrderById(id) {
   const { rows } = await pool.query(`
     SELECT o.*, u.name AS created_by_name,
       COALESCE(
-        json_agg(
-          json_build_object(
-            'id',                   i.id,
-            'catalog_product_id',   i.catalog_product_id,
-            'product_name',         i.product_name,
-            'size_name',            i.size_name,
-            'sisplan_sku',          i.sisplan_sku,
-            'sisplan_color_code',   i.sisplan_color_code,
-            'sisplan_color_name',   i.sisplan_color_name,
-            'qty',                  i.qty,
-            'unit_price',           i.unit_price,
-            'subtotal',             i.subtotal,
-            'photo_url',            p.photo_url
-          ) ORDER BY i.id
-        ) FILTER (WHERE i.id IS NOT NULL),
+        (SELECT json_agg(
+            json_build_object(
+              'id',                   i.id,
+              'catalog_product_id',   i.catalog_product_id,
+              'product_name',         i.product_name,
+              'size_name',            i.size_name,
+              'sisplan_sku',          i.sisplan_sku,
+              'sisplan_color_code',   i.sisplan_color_code,
+              'sisplan_color_name',   i.sisplan_color_name,
+              'qty',                  i.qty,
+              'unit_price',           i.unit_price,
+              'subtotal',             i.subtotal,
+              'photo_url',            p.photo_url
+            ) ORDER BY i.id
+          )
+          FROM order_items i
+          LEFT JOIN order_catalog_products p ON p.id=i.catalog_product_id
+          WHERE i.order_id=o.id),
         '[]'
-      ) AS items
+      ) AS items,
+      COALESCE(
+        (SELECT json_agg(
+            json_build_object(
+              'catalog_product_id', obs.catalog_product_id,
+              'observation',        obs.observation,
+              'product_name',       cp.name,
+              'reference_codigo',   cp.reference_codigo
+            ) ORDER BY obs.catalog_product_id
+          )
+          FROM order_item_observations obs
+          LEFT JOIN order_catalog_products cp ON cp.id=obs.catalog_product_id
+          WHERE obs.order_id=o.id),
+        '[]'
+      ) AS product_observations
     FROM orders o
-    LEFT JOIN order_items i ON i.order_id=o.id
-    LEFT JOIN order_catalog_products p ON p.id=i.catalog_product_id
     LEFT JOIN users u ON u.id = o.created_by
     WHERE o.id=$1
-    GROUP BY o.id, u.name
   `, [id]);
   return rows[0] || null;
 }
 
-async function createOrder({ type, status, customer_id, customer_snapshot, price_table, payment_condition, payment_condition_erp, notes, items, created_by }) {
+async function createOrder({ type, status, customer_id, customer_snapshot, price_table, payment_condition, payment_condition_erp, notes, items, product_observations, created_by }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -257,6 +271,7 @@ async function createOrder({ type, status, customer_id, customer_snapshot, price
     );
     const order = rows[0];
     await _insertOrderItems(client, order.id, items);
+    await _replaceProductObservations(client, order.id, product_observations);
     await client.query('COMMIT');
     return getOrderById(order.id);
   } catch (err) {
@@ -267,7 +282,7 @@ async function createOrder({ type, status, customer_id, customer_snapshot, price
   }
 }
 
-async function updateOrderFull(id, { customer_id, customer_snapshot, price_table, payment_condition, payment_condition_erp, notes, items, type, status }) {
+async function updateOrderFull(id, { customer_id, customer_snapshot, price_table, payment_condition, payment_condition_erp, notes, items, product_observations, type, status }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -284,6 +299,7 @@ async function updateOrderFull(id, { customer_id, customer_snapshot, price_table
     );
     await client.query('DELETE FROM order_items WHERE order_id=$1', [id]);
     await _insertOrderItems(client, id, items);
+    await _replaceProductObservations(client, id, product_observations);
     await client.query('COMMIT');
     return getOrderById(id);
   } catch (err) {
@@ -317,6 +333,23 @@ async function _insertOrderItems(client, orderId, items) {
       `INSERT INTO order_items (order_id, catalog_product_id, product_name, size_name, sisplan_sku, qty, unit_price)
        VALUES ($1,$2,$3,$4,$5,$6,$7)`,
       [orderId, item.catalog_product_id || null, item.product_name, item.size_name, item.sisplan_sku || null, item.qty, item.unit_price]
+    );
+  }
+}
+
+async function _replaceProductObservations(client, orderId, productObservations) {
+  await client.query('DELETE FROM order_item_observations WHERE order_id=$1', [orderId]);
+  if (!Array.isArray(productObservations) || productObservations.length === 0) return;
+  const seen = new Set();
+  for (const po of productObservations) {
+    const cpid = po?.catalog_product_id;
+    const obs = (po?.observation || '').toString().trim().slice(0, 2000);
+    if (!cpid || !obs || seen.has(String(cpid))) continue;
+    seen.add(String(cpid));
+    await client.query(
+      `INSERT INTO order_item_observations (order_id, catalog_product_id, observation)
+       VALUES ($1,$2,$3)`,
+      [orderId, cpid, obs]
     );
   }
 }

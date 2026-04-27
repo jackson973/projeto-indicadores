@@ -602,6 +602,14 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
 
     drawTableHeader();
 
+    // Map de observações por catalog_product_id
+    const obsByCatalogId = new Map();
+    for (const po of order.product_observations || []) {
+      if (po && po.catalog_product_id && po.observation) {
+        obsByCatalogId.set(String(po.catalog_product_id), String(po.observation));
+      }
+    }
+
     // Group by product
     const grouped = {};
     for (const item of order.items) {
@@ -630,10 +638,19 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
       const unitPrice = Number(sizes[0].unit_price);
       const bg        = rowIdx % 2 === 0 ? WHITE : ROWALT;
 
-      ensureSpace(ROW_H);
+      // Observação do produto (mesma para todos os tamanhos)
+      const cpid = sizes[0].catalog_product_id;
+      const obsText = cpid ? obsByCatalogId.get(String(cpid)) : null;
+      const obsW    = PW - IMG_COL - 12;
+      let obsH      = 0;
+      if (obsText) {
+        const measured = doc.font('Helvetica').fontSize(7).heightOfString(`Obs: ${obsText}`, { width: obsW });
+        obsH = Math.min(40, measured + 4);
+      }
 
-      fillRect(M, curY, PW, ROW_H, bg);
-      hline(curY + ROW_H, M, M + PW, RULE, 0.4);
+      ensureSpace(ROW_H + obsH);
+
+      fillRect(M, curY, PW, ROW_H + obsH, bg);
 
       // Photo (from cache)
       const imgData = imageCache[productName];
@@ -663,6 +680,16 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
         { size: 9, font: 'Helvetica-Bold', color: ACCENT, align: 'right', w: TOT_COL });
 
       curY += ROW_H;
+
+      if (obsText) {
+        txt(`Obs: ${obsText}`, M + IMG_COL + 6, curY, {
+          size: 7, color: '#CC0000', w: obsW, lineBreak: true,
+        });
+        curY += obsH;
+      }
+
+      hline(curY, M, M + PW, RULE, 0.4);
+
       totalQty += prodQty;
       totalVal += prodTotal;
       rowIdx++;
