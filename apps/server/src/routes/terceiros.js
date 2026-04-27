@@ -386,7 +386,7 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
       bySupplier.get(key).items.push(p);
     }
 
-    const buildSupplierBlock = (supplierEntry, { pageBreak }) => {
+    const buildSupplierBlock = (supplierEntry) => {
       const byGroup = new Map();
       for (const p of supplierEntry.items) {
         const gName = p.groupName || 'Sem grupo';
@@ -409,12 +409,8 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
         }
       }
 
-      const breakStyle = pageBreak ? 'page-break-before: always;' : '';
-      return `<section class="supplier-block" style="${breakStyle}">
-        <div class="supplier-info">
-          <p><strong>Fornecedor:</strong> ${supplierEntry.codcli} - ${supplierEntry.supplierName}</p>
-          <p><strong>Total de precos:</strong> ${supplierEntry.items.length}</p>
-        </div>
+      return `<section class="supplier-block">
+        <div class="supplier-title">${supplierEntry.codcli} - ${supplierEntry.supplierName} <span class="supplier-count">(${supplierEntry.items.length} preco${supplierEntry.items.length !== 1 ? 's' : ''})</span></div>
         <table>
           <thead><tr>
             <th style="text-align:left;">Parte</th>
@@ -428,7 +424,7 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
     };
 
     const supplierBlocks = Array.from(bySupplier.values())
-      .map((entry, idx) => buildSupplierBlock(entry, { pageBreak: idx > 0 }))
+      .map((entry) => buildSupplierBlock(entry))
       .join('');
 
     const titleText = isGlobal ? 'Precos por Fornecedor - Todos' : 'Precos por Fornecedor';
@@ -451,7 +447,12 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
   .center { text-align: center; }
   .right { text-align: right; }
   .footer { margin-top: 20px; font-size: 9px; color: #666; text-align: center; }
-  .supplier-block { margin-bottom: 20px; }
+  .supplier-block { margin-bottom: 14px; }
+  .supplier-title { font-size: 12px; font-weight: bold; background: #2d3748; color: #fff; padding: 6px 10px; margin-top: 10px; page-break-after: avoid; }
+  .supplier-count { font-weight: normal; font-size: 10px; color: #cbd5e0; }
+  table { page-break-inside: auto; }
+  tr { page-break-inside: avoid; page-break-after: auto; }
+  thead { display: table-header-group; }
 </style></head><body>
   <div class="header">
     <div class="header-left">
