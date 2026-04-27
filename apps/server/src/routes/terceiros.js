@@ -281,30 +281,45 @@ const vigenciaLabel = (vFrom, vUntil) => {
 
 router.get('/supplier-prices/export/excel', async (req, res) => {
   try {
-    const { codcli } = req.query;
-    if (!codcli) return res.status(400).json({ message: 'Fornecedor obrigatorio.' });
+    const { codcli, groupId } = req.query;
+    const isGlobal = !codcli;
 
-    const prices = await repo.getSupplierPrices({ codcli });
+    const filters = {};
+    if (codcli) filters.codcli = codcli;
+    if (groupId) filters.groupId = groupId;
+
+    const prices = await repo.getSupplierPrices(filters);
     if (prices.length === 0) return res.status(404).json({ message: 'Nenhum preco encontrado.' });
 
-    const supplierName = prices[0].supplierName || codcli;
-
-    const rows = prices.map(p => ({
-      'Grupo': p.groupName || '',
-      'Parte': p.part ? `${p.part}${p.partName ? ' - ' + p.partName : ''}` : 'Todas',
-      'Preco (R$)': parseFloat(p.price) || 0,
-      'Vigencia De': formatDateBR(p.validFrom),
-      'Vigencia Ate': formatDateBR(p.validUntil),
-    }));
+    const rows = prices.map(p => {
+      const base = {
+        'Grupo': p.groupName || '',
+        'Parte': p.part ? `${p.part}${p.partName ? ' - ' + p.partName : ''}` : 'Todas',
+        'Preco (R$)': parseFloat(p.price) || 0,
+        'Vigencia De': formatDateBR(p.validFrom),
+        'Vigencia Ate': formatDateBR(p.validUntil),
+      };
+      if (isGlobal) {
+        return {
+          'Fornecedor': `${p.codcli} - ${p.supplierName || ''}`.trim(),
+          ...base,
+        };
+      }
+      return base;
+    });
 
     const ws = xlsx.utils.json_to_sheet(rows);
-    // Set column widths
-    ws['!cols'] = [{ wch: 35 }, { wch: 25 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
+    ws['!cols'] = isGlobal
+      ? [{ wch: 40 }, { wch: 35 }, { wch: 25 }, { wch: 12 }, { wch: 14 }, { wch: 14 }]
+      : [{ wch: 35 }, { wch: 25 }, { wch: 12 }, { wch: 14 }, { wch: 14 }];
     const wb = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(wb, ws, 'Precos');
     const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
 
-    const filename = `precos_${supplierName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
+    const baseName = isGlobal
+      ? 'todos_fornecedores'
+      : (prices[0].supplierName || codcli);
+    const filename = `precos_${baseName.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     return res.send(buffer);
@@ -316,13 +331,15 @@ router.get('/supplier-prices/export/excel', async (req, res) => {
 
 router.get('/supplier-prices/export/pdf', async (req, res) => {
   try {
-    const { codcli } = req.query;
-    if (!codcli) return res.status(400).json({ message: 'Fornecedor obrigatorio.' });
+    const { codcli, groupId } = req.query;
+    const isGlobal = !codcli;
 
-    const prices = await repo.getSupplierPrices({ codcli });
+    const filters = {};
+    if (codcli) filters.codcli = codcli;
+    if (groupId) filters.groupId = groupId;
+
+    const prices = await repo.getSupplierPrices(filters);
     if (prices.length === 0) return res.status(404).json({ message: 'Nenhum preco encontrado.' });
-
-    const supplierName = prices[0].supplierName || codcli;
 
     // Get system settings for logo
     const db = require('../db/connection');
@@ -359,29 +376,65 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
       return fromOk && untilOk;
     };
 
-    // Group by groupName for better organization
-    const byGroup = new Map();
+    // First, group by supplier (codcli); then within supplier, group by group name.
+    const bySupplier = new Map();
     for (const p of prices) {
-      const gName = p.groupName || 'Sem grupo';
-      if (!byGroup.has(gName)) byGroup.set(gName, []);
-      byGroup.get(gName).push(p);
+      const key = String(p.codcli);
+      if (!bySupplier.has(key)) {
+        bySupplier.set(key, { codcli: p.codcli, supplierName: p.supplierName || p.codcli, items: [] });
+      }
+      bySupplier.get(key).items.push(p);
     }
 
-    let rowsHtml = '';
-    let currentGroup = '';
-    for (const [groupName, items] of byGroup) {
-      rowsHtml += `<tr class="group-header"><td colspan="4" style="background:#edf2f7;font-weight:bold;font-size:11px;padding:6px 8px;">${groupName}</td></tr>`;
-      for (const p of items) {
-        const active = isActive(p.validFrom, p.validUntil);
-        const partLabel = p.part ? `${p.part}${p.partName ? ' - ' + p.partName : ''}` : 'Todas';
-        rowsHtml += `<tr>
-          <td style="padding-left:20px;">${partLabel}</td>
-          <td class="right">R$ ${formatPriceCur(p.price)}</td>
-          <td>${vigenciaLabel(p.validFrom, p.validUntil)}</td>
-          <td class="center">${active ? '<span style="color:#38a169;font-weight:bold;">Vigente</span>' : '<span style="color:#999;">Expirado</span>'}</td>
-        </tr>`;
+    const buildSupplierBlock = (supplierEntry, { pageBreak }) => {
+      const byGroup = new Map();
+      for (const p of supplierEntry.items) {
+        const gName = p.groupName || 'Sem grupo';
+        if (!byGroup.has(gName)) byGroup.set(gName, []);
+        byGroup.get(gName).push(p);
       }
-    }
+
+      let rowsHtml = '';
+      for (const [groupName, items] of byGroup) {
+        rowsHtml += `<tr class="group-header"><td colspan="4" style="background:#edf2f7;font-weight:bold;font-size:11px;padding:6px 8px;">${groupName}</td></tr>`;
+        for (const p of items) {
+          const active = isActive(p.validFrom, p.validUntil);
+          const partLabel = p.part ? `${p.part}${p.partName ? ' - ' + p.partName : ''}` : 'Todas';
+          rowsHtml += `<tr>
+            <td style="padding-left:20px;">${partLabel}</td>
+            <td class="right">R$ ${formatPriceCur(p.price)}</td>
+            <td>${vigenciaLabel(p.validFrom, p.validUntil)}</td>
+            <td class="center">${active ? '<span style="color:#38a169;font-weight:bold;">Vigente</span>' : '<span style="color:#999;">Expirado</span>'}</td>
+          </tr>`;
+        }
+      }
+
+      const breakStyle = pageBreak ? 'page-break-before: always;' : '';
+      return `<section class="supplier-block" style="${breakStyle}">
+        <div class="supplier-info">
+          <p><strong>Fornecedor:</strong> ${supplierEntry.codcli} - ${supplierEntry.supplierName}</p>
+          <p><strong>Total de precos:</strong> ${supplierEntry.items.length}</p>
+        </div>
+        <table>
+          <thead><tr>
+            <th style="text-align:left;">Parte</th>
+            <th style="text-align:right;">Preco (R$)</th>
+            <th style="text-align:left;">Vigencia</th>
+            <th style="text-align:center;">Status</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </section>`;
+    };
+
+    const supplierBlocks = Array.from(bySupplier.values())
+      .map((entry, idx) => buildSupplierBlock(entry, { pageBreak: idx > 0 }))
+      .join('');
+
+    const titleText = isGlobal ? 'Precos por Fornecedor - Todos' : 'Precos por Fornecedor';
+    const headerSummary = isGlobal
+      ? `<div class="supplier-info"><p><strong>Fornecedores:</strong> ${bySupplier.size}</p><p><strong>Total de precos:</strong> ${prices.length}</p></div>`
+      : '';
 
     const html = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>
@@ -398,6 +451,7 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
   .center { text-align: center; }
   .right { text-align: right; }
   .footer { margin-top: 20px; font-size: 9px; color: #666; text-align: center; }
+  .supplier-block { margin-bottom: 20px; }
 </style></head><body>
   <div class="header">
     <div class="header-left">
@@ -408,20 +462,9 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
       ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}
     </div>
   </div>
-  <div class="title">Precos por Fornecedor</div>
-  <div class="supplier-info">
-    <p><strong>Fornecedor:</strong> ${codcli} - ${supplierName}</p>
-    <p><strong>Total de precos:</strong> ${prices.length}</p>
-  </div>
-  <table>
-    <thead><tr>
-      <th style="text-align:left;">Parte</th>
-      <th style="text-align:right;">Preco (R$)</th>
-      <th style="text-align:left;">Vigencia</th>
-      <th style="text-align:center;">Status</th>
-    </tr></thead>
-    <tbody>${rowsHtml}</tbody>
-  </table>
+  <div class="title">${titleText}</div>
+  ${headerSummary}
+  ${supplierBlocks}
   <div class="footer">Gerado em ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}</div>
 </body></html>`;
 
@@ -432,7 +475,10 @@ router.get('/supplier-prices/export/pdf', async (req, res) => {
     const pdf = await page.pdf({ format: 'A4', printBackground: true, margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' } });
     await browser.close();
 
-    const filename = `precos_${supplierName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
+    const baseName = isGlobal
+      ? 'todos_fornecedores'
+      : (prices[0].supplierName || codcli);
+    const filename = `precos_${baseName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`;
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Type', 'application/pdf');
     return res.send(Buffer.from(pdf));

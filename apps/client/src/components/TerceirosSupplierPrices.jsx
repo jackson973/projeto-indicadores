@@ -577,6 +577,24 @@ const TerceirosSupplierPrices = () => {
     }
   };
 
+  const handleExportAll = async (kind) => {
+    try {
+      const token = getToken();
+      const params = new URLSearchParams();
+      if (filterGroup) params.set("groupId", filterGroup);
+      const qs = params.toString() ? `?${params.toString()}` : "";
+      const response = await fetch(`/api/terceiros/supplier-prices/export/${kind}${qs}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+      if (!response.ok) throw new Error();
+      const blob = await response.blob();
+      const ext = kind === "excel" ? "xlsx" : "pdf";
+      downloadBlob(blob, `precos_todos_fornecedores.${ext}`);
+    } catch (err) {
+      toast({ title: `Erro ao exportar ${kind === "excel" ? "Excel" : "PDF"}.`, status: "error", duration: 3000 });
+    }
+  };
+
   // ── Render ────────────────────────────────────────────────────────────────
   const FiltersBar = isMobile ? (
     <VStack spacing={3} mb={4} align="stretch">
@@ -600,9 +618,17 @@ const TerceirosSupplierPrices = () => {
           <option key={g.id} value={g.id}>{g.name}</option>
         ))}
       </Select>
-      <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openBulkCreate} w="100%">
-        Novo Preço
-      </Button>
+      <HStack spacing={2}>
+        <Tooltip label="Exportar todos (PDF)">
+          <IconButton icon={<PdfIcon boxSize={5} />} size="sm" variant="outline" aria-label="Exportar todos PDF" onClick={() => handleExportAll("pdf")} />
+        </Tooltip>
+        <Tooltip label="Exportar todos (Excel)">
+          <IconButton icon={<ExcelIcon boxSize={5} />} size="sm" variant="outline" aria-label="Exportar todos Excel" onClick={() => handleExportAll("excel")} />
+        </Tooltip>
+        <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openBulkCreate} flex={1}>
+          Novo Preço
+        </Button>
+      </HStack>
     </VStack>
   ) : (
     <Flex justify="space-between" align="center" mb={4} gap={3} wrap="wrap">
@@ -630,9 +656,17 @@ const TerceirosSupplierPrices = () => {
           ))}
         </Select>
       </HStack>
-      <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openBulkCreate} flexShrink={0}>
-        Novo Preço
-      </Button>
+      <HStack spacing={2} flexShrink={0}>
+        <Tooltip label="Exportar todos (PDF)">
+          <IconButton icon={<PdfIcon boxSize={5} />} size="sm" variant="outline" aria-label="Exportar todos PDF" onClick={() => handleExportAll("pdf")} />
+        </Tooltip>
+        <Tooltip label="Exportar todos (Excel)">
+          <IconButton icon={<ExcelIcon boxSize={5} />} size="sm" variant="outline" aria-label="Exportar todos Excel" onClick={() => handleExportAll("excel")} />
+        </Tooltip>
+        <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openBulkCreate}>
+          Novo Preço
+        </Button>
+      </HStack>
     </Flex>
   );
 
