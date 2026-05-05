@@ -349,6 +349,29 @@ const TerceirosSettlement = () => {
     }
   }, [editingSettlement, loadSettlements, toast]);
 
+  const handleRemoveOf = useCallback(async (ofGroup) => {
+    if (!editingSettlement) return;
+    const itemIds = [];
+    for (const cg of ofGroup.colorGroups || []) {
+      for (const sz of cg.sizes || []) {
+        if (!sz.missing && sz.id != null && !String(sz.id).startsWith("missing-")) {
+          itemIds.push(sz.id);
+        }
+      }
+    }
+    if (itemIds.length === 0) return;
+    if (!window.confirm(`Remover a OF ${ofGroup.facNumero} (${itemIds.length} ${itemIds.length === 1 ? "item" : "itens"}) do fechamento?`)) return;
+    try {
+      await Promise.all(itemIds.map((id) => removeSettlementItem(editingSettlement.id, id)));
+      toast({ title: `OF ${ofGroup.facNumero} removida.`, status: "success", duration: 2000 });
+      const updated = await fetchTerceirosSettlement(editingSettlement.id);
+      setEditingSettlement(updated);
+      await loadSettlements();
+    } catch (err) {
+      toast({ title: "Erro ao remover OF.", status: "error", duration: 3000 });
+    }
+  }, [editingSettlement, loadSettlements, toast]);
+
   const handleUpdateItem = useCallback(async (itemId, data) => {
     if (!editingSettlement) return;
     try {
@@ -2377,6 +2400,16 @@ const TerceirosSettlement = () => {
                       <Badge colorScheme="gray" variant="subtle">{ofGroup.colorGroups.length} {ofGroup.colorGroups.length === 1 ? "cor" : "cores"}</Badge>
                       <Text fontWeight="medium" color="gray.600">{ofQty} pcs</Text>
                       <Text fontWeight="bold" color="blue.600">{formatCurrency(ofTotal)}</Text>
+                      <Tooltip label="Remover OF do fechamento">
+                        <IconButton
+                          icon={<DeleteIcon />}
+                          size="xs"
+                          variant="ghost"
+                          colorScheme="red"
+                          aria-label="Remover OF"
+                          onClick={(e) => { e.stopPropagation(); handleRemoveOf(ofGroup); }}
+                        />
+                      </Tooltip>
                     </HStack>
                   </Flex>
                   {isExpanded && (
