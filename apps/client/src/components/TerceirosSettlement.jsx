@@ -1024,6 +1024,18 @@ const TerceirosSettlement = () => {
     const supplierObj = suppliers.find((s) => String(s.codcli) === String(newSupplier));
     const supplierName = supplierObj ? supplierObj.nome || newSupplier : newSupplier;
 
+    // See handleSaveDraft for rationale on id-keyed persistence.
+    const editedQuantitiesById = {};
+    Object.entries(editedQuantities).forEach(([idx, val]) => {
+      const of = unsettledOfs[idx];
+      if (of?.id != null) editedQuantitiesById[of.id] = val;
+    });
+    const manualPricesById = {};
+    Object.entries(manualPrices).forEach(([idx, val]) => {
+      const of = unsettledOfs[idx];
+      if (of?.id != null) manualPricesById[of.id] = val;
+    });
+
     const payload = {
       codcli: newSupplier,
       supplierName,
@@ -1034,7 +1046,7 @@ const TerceirosSettlement = () => {
         dateFrom, dateTo, ofSearchNew, etapaFilter,
         newMonth, newYear,
         selectedOfIds: ofIds,
-        manualPrices, editedQuantities, editedGroupPrices,
+        editedQuantitiesById, manualPricesById, editedGroupPrices,
         newDiscounts
       }
     };
@@ -1106,11 +1118,25 @@ const TerceirosSettlement = () => {
     const supplierObj = suppliers.find((s) => String(s.codcli) === String(newSupplier));
     const supplierName = supplierObj ? supplierObj.nome || newSupplier : newSupplier;
 
+    // Persist edits keyed by OF id (stable) instead of array index. Index-keyed
+    // edits would silently bind to the wrong OF if the list reorders between
+    // save and restore — same root cause as the live-session leak.
+    const editedQuantitiesById = {};
+    Object.entries(editedQuantities).forEach(([idx, val]) => {
+      const of = unsettledOfs[idx];
+      if (of?.id != null) editedQuantitiesById[of.id] = val;
+    });
+    const manualPricesById = {};
+    Object.entries(manualPrices).forEach(([idx, val]) => {
+      const of = unsettledOfs[idx];
+      if (of?.id != null) manualPricesById[of.id] = val;
+    });
+
     const draftData = {
       dateFrom, dateTo, ofSearchNew, etapaFilter,
       newMonth, newYear,
       selectedOfIds: ofIds,
-      manualPrices, editedQuantities, editedGroupPrices,
+      editedQuantitiesById, manualPricesById, editedGroupPrices,
       newDiscounts
     };
 
@@ -1235,8 +1261,32 @@ const TerceirosSettlement = () => {
       }
 
       setSelectedOfs(restored);
-      setManualPrices(dd.manualPrices || {});
-      setEditedQuantities(dd.editedQuantities || {});
+      // Prefer id-keyed edits (current format). Fall back to legacy index-keyed
+      // edits for drafts saved before the id-keyed format existed — those rely
+      // on the server returning OFs in the same order as at save time, which
+      // we can't guarantee, but it's the best we can do for old drafts.
+      const hasIdKeyedQuantities = dd.editedQuantitiesById && typeof dd.editedQuantitiesById === "object";
+      const hasIdKeyedPrices = dd.manualPricesById && typeof dd.manualPricesById === "object";
+      if (hasIdKeyedQuantities) {
+        const eq = {};
+        Object.entries(dd.editedQuantitiesById).forEach(([id, val]) => {
+          const idx = idToIndex[id];
+          if (idx !== undefined) eq[idx] = val;
+        });
+        setEditedQuantities(eq);
+      } else {
+        setEditedQuantities(dd.editedQuantities || {});
+      }
+      if (hasIdKeyedPrices) {
+        const mp = {};
+        Object.entries(dd.manualPricesById).forEach(([id, val]) => {
+          const idx = idToIndex[id];
+          if (idx !== undefined) mp[idx] = val;
+        });
+        setManualPrices(mp);
+      } else {
+        setManualPrices(dd.manualPrices || {});
+      }
       setEditedGroupPrices(dd.editedGroupPrices || {});
 
       setLoadingOfs(false);
