@@ -648,6 +648,32 @@ const TerceirosSettlement = () => {
       const merged = [...data, ...prevSelectedOfs];
       setUnsettledOfs(merged);
 
+      // Build a stable old-index → new-index map by OF id so per-index edits
+      // (editedQuantities, manualPrices) survive the reorder. Without this,
+      // edits "leak" to whichever OF lands on the previous index — corrupting
+      // the settlement.
+      const idToNewIdx = new Map();
+      merged.forEach((of, idx) => {
+        if (of && of.id != null) idToNewIdx.set(of.id, idx);
+      });
+      const oldToNewIdx = {};
+      prevOfs.forEach((of, oldIdx) => {
+        if (of && of.id != null && idToNewIdx.has(of.id)) {
+          oldToNewIdx[oldIdx] = idToNewIdx.get(of.id);
+        }
+      });
+      const remapByIndex = (obj) => {
+        const next = {};
+        for (const [oldIdx, val] of Object.entries(obj)) {
+          const newIdx = oldToNewIdx[oldIdx];
+          if (newIdx !== undefined) next[newIdx] = val;
+        }
+        return next;
+      };
+      setEditedQuantities((prev) => remapByIndex(prev));
+      setManualPrices((prev) => remapByIndex(prev));
+      setEditingSize(null);
+
       // Re-select the previously selected OFs in the merged list
       const newSelectedSet = new Set();
       merged.forEach((of, idx) => {
