@@ -645,7 +645,8 @@ async function getSettlements({ codcli, month, year, status } = {}) {
             s.reference_month AS "referenceMonth", s.reference_year AS "referenceYear",
             s.total_amount AS "totalAmount", s.total_items AS "totalItems",
             s.status, s.paid_at AS "paidAt", s.notes,
-            s.total_discounts AS "totalDiscounts", s.total_payable AS "totalPayable",
+            s.total_discounts AS "totalDiscounts", s.total_surcharges AS "totalSurcharges",
+            s.total_payable AS "totalPayable",
             s.created_at AS "createdAt", s.updated_at AS "updatedAt",
             u.name AS "createdByName",
             (
@@ -685,7 +686,8 @@ async function getSettlement(id) {
     `SELECT s.id, s.codcli, s.supplier_name AS "supplierName",
             s.reference_month AS "referenceMonth", s.reference_year AS "referenceYear",
             s.total_amount AS "totalAmount", s.total_items AS "totalItems",
-            s.total_discounts AS "totalDiscounts", s.total_payable AS "totalPayable",
+            s.total_discounts AS "totalDiscounts", s.total_surcharges AS "totalSurcharges",
+            s.total_payable AS "totalPayable",
             s.status, s.paid_at AS "paidAt", s.notes,
             s.created_at AS "createdAt"
      FROM terceiros_settlements s WHERE s.id = $1`,
@@ -721,6 +723,14 @@ async function getSettlement(id) {
     [id]
   );
 
+  // Get surcharges
+  const surcharges = await db.query(
+    `SELECT id, description, amount, created_at AS "createdAt"
+     FROM terceiros_settlement_surcharges WHERE settlement_id = $1
+     ORDER BY created_at`,
+    [id]
+  );
+
   // Find missing OFs: same OF/product/color/part/etapa but NOT in this settlement
   const missingOfs = await db.query(
     `SELECT o.id, o.fac_numero AS "facNumero",
@@ -746,10 +756,10 @@ async function getSettlement(id) {
     [settlement.rows[0].codcli, id]
   );
 
-  return { ...settlement.rows[0], items: items.rows, missingOfs: missingOfs.rows, discounts: discounts.rows };
+  return { ...settlement.rows[0], items: items.rows, missingOfs: missingOfs.rows, discounts: discounts.rows, surcharges: surcharges.rows };
 }
 
-async function createSettlement({ codcli, supplierName, referenceMonth, referenceYear, notes, createdBy, items, discounts }) {
+async function createSettlement({ codcli, supplierName, referenceMonth, referenceYear, notes, createdBy, items, discounts, surcharges }) {
   const client = await db.getClient();
 
   try {
@@ -803,7 +813,20 @@ async function createSettlement({ codcli, supplierName, referenceMonth, referenc
       }
     }
 
-    // Recalculate all totals (amount, discounts, payable)
+    // Insert surcharges if any
+    if (surcharges && surcharges.length > 0) {
+      for (const sur of surcharges) {
+        if (sur.description && parseFloat(sur.amount) > 0) {
+          await client.query(
+            `INSERT INTO terceiros_settlement_surcharges (settlement_id, description, amount)
+             VALUES ($1, $2, $3)`,
+            [settlementId, sur.description, parseFloat(sur.amount).toFixed(2)]
+          );
+        }
+      }
+    }
+
+    // Recalculate all totals (amount, discounts, surcharges, payable)
     const totals = await recalcSettlementTotals(client.query.bind(client), settlementId);
 
     await client.query('COMMIT');
@@ -856,7 +879,7 @@ async function getDraft(id) {
   return result.rows[0] || null;
 }
 
-async function promoteDraft(id, { items, discounts }) {
+async function promoteDraft(id, { items, discounts, surcharges }) {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
@@ -891,6 +914,17 @@ async function promoteDraft(id, { items, discounts }) {
           await client.query(
             `INSERT INTO terceiros_settlement_discounts (settlement_id, description, amount) VALUES ($1, $2, $3)`,
             [id, disc.description, parseFloat(disc.amount).toFixed(2)]
+          );
+        }
+      }
+    }
+
+    if (surcharges && surcharges.length > 0) {
+      for (const sur of surcharges) {
+        if (sur.description && parseFloat(sur.amount) > 0) {
+          await client.query(
+            `INSERT INTO terceiros_settlement_surcharges (settlement_id, description, amount) VALUES ($1, $2, $3)`,
+            [id, sur.description, parseFloat(sur.amount).toFixed(2)]
           );
         }
       }
@@ -1115,18 +1149,24 @@ async function recalcSettlementTotals(queryFn, settlementId) {
      FROM terceiros_settlement_discounts WHERE settlement_id = $1`,
     [settlementId]
   );
+  const surcharges = await queryFn(
+    `SELECT COALESCE(SUM(amount), 0) AS total_surcharges
+     FROM terceiros_settlement_surcharges WHERE settlement_id = $1`,
+    [settlementId]
+  );
   const totalAmount = parseFloat(items.rows[0].total_amount) || 0;
   const totalItems = parseFloat(items.rows[0].total_items) || 0;
   const totalDiscounts = parseFloat(discounts.rows[0].total_discounts) || 0;
-  const totalPayable = Math.max(0, totalAmount - totalDiscounts);
+  const totalSurcharges = parseFloat(surcharges.rows[0].total_surcharges) || 0;
+  const totalPayable = Math.max(0, totalAmount - totalDiscounts + totalSurcharges);
 
   await queryFn(
     `UPDATE terceiros_settlements
-     SET total_amount = $1, total_items = $2, total_discounts = $3, total_payable = $4
-     WHERE id = $5`,
-    [totalAmount.toFixed(2), totalItems, totalDiscounts.toFixed(2), totalPayable.toFixed(2), settlementId]
+     SET total_amount = $1, total_items = $2, total_discounts = $3, total_surcharges = $4, total_payable = $5
+     WHERE id = $6`,
+    [totalAmount.toFixed(2), totalItems, totalDiscounts.toFixed(2), totalSurcharges.toFixed(2), totalPayable.toFixed(2), settlementId]
   );
-  return { totalAmount, totalItems, totalDiscounts, totalPayable };
+  return { totalAmount, totalItems, totalDiscounts, totalSurcharges, totalPayable };
 }
 
 // ── Settlement Discounts ──────────────────────────────────────────────────
@@ -1190,6 +1230,81 @@ async function removeSettlementDiscount(discountId) {
     const result = await client.query(
       'DELETE FROM terceiros_settlement_discounts WHERE id = $1 RETURNING settlement_id',
       [discountId]
+    );
+    if (result.rows.length === 0) { await client.query('ROLLBACK'); return null; }
+    const settlementId = result.rows[0].settlement_id;
+    const totals = await recalcSettlementTotals(client.query.bind(client), settlementId);
+    await client.query('COMMIT');
+    return totals;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// ── Settlement Surcharges ─────────────────────────────────────────────────
+
+async function getSettlementSurcharges(settlementId) {
+  const result = await db.query(
+    `SELECT id, description, amount, created_at AS "createdAt"
+     FROM terceiros_settlement_surcharges WHERE settlement_id = $1
+     ORDER BY created_at`,
+    [settlementId]
+  );
+  return result.rows;
+}
+
+async function addSettlementSurcharge(settlementId, description, amount) {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      `INSERT INTO terceiros_settlement_surcharges (settlement_id, description, amount)
+       VALUES ($1, $2, $3) RETURNING id, description, amount`,
+      [settlementId, description, parseFloat(amount).toFixed(2)]
+    );
+    const totals = await recalcSettlementTotals(client.query.bind(client), settlementId);
+    await client.query('COMMIT');
+    return { surcharge: result.rows[0], ...totals };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function updateSettlementSurcharge(surchargeId, description, amount) {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      `UPDATE terceiros_settlement_surcharges SET description = $1, amount = $2
+       WHERE id = $3 RETURNING id, settlement_id`,
+      [description, parseFloat(amount).toFixed(2), surchargeId]
+    );
+    if (result.rows.length === 0) { await client.query('ROLLBACK'); return null; }
+    const settlementId = result.rows[0].settlement_id;
+    const totals = await recalcSettlementTotals(client.query.bind(client), settlementId);
+    await client.query('COMMIT');
+    return totals;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function removeSettlementSurcharge(surchargeId) {
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const result = await client.query(
+      'DELETE FROM terceiros_settlement_surcharges WHERE id = $1 RETURNING settlement_id',
+      [surchargeId]
     );
     if (result.rows.length === 0) { await client.query('ROLLBACK'); return null; }
     const settlementId = result.rows[0].settlement_id;
@@ -1385,6 +1500,11 @@ module.exports = {
   addSettlementDiscount,
   updateSettlementDiscount,
   removeSettlementDiscount,
+  // Surcharges
+  getSettlementSurcharges,
+  addSettlementSurcharge,
+  updateSettlementSurcharge,
+  removeSettlementSurcharge,
   // Rastreio
   getOFRastreio
 };

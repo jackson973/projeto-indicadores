@@ -854,20 +854,20 @@ router.get('/settlements/:id', async (req, res) => {
 
 router.post('/settlements', async (req, res) => {
   try {
-    const { codcli, supplierName, referenceMonth, referenceYear, notes, items, discounts, draftId } = req.body;
+    const { codcli, supplierName, referenceMonth, referenceYear, notes, items, discounts, surcharges, draftId } = req.body;
     if (!codcli || !referenceMonth || !referenceYear || !items || items.length === 0) {
       return res.status(400).json({ message: 'Fornecedor, mes/ano e itens sao obrigatorios.' });
     }
 
     // If promoting from a draft, use promoteDraft
     if (draftId) {
-      const result = await repo.promoteDraft(draftId, { items, discounts });
+      const result = await repo.promoteDraft(draftId, { items, discounts, surcharges });
       return res.status(201).json(result);
     }
 
     const result = await repo.createSettlement({
       codcli, supplierName, referenceMonth, referenceYear,
-      notes, createdBy: req.user.id, items, discounts
+      notes, createdBy: req.user.id, items, discounts, surcharges
     });
     return res.status(201).json(result);
   } catch (error) {
@@ -1041,6 +1041,21 @@ router.get('/settlements/:id/export/excel', async (req, res) => {
           'Total': -(parseFloat(disc.amount) || 0)
         });
       }
+    }
+
+    // Add surcharges (acréscimos)
+    const surcharges = data.surcharges || [];
+    if (surcharges.length > 0) {
+      for (const sur of surcharges) {
+        rows.push({
+          'OF': '', 'Descricao': `Acréscimo: ${sur.description}`, 'Parte': '',
+          'Quantidade': '', 'Preco Unit.': '',
+          'Total': parseFloat(sur.amount) || 0
+        });
+      }
+    }
+
+    if (discounts.length > 0 || surcharges.length > 0) {
       rows.push({
         'OF': '', 'Descricao': 'TOTAL A PAGAR', 'Parte': '',
         'Quantidade': '', 'Preco Unit.': '',
@@ -1132,13 +1147,23 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
     }).join('');
 
     const totalDiscounts = (data.discounts || []).reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
-    const totalPayable = parseFloat(data.totalPayable) || (grandTotal - totalDiscounts);
+    const totalSurcharges = (data.surcharges || []).reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
+    const totalPayable = parseFloat(data.totalPayable) || (grandTotal - totalDiscounts + totalSurcharges);
     const hasDiscounts = (data.discounts || []).length > 0;
+    const hasSurcharges = (data.surcharges || []).length > 0;
+    const hasAdjustments = hasDiscounts || hasSurcharges;
 
     const discountRowsHtml = hasDiscounts ? data.discounts.map(d =>
       `<tr class="discount-row">
         <td colspan="5" class="right">${d.description}</td>
         <td class="right discount-val">- R$ ${formatCur(d.amount)}</td>
+      </tr>`
+    ).join('') : '';
+
+    const surchargeRowsHtml = hasSurcharges ? data.surcharges.map(d =>
+      `<tr class="surcharge-row">
+        <td colspan="5" class="right">${d.description}</td>
+        <td class="right surcharge-val">+ R$ ${formatCur(d.amount)}</td>
       </tr>`
     ).join('') : '';
 
@@ -1160,6 +1185,8 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
   .total-row td { border-top: 2px solid #333; font-weight: bold; font-size: 11px; background: #f0f4ff !important; }
   .discount-row td { font-size: 10px; border-bottom: 1px dashed #ccc; }
   .discount-val { color: #e53e3e; font-weight: bold; }
+  .surcharge-row td { font-size: 10px; border-bottom: 1px dashed #ccc; }
+  .surcharge-val { color: #2f855a; font-weight: bold; }
   .payable-row td { border-top: 2px solid #333; font-weight: bold; font-size: 13px; background: #fefcbf !important; }
   .status { margin-top: 12px; padding: 8px; border-radius: 4px; text-align: center; font-weight: bold; font-size: 12px; }
   .status-paid { background: #d4edda; color: #155724; }
@@ -1203,10 +1230,11 @@ router.get('/settlements/:id/export/pdf', async (req, res) => {
         <td colspan="3" class="right">Total de pecas</td>
         <td class="center">${formatNum(grandQty)}</td>
         <td></td>
-        <td class="right">${hasDiscounts ? 'SUBTOTAL' : 'TOTAL'} R$ ${formatCur(grandTotal)}</td>
+        <td class="right">${hasAdjustments ? 'SUBTOTAL' : 'TOTAL'} R$ ${formatCur(grandTotal)}</td>
       </tr>
       ${discountRowsHtml}
-      ${hasDiscounts ? `<tr class="payable-row">
+      ${surchargeRowsHtml}
+      ${hasAdjustments ? `<tr class="payable-row">
         <td colspan="5" class="right">Total a pagar</td>
         <td class="right">R$ ${formatCur(totalPayable)}</td>
       </tr>` : ''}
@@ -1283,6 +1311,48 @@ router.delete('/settlements/:id/discounts/:discountId', async (req, res) => {
   } catch (error) {
     console.error('Remove discount error:', error);
     return res.status(500).json({ message: 'Erro ao remover desconto.' });
+  }
+});
+
+// ── Settlement Surcharges (Acréscimos) ────────────────────────────────────
+
+router.post('/settlements/:id/surcharges', async (req, res) => {
+  try {
+    const { description, amount } = req.body;
+    if (!description || !amount) {
+      return res.status(400).json({ message: 'Descricao e valor sao obrigatorios.' });
+    }
+    const result = await repo.addSettlementSurcharge(req.params.id, description, parseFloat(amount));
+    return res.json(result);
+  } catch (error) {
+    console.error('Add surcharge error:', error);
+    return res.status(500).json({ message: 'Erro ao adicionar acrescimo.' });
+  }
+});
+
+router.put('/settlements/:id/surcharges/:surchargeId', async (req, res) => {
+  try {
+    const { description, amount } = req.body;
+    if (!description || !amount) {
+      return res.status(400).json({ message: 'Descricao e valor sao obrigatorios.' });
+    }
+    const result = await repo.updateSettlementSurcharge(req.params.surchargeId, description, parseFloat(amount));
+    if (!result) return res.status(404).json({ message: 'Acrescimo nao encontrado.' });
+    return res.json(result);
+  } catch (error) {
+    console.error('Update surcharge error:', error);
+    return res.status(500).json({ message: 'Erro ao atualizar acrescimo.' });
+  }
+});
+
+router.delete('/settlements/:id/surcharges/:surchargeId', async (req, res) => {
+  try {
+    const result = await repo.removeSettlementSurcharge(req.params.surchargeId);
+    if (!result) return res.status(404).json({ message: 'Acrescimo nao encontrado.' });
+    return res.json(result);
+  } catch (error) {
+    console.error('Remove surcharge error:', error);
+    return res.status(500).json({ message: 'Erro ao remover acrescimo.' });
   }
 });
 

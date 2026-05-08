@@ -847,6 +847,33 @@ export const removeSettlementDiscount = async (settlementId, discountId) => {
   return handleResponse(response);
 };
 
+// ── Terceiros: Settlement Surcharges (Acréscimos) ───────────────────────────
+
+export const addSettlementSurcharge = async (settlementId, data) => {
+  const response = await authFetch(`/api/terceiros/settlements/${settlementId}/surcharges`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const updateSettlementSurcharge = async (settlementId, surchargeId, data) => {
+  const response = await authFetch(`/api/terceiros/settlements/${settlementId}/surcharges/${surchargeId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data)
+  });
+  return handleResponse(response);
+};
+
+export const removeSettlementSurcharge = async (settlementId, surchargeId) => {
+  const response = await authFetch(`/api/terceiros/settlements/${settlementId}/surcharges/${surchargeId}`, {
+    method: "DELETE"
+  });
+  return handleResponse(response);
+};
+
 export const fetchTerceirosPricesForOfs = async (codcli, items) => {
   const response = await authFetch("/api/terceiros/find-prices", {
     method: "POST",

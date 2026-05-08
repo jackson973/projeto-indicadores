@@ -62,6 +62,8 @@ import {
   addSettlementItems,
   addSettlementDiscount,
   removeSettlementDiscount,
+  addSettlementSurcharge,
+  removeSettlementSurcharge,
   fetchTerceirosOfs,
   fetchTerceirosSuppliers,
   fetchTerceirosPricesForOfs,
@@ -134,6 +136,8 @@ const TerceirosSettlement = () => {
   const [editNotes, setEditNotes] = useState("");
   const [editDiscDesc, setEditDiscDesc] = useState("");
   const [editDiscAmount, setEditDiscAmount] = useState("");
+  const [editSurDesc, setEditSurDesc] = useState("");
+  const [editSurAmount, setEditSurAmount] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
   const [editingItemId, setEditingItemId] = useState(null);
   const [editingItemValue, setEditingItemValue] = useState("");
@@ -174,6 +178,9 @@ const TerceirosSettlement = () => {
   const [newDiscounts, setNewDiscounts] = useState([]);
   const [newDiscDesc, setNewDiscDesc] = useState("");
   const [newDiscAmount, setNewDiscAmount] = useState("");
+  const [newSurcharges, setNewSurcharges] = useState([]);
+  const [newSurDesc, setNewSurDesc] = useState("");
+  const [newSurAmount, setNewSurAmount] = useState("");
   const [ofSearchNew, setOfSearchNew] = useState("");
   const [etapaFilter, setEtapaFilter] = useState("");
   const [paymentStatusFilter, setPaymentStatusFilter] = useState("all");
@@ -976,6 +983,7 @@ const TerceirosSettlement = () => {
         notes,
         items,
         discounts: newDiscounts.length > 0 ? newDiscounts : undefined,
+        surcharges: newSurcharges.length > 0 ? newSurcharges : undefined,
         draftId: activeDraftId || undefined
       });
       toast({  title: "Fechamento criado com sucesso.", status: "success", duration: 3000 });
@@ -999,13 +1007,14 @@ const TerceirosSettlement = () => {
       setNewMonth(prevMonth);
       setNewYear(prevYear);
       setNewDiscounts([]);
+      setNewSurcharges([]);
       await loadSettlements();
     } catch (err) {
       toast({  title: err.message || "Erro ao criar fechamento.", status: "error", duration: 4000 });
     } finally {
       setSubmitting(false);
     }
-  }, [newSupplier, selectedOfs, unsettledOfs, getOfPrice, getOfPriceInfo, editedQuantities, editedGroupPrices, manualPrices, suppliers, newMonth, newYear, prevMonth, prevYear, notes, newDiscounts, loadSettlements, toast]);
+  }, [newSupplier, selectedOfs, unsettledOfs, getOfPrice, getOfPriceInfo, editedQuantities, editedGroupPrices, manualPrices, suppliers, newMonth, newYear, prevMonth, prevYear, notes, newDiscounts, newSurcharges, loadSettlements, toast]);
 
   // ── Draft auto-save ──────────────────────────────────────────────────────
   // Background save triggered by state changes while the new-settlement modal
@@ -1047,7 +1056,8 @@ const TerceirosSettlement = () => {
         newMonth, newYear,
         selectedOfIds: ofIds,
         editedQuantitiesById, manualPricesById, editedGroupPrices,
-        newDiscounts
+        newDiscounts,
+        newSurcharges
       }
     };
 
@@ -1067,7 +1077,7 @@ const TerceirosSettlement = () => {
     }
   }, [newSupplier, selectedOfs, unsettledOfs, suppliers, newMonth, newYear, notes,
       dateFrom, dateTo, ofSearchNew, etapaFilter, manualPrices, editedQuantities,
-      editedGroupPrices, newDiscounts]);
+      editedGroupPrices, newDiscounts, newSurcharges]);
 
   const flushPendingAutoSave = useCallback(async () => {
     if (autoSaveTimerRef.current) {
@@ -1099,7 +1109,7 @@ const TerceirosSettlement = () => {
       }
     };
   }, [creating, newSupplier, selectedOfs, unsettledOfs, manualPrices, editedQuantities,
-      editedGroupPrices, newDiscounts, notes, newMonth, newYear, dateFrom, dateTo,
+      editedGroupPrices, newDiscounts, newSurcharges, notes, newMonth, newYear, dateFrom, dateTo,
       ofSearchNew, etapaFilter, submitting, restoringDraft, savingDraft, persistDraft]);
 
   // ── Draft save/restore (persisted in DB) ─────────────────────────────────
@@ -1137,7 +1147,8 @@ const TerceirosSettlement = () => {
       newMonth, newYear,
       selectedOfIds: ofIds,
       editedQuantitiesById, manualPricesById, editedGroupPrices,
-      newDiscounts
+      newDiscounts,
+      newSurcharges
     };
 
     setSavingDraft(true);
@@ -1162,7 +1173,7 @@ const TerceirosSettlement = () => {
     } finally {
       setSavingDraft(false);
     }
-  }, [newSupplier, dateFrom, dateTo, ofSearchNew, etapaFilter, selectedOfs, unsettledOfs, manualPrices, editedQuantities, editedGroupPrices, notes, newDiscounts, suppliers, newMonth, newYear, activeDraftId, loadSettlements, toast]);
+  }, [newSupplier, dateFrom, dateTo, ofSearchNew, etapaFilter, selectedOfs, unsettledOfs, manualPrices, editedQuantities, editedGroupPrices, notes, newDiscounts, newSurcharges, suppliers, newMonth, newYear, activeDraftId, loadSettlements, toast]);
 
   const handleRestoreDraft = useCallback(async (draftId) => {
     setRestoringDraft(true);
@@ -1186,6 +1197,7 @@ const TerceirosSettlement = () => {
       setEtapaFilter(dd.etapaFilter || "");
       setNotes(draft.notes || "");
       setNewDiscounts(dd.newDiscounts || []);
+      setNewSurcharges(dd.newSurcharges || []);
 
       // Reload OFs from server. Fetch EXACTLY the OFs saved in the draft (by id)
       // so the modal shows just the user's selection — not the full unsettled
@@ -1325,6 +1337,9 @@ const TerceirosSettlement = () => {
     setNewDiscounts([]);
     setNewDiscDesc("");
     setNewDiscAmount("");
+    setNewSurcharges([]);
+    setNewSurDesc("");
+    setNewSurAmount("");
   }, [flushPendingAutoSave]);
 
   // ── Discount handlers (create panel - local state) ──────────────────────
@@ -1339,6 +1354,20 @@ const TerceirosSettlement = () => {
 
   const handleRemoveNewDiscount = useCallback((index) => {
     setNewDiscounts((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  // ── Surcharge handlers (create panel - local state) ─────────────────────
+  const handleAddNewSurcharge = useCallback(() => {
+    const desc = newSurDesc.trim();
+    const amt = parseFloat(String(newSurAmount).replace(",", "."));
+    if (!desc || !amt || amt <= 0) return;
+    setNewSurcharges((prev) => [...prev, { description: desc, amount: amt }]);
+    setNewSurDesc("");
+    setNewSurAmount("");
+  }, [newSurDesc, newSurAmount]);
+
+  const handleRemoveNewSurcharge = useCallback((index) => {
+    setNewSurcharges((prev) => prev.filter((_, i) => i !== index));
   }, []);
 
   // ── Discount handlers (edit panel - API calls) ──────────────────────────
@@ -1363,6 +1392,31 @@ const TerceirosSettlement = () => {
       await loadSettlements();
     } catch (err) {
       toast({  title: err.message || "Erro ao remover desconto.", status: "error", duration: 3000 });
+    }
+  }, [editingSettlement, loadSettlements, toast]);
+
+  // ── Surcharge handlers (edit panel - API calls) ─────────────────────────
+  const handleAddEditSurcharge = useCallback(async (desc, amount) => {
+    if (!editingSettlement) return;
+    try {
+      await addSettlementSurcharge(editingSettlement.id, { description: desc, amount });
+      const updated = await fetchTerceirosSettlement(editingSettlement.id);
+      setEditingSettlement(updated);
+      await loadSettlements();
+    } catch (err) {
+      toast({  title: err.message || "Erro ao adicionar acrescimo.", status: "error", duration: 3000 });
+    }
+  }, [editingSettlement, loadSettlements, toast]);
+
+  const handleRemoveEditSurcharge = useCallback(async (surchargeId) => {
+    if (!editingSettlement) return;
+    try {
+      await removeSettlementSurcharge(editingSettlement.id, surchargeId);
+      const updated = await fetchTerceirosSettlement(editingSettlement.id);
+      setEditingSettlement(updated);
+      await loadSettlements();
+    } catch (err) {
+      toast({  title: err.message || "Erro ao remover acrescimo.", status: "error", duration: 3000 });
     }
   }, [editingSettlement, loadSettlements, toast]);
 
@@ -1499,13 +1553,13 @@ const TerceirosSettlement = () => {
                   {monthNames[(s.referenceMonth || 1) - 1]}/{s.referenceYear} - {(s.totalItems ?? 0).toLocaleString("pt-BR")} pcs
                 </Text>
                 <VStack spacing={0} align="flex-end">
-                  {parseFloat(s.totalDiscounts) > 0 && (
+                  {(parseFloat(s.totalDiscounts) > 0 || parseFloat(s.totalSurcharges) > 0) && (
                     <Text fontSize="xs" color="gray.400" textDecoration="line-through">
                       {formatCurrency(s.totalAmount ?? 0)}
                     </Text>
                   )}
                   <Text fontSize="sm" fontWeight="bold">
-                    {formatCurrency(parseFloat(s.totalDiscounts) > 0 ? (s.totalPayable ?? 0) : (s.totalAmount ?? 0))}
+                    {formatCurrency((parseFloat(s.totalDiscounts) > 0 || parseFloat(s.totalSurcharges) > 0) ? (s.totalPayable ?? 0) : (s.totalAmount ?? 0))}
                   </Text>
                 </VStack>
               </Flex>
@@ -1586,13 +1640,13 @@ const TerceirosSettlement = () => {
                   <Td fontSize="sm">{monthNames[(s.referenceMonth || 1) - 1]}/{s.referenceYear}</Td>
                   <Td fontSize="sm" isNumeric>{(s.totalItems ?? 0).toLocaleString("pt-BR")}</Td>
                   <Td fontSize="sm" isNumeric>
-                    {parseFloat(s.totalDiscounts) > 0 && (
+                    {(parseFloat(s.totalDiscounts) > 0 || parseFloat(s.totalSurcharges) > 0) && (
                       <Text fontSize="xs" color="gray.400" textDecoration="line-through">
                         {formatCurrency(s.totalAmount ?? 0)}
                       </Text>
                     )}
                     <Text fontWeight="bold">
-                      {formatCurrency(parseFloat(s.totalDiscounts) > 0 ? (s.totalPayable ?? 0) : (s.totalAmount ?? 0))}
+                      {formatCurrency((parseFloat(s.totalDiscounts) > 0 || parseFloat(s.totalSurcharges) > 0) ? (s.totalPayable ?? 0) : (s.totalAmount ?? 0))}
                     </Text>
                   </Td>
                   <Td>
@@ -1978,8 +2032,11 @@ const TerceirosSettlement = () => {
             </VStack>
             {(() => {
               const detailDiscounts = viewingSettlement.discounts || [];
+              const detailSurcharges = viewingSettlement.surcharges || [];
               const totalDiscounts = detailDiscounts.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
-              const totalPayable = Math.max(0, total - totalDiscounts);
+              const totalSurcharges = detailSurcharges.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
+              const totalPayable = Math.max(0, total - totalDiscounts + totalSurcharges);
+              const hasAdjustments = detailDiscounts.length > 0 || detailSurcharges.length > 0;
               const totalPecas = items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0);
               return (
                 <>
@@ -1992,26 +2049,30 @@ const TerceirosSettlement = () => {
                         </Text>
                       </HStack>
                       <HStack spacing={2}>
-                        <Text fontWeight="bold" fontSize="sm">{detailDiscounts.length > 0 ? "Subtotal:" : "Total:"}</Text>
+                        <Text fontWeight="bold" fontSize="sm">{hasAdjustments ? "Subtotal:" : "Total:"}</Text>
                         <Text fontWeight="bold" fontSize="md" color="blue.500">
                           {formatCurrency(total)}
                         </Text>
                       </HStack>
-                      {detailDiscounts.length > 0 && (
-                        <>
-                          {detailDiscounts.map((d) => (
-                            <HStack key={d.id} spacing={2}>
-                              <Text fontSize="xs" color="red.500">{d.description}:</Text>
-                              <Text fontSize="sm" color="red.500" fontWeight="bold">- {formatCurrency(d.amount)}</Text>
-                            </HStack>
-                          ))}
-                          <HStack spacing={2} mt={1}>
-                            <Text fontWeight="bold" fontSize="sm">Total a Pagar:</Text>
-                            <Text fontWeight="bold" fontSize="md" color="green.500">
-                              {formatCurrency(totalPayable)}
-                            </Text>
-                          </HStack>
-                        </>
+                      {detailDiscounts.map((d) => (
+                        <HStack key={d.id} spacing={2}>
+                          <Text fontSize="xs" color="red.500">{d.description}:</Text>
+                          <Text fontSize="sm" color="red.500" fontWeight="bold">- {formatCurrency(d.amount)}</Text>
+                        </HStack>
+                      ))}
+                      {detailSurcharges.map((s) => (
+                        <HStack key={s.id} spacing={2}>
+                          <Text fontSize="xs" color="green.500">{s.description}:</Text>
+                          <Text fontSize="sm" color="green.500" fontWeight="bold">+ {formatCurrency(s.amount)}</Text>
+                        </HStack>
+                      ))}
+                      {hasAdjustments && (
+                        <HStack spacing={2} mt={1}>
+                          <Text fontWeight="bold" fontSize="sm">Total a Pagar:</Text>
+                          <Text fontWeight="bold" fontSize="md" color="green.500">
+                            {formatCurrency(totalPayable)}
+                          </Text>
+                        </HStack>
                       )}
                     </VStack>
                   </Flex>
@@ -2502,8 +2563,11 @@ const TerceirosSettlement = () => {
 
         {(() => {
           const editDiscounts = editingSettlement.discounts || [];
+          const editSurcharges = editingSettlement.surcharges || [];
           const totalDiscounts = editDiscounts.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
-          const totalPayable = Math.max(0, total - totalDiscounts);
+          const totalSurcharges = editSurcharges.reduce((s, d) => s + (parseFloat(d.amount) || 0), 0);
+          const totalPayable = Math.max(0, total - totalDiscounts + totalSurcharges);
+          const hasAdjustments = editDiscounts.length > 0 || editSurcharges.length > 0;
           const totalPecas = items.reduce((s, i) => s + (parseFloat(i.quantity) || 0), 0);
           return (
             <>
@@ -2516,26 +2580,34 @@ const TerceirosSettlement = () => {
                     </Text>
                   </HStack>
                   <HStack spacing={2}>
-                    <Text fontWeight="bold" fontSize="sm">{editDiscounts.length > 0 ? "Subtotal:" : "Total Geral:"}</Text>
+                    <Text fontWeight="bold" fontSize="sm">{hasAdjustments ? "Subtotal:" : "Total Geral:"}</Text>
                     <Text fontWeight="bold" fontSize="lg" color="blue.500">
                       {formatCurrency(total)}
                     </Text>
                   </HStack>
                   {editDiscounts.length > 0 && (
-                    <>
-                      <HStack spacing={2}>
-                        <Text fontSize="sm" color="red.500">Descontos:</Text>
-                        <Text fontSize="sm" color="red.500" fontWeight="bold">
-                          - {formatCurrency(totalDiscounts)}
-                        </Text>
-                      </HStack>
-                      <HStack spacing={2}>
-                        <Text fontWeight="bold" fontSize="sm">Total a Pagar:</Text>
-                        <Text fontWeight="bold" fontSize="lg" color="green.500">
-                          {formatCurrency(totalPayable)}
-                        </Text>
-                      </HStack>
-                    </>
+                    <HStack spacing={2}>
+                      <Text fontSize="sm" color="red.500">Descontos:</Text>
+                      <Text fontSize="sm" color="red.500" fontWeight="bold">
+                        - {formatCurrency(totalDiscounts)}
+                      </Text>
+                    </HStack>
+                  )}
+                  {editSurcharges.length > 0 && (
+                    <HStack spacing={2}>
+                      <Text fontSize="sm" color="green.500">Acréscimos:</Text>
+                      <Text fontSize="sm" color="green.500" fontWeight="bold">
+                        + {formatCurrency(totalSurcharges)}
+                      </Text>
+                    </HStack>
+                  )}
+                  {hasAdjustments && (
+                    <HStack spacing={2}>
+                      <Text fontWeight="bold" fontSize="sm">Total a Pagar:</Text>
+                      <Text fontWeight="bold" fontSize="lg" color="green.500">
+                        {formatCurrency(totalPayable)}
+                      </Text>
+                    </HStack>
                   )}
                 </VStack>
               </Flex>
@@ -2597,6 +2669,67 @@ const TerceirosSettlement = () => {
                       setEditDiscAmount("");
                     }}
                     isDisabled={!editDiscDesc.trim() || !editDiscAmount || parseFloat(String(editDiscAmount).replace(",", ".")) <= 0}
+                  />
+                </Flex>
+              </Box>
+
+              {/* Surcharges grid (Acréscimos) */}
+              <Box mt={4} borderWidth="1px" borderColor={borderColor} borderRadius="md" p={3}>
+                <Text fontSize="sm" fontWeight="bold" mb={2}>Acréscimos</Text>
+                {editSurcharges.length > 0 && (
+                  <VStack align="stretch" spacing={1} mb={2}>
+                    {editSurcharges.map((sur) => (
+                      <Flex key={sur.id} align="center" gap={2} bg="green.50" px={2} py={1} borderRadius="md">
+                        <Text fontSize="sm" flex="1">{sur.description}</Text>
+                        <Text fontSize="sm" fontWeight="bold" color="green.600">+ {formatCurrency(sur.amount)}</Text>
+                        <IconButton
+                          icon={<CloseIcon />}
+                          size="xs"
+                          variant="ghost"
+                          colorScheme="red"
+                          aria-label="Remover acréscimo"
+                          onClick={() => handleRemoveEditSurcharge(sur.id)}
+                        />
+                      </Flex>
+                    ))}
+                  </VStack>
+                )}
+                <Flex gap={2} align="center">
+                  <Input
+                    size="sm"
+                    placeholder="Descricao do acréscimo"
+                    value={editSurDesc}
+                    onChange={(e) => setEditSurDesc(e.target.value)}
+                    flex="1"
+                  />
+                  <InputGroup size="sm" w="140px">
+                    <InputLeftElement pointerEvents="none" fontSize="xs" color="gray.500">R$</InputLeftElement>
+                    <Input
+                      placeholder="0,00"
+                      value={editSurAmount}
+                      onChange={(e) => {
+                        const v = e.target.value.replace(/[^0-9,\.]/g, "");
+                        setEditSurAmount(v);
+                      }}
+                      textAlign="right"
+                      pl="10"
+                    />
+                  </InputGroup>
+                  <IconButton
+                    icon={<AddIcon />}
+                    size="sm"
+                    colorScheme="blue"
+                    variant="outline"
+                    aria-label="Adicionar acréscimo"
+                    onClick={async () => {
+                      const desc = editSurDesc.trim();
+                      const amt = parseFloat(String(editSurAmount).replace(",", "."));
+                      if (!desc || !amt || amt <= 0) return;
+                      await handleAddEditSurcharge(desc, amt);
+                      setEditSurDesc("");
+                      setEditSurAmount("");
+                    }}
+                    isDisabled={!editSurDesc.trim() || !editSurAmount || parseFloat(String(editSurAmount).replace(",", ".")) <= 0}
                   />
                 </Flex>
               </Box>
@@ -3285,26 +3418,34 @@ const TerceirosSettlement = () => {
                   </Text>
                 </HStack>
                 <HStack spacing={2}>
-                  <Text fontWeight="bold" fontSize="sm">{newDiscounts.length > 0 ? "Subtotal:" : "Total Selecionado:"}</Text>
+                  <Text fontWeight="bold" fontSize="sm">{(newDiscounts.length > 0 || newSurcharges.length > 0) ? "Subtotal:" : "Total Selecionado:"}</Text>
                   <Text fontWeight="bold" fontSize="lg" color="blue.500">
                     {formatCurrency(newSettlementTotal)}
                   </Text>
                 </HStack>
                 {newDiscounts.length > 0 && (
-                  <>
-                    <HStack spacing={2}>
-                      <Text fontSize="sm" color="red.500">Descontos:</Text>
-                      <Text fontSize="sm" color="red.500" fontWeight="bold">
-                        - {formatCurrency(newDiscounts.reduce((s, d) => s + d.amount, 0))}
-                      </Text>
-                    </HStack>
-                    <HStack spacing={2}>
-                      <Text fontWeight="bold" fontSize="sm">Total a Pagar:</Text>
-                      <Text fontWeight="bold" fontSize="lg" color="green.500">
-                        {formatCurrency(Math.max(0, newSettlementTotal - newDiscounts.reduce((s, d) => s + d.amount, 0)))}
-                      </Text>
-                    </HStack>
-                  </>
+                  <HStack spacing={2}>
+                    <Text fontSize="sm" color="red.500">Descontos:</Text>
+                    <Text fontSize="sm" color="red.500" fontWeight="bold">
+                      - {formatCurrency(newDiscounts.reduce((s, d) => s + d.amount, 0))}
+                    </Text>
+                  </HStack>
+                )}
+                {newSurcharges.length > 0 && (
+                  <HStack spacing={2}>
+                    <Text fontSize="sm" color="green.500">Acréscimos:</Text>
+                    <Text fontSize="sm" color="green.500" fontWeight="bold">
+                      + {formatCurrency(newSurcharges.reduce((s, d) => s + d.amount, 0))}
+                    </Text>
+                  </HStack>
+                )}
+                {(newDiscounts.length > 0 || newSurcharges.length > 0) && (
+                  <HStack spacing={2}>
+                    <Text fontWeight="bold" fontSize="sm">Total a Pagar:</Text>
+                    <Text fontWeight="bold" fontSize="lg" color="green.500">
+                      {formatCurrency(Math.max(0, newSettlementTotal - newDiscounts.reduce((s, d) => s + d.amount, 0) + newSurcharges.reduce((s, d) => s + d.amount, 0)))}
+                    </Text>
+                  </HStack>
                 )}
               </VStack>
             </Flex>
@@ -3359,6 +3500,60 @@ const TerceirosSettlement = () => {
                   aria-label="Adicionar desconto"
                   onClick={handleAddNewDiscount}
                   isDisabled={!newDiscDesc.trim() || !newDiscAmount || parseFloat(String(newDiscAmount).replace(",", ".")) <= 0}
+                />
+              </Flex>
+            </Box>
+
+            {/* Surcharges grid (Acréscimos) */}
+            <Box mt={4} borderWidth="1px" borderColor={borderColor} borderRadius="md" p={3}>
+              <Text fontSize="sm" fontWeight="bold" mb={2}>Acréscimos</Text>
+              {newSurcharges.length > 0 && (
+                <VStack align="stretch" spacing={1} mb={2}>
+                  {newSurcharges.map((sur, i) => (
+                    <Flex key={i} align="center" gap={2} bg="green.50" px={2} py={1} borderRadius="md">
+                      <Text fontSize="sm" flex="1">{sur.description}</Text>
+                      <Text fontSize="sm" fontWeight="bold" color="green.600">+ {formatCurrency(sur.amount)}</Text>
+                      <IconButton
+                        icon={<CloseIcon />}
+                        size="xs"
+                        variant="ghost"
+                        colorScheme="red"
+                        aria-label="Remover acréscimo"
+                        onClick={() => handleRemoveNewSurcharge(i)}
+                      />
+                    </Flex>
+                  ))}
+                </VStack>
+              )}
+              <Flex gap={2} align="center">
+                <Input
+                  size="sm"
+                  placeholder="Descricao do acréscimo"
+                  value={newSurDesc}
+                  onChange={(e) => setNewSurDesc(e.target.value)}
+                  flex="1"
+                />
+                <InputGroup size="sm" w="140px">
+                  <InputLeftElement pointerEvents="none" fontSize="xs" color="gray.500">R$</InputLeftElement>
+                  <Input
+                    placeholder="0,00"
+                    value={newSurAmount}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/[^0-9,\.]/g, "");
+                      setNewSurAmount(v);
+                    }}
+                    textAlign="right"
+                    pl="10"
+                  />
+                </InputGroup>
+                <IconButton
+                  icon={<AddIcon />}
+                  size="sm"
+                  colorScheme="blue"
+                  variant="outline"
+                  aria-label="Adicionar acréscimo"
+                  onClick={handleAddNewSurcharge}
+                  isDisabled={!newSurDesc.trim() || !newSurAmount || parseFloat(String(newSurAmount).replace(",", ".")) <= 0}
                 />
               </Flex>
             </Box>
