@@ -1377,3 +1377,186 @@ export const downloadOrderPdf = async (order) => {
     URL.revokeObjectURL(blobUrl);
   }, 100);
 };
+
+// ─── Estoque: Produtos ────────────────────────────────────────────────────────
+
+export const fetchStockProducts = async ({ search = '', includeInactive = false } = {}) => {
+  const qs = new URLSearchParams();
+  if (search) qs.set('search', search);
+  if (includeInactive) qs.set('includeInactive', 'true');
+  const q = qs.toString();
+  const r = await authFetch(`/api/stock/products${q ? `?${q}` : ''}`);
+  return handleResponse(r);
+};
+
+export const fetchStockProduct = async (id) => {
+  const r = await authFetch(`/api/stock/products/${id}`);
+  return handleResponse(r);
+};
+
+export const createStockProduct = async (data) => {
+  const r = await authFetch('/api/stock/products', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const updateStockProduct = async (id, data) => {
+  const r = await authFetch(`/api/stock/products/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const deleteStockProduct = async (id) => {
+  const r = await authFetch(`/api/stock/products/${id}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
+export const uploadStockProductPhoto = async (id, file) => {
+  const form = new FormData();
+  form.append('photo', file);
+  const r = await authFetch(`/api/stock/products/${id}/photo`, { method: 'POST', body: form });
+  return handleResponse(r);
+};
+
+// ─── Estoque: Códigos de barras ───────────────────────────────────────────────
+
+export const fetchStockVariantBarcodes = async (variantId) => {
+  const r = await authFetch(`/api/stock/variants/${variantId}/barcodes`);
+  return handleResponse(r);
+};
+
+export const addStockVariantBarcodes = async (variantId, barcodes) => {
+  const r = await authFetch(`/api/stock/variants/${variantId}/barcodes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ barcodes }),
+  });
+  return handleResponse(r);
+};
+
+export const removeStockBarcode = async (barcodeId) => {
+  const r = await authFetch(`/api/stock/barcodes/${barcodeId}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
+export const scanStockBarcode = async (barcode) => {
+  const r = await authFetch(`/api/stock/scan/${encodeURIComponent(barcode)}`);
+  return handleResponse(r);
+};
+
+// ─── Estoque: Motivos de movimentação ─────────────────────────────────────────
+
+export const fetchStockReasons = async ({ includeInactive = false } = {}) => {
+  const q = includeInactive ? '?includeInactive=true' : '';
+  const r = await authFetch(`/api/stock/reasons${q}`);
+  return handleResponse(r);
+};
+
+export const createStockReason = async (data) => {
+  const r = await authFetch('/api/stock/reasons', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const updateStockReason = async (id, data) => {
+  const r = await authFetch(`/api/stock/reasons/${id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const deleteStockReason = async (id) => {
+  const r = await authFetch(`/api/stock/reasons/${id}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
+// ─── Estoque: Movimentos ──────────────────────────────────────────────────────
+
+export const createStockMovement = async (data) => {
+  const r = await authFetch('/api/stock/movements', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const fetchStockMovements = async ({ variant_id, from, to, tipo, limit } = {}) => {
+  const qs = new URLSearchParams();
+  if (variant_id) qs.set('variant_id', variant_id);
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
+  if (tipo) qs.set('tipo', tipo);
+  if (limit) qs.set('limit', limit);
+  const q = qs.toString();
+  const r = await authFetch(`/api/stock/movements${q ? `?${q}` : ''}`);
+  return handleResponse(r);
+};
+
+// ─── Estoque: Inventário ──────────────────────────────────────────────────────
+
+export const fetchStockInventorySessions = async () => {
+  const r = await authFetch('/api/stock/inventory');
+  return handleResponse(r);
+};
+
+export const openStockInventorySession = async (data = {}) => {
+  const r = await authFetch('/api/stock/inventory', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse(r);
+};
+
+export const fetchStockInventorySession = async (id) => {
+  const r = await authFetch(`/api/stock/inventory/${id}`);
+  return handleResponse(r);
+};
+
+export const setStockInventoryCount = async (id, body) => {
+  const r = await authFetch(`/api/stock/inventory/${id}/count`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  return handleResponse(r);
+};
+
+export const removeStockInventoryCount = async (id, variantId) => {
+  const r = await authFetch(`/api/stock/inventory/${id}/count/${variantId}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
+export const finalizeStockInventorySession = async (id) => {
+  const r = await authFetch(`/api/stock/inventory/${id}/finalize`, { method: 'POST' });
+  return handleResponse(r);
+};
+
+export const cancelStockInventorySession = async (id) => {
+  const r = await authFetch(`/api/stock/inventory/${id}/cancel`, { method: 'POST' });
+  return handleResponse(r);
+};
+
+// ─── Estoque: Relatórios ──────────────────────────────────────────────────────
+
+export const fetchStockConsumption = async (from, to) => {
+  const r = await authFetch(`/api/stock/reports/consumption?from=${from}&to=${to}`);
+  return handleResponse(r);
+};
+
+export const fetchStockLowStock = async () => {
+  const r = await authFetch('/api/stock/reports/low-stock');
+  return handleResponse(r);
+};
