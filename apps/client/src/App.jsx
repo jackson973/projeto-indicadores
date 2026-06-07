@@ -75,6 +75,11 @@ import NewOrder from "./components/NewOrder";
 import OrdersList from "./components/OrdersList";
 import ProductDashboard from "./components/ProductDashboard";
 import ProductGroups from "./components/ProductGroups";
+import StockProductsManagement from "./components/StockProductsManagement";
+import StockControl from "./components/StockControl";
+import StockInventory from "./components/StockInventory";
+import StockReports from "./components/StockReports";
+import StockSettings from "./components/StockSettings";
 import ShopeeValidator from "./components/ShopeeValidator";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import RevenueDetailDrawer from "./components/RevenueDetailDrawer";
@@ -195,6 +200,12 @@ const ProductIcon = (props) => (
 const AdsIcon = (props) => (
   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
     <path d="M3 3h18v2H3V3zm0 4h12v2H3V7zm0 4h18v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2z" />
+  </svg>
+);
+
+const StockIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M20 2H4c-1.1 0-2 .9-2 2v3.01c0 .72.43 1.34 1 1.69V20c0 1.1 1.1 2 2 2h14c.9 0 2-.9 2-2V8.7c.57-.35 1-.97 1-1.69V4c0-1.1-.9-2-2-2zm-5 12H9v-2h6v2zm5-7H4V4h16v3z" />
   </svg>
 );
 
@@ -466,6 +477,18 @@ const App = () => {
         { label: "Config Produtos",  view: "orders-products",    show: user?.role === "admin" },
         { label: "Cond. Pagamento",  view: "orders-conditions",  show: user?.role === "admin" }
       ].filter(s => s.show !== false)
+    },
+    {
+      label: "Estoque",
+      icon: <StockIcon />,
+      show: true,
+      submenu: [
+        { label: "Controle de Estoque",  view: "stock-control" },
+        { label: "Inventário / Acerto",  view: "stock-inventory" },
+        { label: "Relatórios",           view: "stock-reports" },
+        { label: "Cadastro de Produtos", view: "stock-products",  show: user?.role === "admin" },
+        { label: "Configuração",         view: "stock-settings",  show: user?.role === "admin" },
+      ].filter(s => s.show !== false),
     },
     {
       label: "Terceiros",
@@ -945,6 +968,26 @@ const App = () => {
 
         {activeView === "validador-shopee" && user?.role === "admin" && (
           <ShopeeValidator />
+        )}
+
+        {activeView === "stock-control" && (
+          <StockControl />
+        )}
+
+        {activeView === "stock-inventory" && (
+          <StockInventory />
+        )}
+
+        {activeView === "stock-reports" && (
+          <StockReports />
+        )}
+
+        {activeView === "stock-products" && user?.role === "admin" && (
+          <StockProductsManagement />
+        )}
+
+        {activeView === "stock-settings" && user?.role === "admin" && (
+          <StockSettings />
         )}
 
         {hasData && activeView === "dashboard" && (
