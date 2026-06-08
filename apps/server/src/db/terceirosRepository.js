@@ -9,10 +9,11 @@ async function batchUpsertOfs(ofsData) {
     return { inserted: 0, updated: 0 };
   }
 
-  // Deduplicate by composite key
+  // Deduplicate by composite key — fac_codcli included so an OF split across two
+  // fornecedores in the same stage keeps both rows instead of dropping the first.
   const deduped = new Map();
   ofsData.forEach((of) => {
-    const key = `${of.facNumero}|${of.facCodsetor || ''}|${of.facCodigoProduto || ''}|${of.facCor || ''}|${of.facParte || ''}|${of.facTam || ''}`;
+    const key = `${of.facNumero}|${of.facCodsetor || ''}|${of.facCodigoProduto || ''}|${of.facCor || ''}|${of.facParte || ''}|${of.facTam || ''}|${of.facCodcli || ''}`;
     deduped.set(key, of);
   });
 
@@ -104,7 +105,8 @@ async function upsertOfBatch(batch) {
         COALESCE(fac_codigo_produto, ''),
         COALESCE(fac_cor, ''),
         COALESCE(fac_parte, ''),
-        COALESCE(fac_tam, '')
+        COALESCE(fac_tam, ''),
+        COALESCE(fac_codcli, '')
       )
       DO UPDATE SET
         fac_lancto = EXCLUDED.fac_lancto,
@@ -118,7 +120,6 @@ async function upsertOfBatch(batch) {
         fac_descparte = EXCLUDED.fac_descparte,
         fac_desc_produto = EXCLUDED.fac_desc_produto,
         produto_unidade = EXCLUDED.produto_unidade,
-        fac_codcli = EXCLUDED.fac_codcli,
         cliente_nome = EXCLUDED.cliente_nome,
         ddd_fone = EXCLUDED.ddd_fone,
         cliente_fone = EXCLUDED.cliente_fone,

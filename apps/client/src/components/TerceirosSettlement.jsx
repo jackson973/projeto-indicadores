@@ -630,7 +630,7 @@ const TerceirosSettlement = () => {
       prevSelected.forEach((idx) => {
         const of = prevOfs[idx];
         if (of) {
-          prevSelectedKeys.add(`${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`);
+          prevSelectedKeys.add(`${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_codcli || ''}`);
         }
       });
 
@@ -639,10 +639,10 @@ const TerceirosSettlement = () => {
       prevSelected.forEach((idx) => {
         const of = prevOfs[idx];
         if (of) {
-          const key = `${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+          const key = `${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_codcli || ''}`;
           // Only keep if not already in new data (avoid duplicates)
           const isDuplicate = data.some((d) =>
-            `${d.fac_numero}|${d.fac_codsetor}|${d.fac_codigo_produto}|${d.fac_parte}|${d.fac_cor}` === key
+            `${d.fac_numero}|${d.fac_codsetor}|${d.fac_codigo_produto}|${d.fac_parte}|${d.fac_cor}|${d.fac_codcli || ''}` === key
           );
           if (!isDuplicate) {
             prevSelectedOfs.push(of);
@@ -685,7 +685,7 @@ const TerceirosSettlement = () => {
       const newSelectedSet = new Set();
       merged.forEach((of, idx) => {
         if (of.settlementId) return; // skip already-settled OFs
-        const key = `${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}`;
+        const key = `${of.fac_numero}|${of.fac_codsetor}|${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_codcli || ''}`;
         if (prevSelectedKeys.has(key)) {
           newSelectedSet.add(idx);
         }
@@ -839,7 +839,7 @@ const TerceirosSettlement = () => {
   const partialOfPartKeys = useMemo(() => {
     const countMap = new Map();
     for (const of of unsettledOfs) {
-      const key = `${of.fac_numero}|${of.fac_parte || ''}`;
+      const key = `${of.fac_numero}|${of.fac_parte || ''}|${of.fac_codcli || ''}`;
       const entry = countMap.get(key) || { settled: 0, total: 0 };
       entry.total++;
       if (of.settlementId) entry.settled++;
@@ -2111,7 +2111,8 @@ const TerceirosSettlement = () => {
     ofs.forEach((of) => {
       // Use global index from unsettledOfs so selectedOfs indices match
       const globalIndex = globalOfs ? globalOfs.indexOf(of) : ofs.indexOf(of);
-      const key = `${of.fac_numero}|${of.fac_codsetor || ''}|${of.fac_codigo_produto}|${of.fac_cor}|${of.fac_parte}`;
+      // fac_codcli in the key keeps an OF split across two fornecedores as distinct groups.
+      const key = `${of.fac_numero}|${of.fac_codsetor || ''}|${of.fac_codigo_produto}|${of.fac_cor}|${of.fac_parte}|${of.fac_codcli || ''}`;
       if (!map.has(key)) {
         const priceInfo = getOfPriceInfo(of);
         const group = {
@@ -2219,11 +2220,12 @@ const TerceirosSettlement = () => {
     const map = new Map();
     const result = [];
     for (const cg of colorGroups) {
-      const key = `${cg.facNumero}|${cg.facCodsetor || ''}|${cg.facParte || ''}`;
+      const key = `${cg.facNumero}|${cg.facCodsetor || ''}|${cg.facParte || ''}|${cg.facCodcli || ''}`;
       if (!map.has(key)) {
         const g = {
           key,
           facNumero: cg.facNumero,
+          facCodcli: cg.facCodcli,
           facCodsetor: cg.facCodsetor,
           facDescsetor: cg.facDescsetor,
           facCodigoProduto: cg.facCodigoProduto,
@@ -2964,7 +2966,7 @@ const TerceirosSettlement = () => {
                 // Override partial status using the FULL unfiltered dataset so the
                 // "pago parcial" indication persists after the payment-status filter
                 // narrows the visible rows to only paid or only open.
-                const ofPartKey = `${ofGroup.facNumero}|${ofGroup.facParte || ''}`;
+                const ofPartKey = `${ofGroup.facNumero}|${ofGroup.facParte || ''}|${ofGroup.facCodcli || ''}`;
                 const isPartial = partialOfPartKeys.has(ofPartKey);
                 // Compute OF/Parte-level totals
                 let ofGroupQty = 0;
