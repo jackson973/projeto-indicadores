@@ -310,6 +310,47 @@ async function getMovements({ variant_id, from, to, tipo, limit = 100 } = {}) {
   return rows;
 }
 
+// Relatório de movimentações (produtos bipados / entradas / saídas / ajustes)
+// com filtros por período, código de produto, tamanho e busca por descrição.
+// As datas (from/to) são interpretadas no fuso de São Paulo e são inclusivas.
+async function getMovementsReport({ from, to, tipo, product_codigo, tamanho, q, limit = 1000 } = {}) {
+  const params = [];
+  const where = [];
+  if (tipo) { params.push(tipo); where.push(`m.tipo = $${params.length}`); }
+  if (from) {
+    params.push(from);
+    where.push(`m.created_at >= ($${params.length}::date)::timestamp AT TIME ZONE 'America/Sao_Paulo'`);
+  }
+  if (to) {
+    params.push(to);
+    where.push(`m.created_at < (($${params.length}::date) + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo'`);
+  }
+  if (product_codigo) { params.push(product_codigo); where.push(`p.codigo = $${params.length}`); }
+  if (tamanho) { params.push(tamanho); where.push(`v.tamanho ILIKE $${params.length}`); }
+  if (q) {
+    params.push(`%${q}%`);
+    where.push(`(p.descricao ILIKE $${params.length} OR p.codigo ILIKE $${params.length} OR v.codigo ILIKE $${params.length})`);
+  }
+  params.push(limit);
+  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+  const { rows } = await pool.query(
+    `SELECT m.id, m.tipo, m.qty, m.resulting_balance, m.note, m.created_at,
+            v.tamanho, v.codigo AS variant_codigo,
+            p.codigo AS product_codigo, p.descricao,
+            r.nome AS reason_nome, u.name AS user_name
+     FROM stock_movements m
+     JOIN stock_variants v ON v.id = m.variant_id
+     JOIN stock_products p ON p.id = v.product_id
+     LEFT JOIN stock_reasons r ON r.id = m.reason_id
+     LEFT JOIN users u ON u.id = m.user_id
+     ${whereSql}
+     ORDER BY m.created_at DESC
+     LIMIT $${params.length}`,
+    params
+  );
+  return rows;
+}
+
 // ─── Inventário (contagem absoluta) ──────────────────────────────────────────
 
 async function openInventorySession({ modo = 'contagem', note = null, user_id = null }) {
@@ -338,10 +379,12 @@ async function getInventorySession(id) {
   if (!session) return null;
   const { rows: counts } = await pool.query(
     `SELECT c.*, v.tamanho, v.codigo AS variant_codigo, v.balance AS current_balance,
-            p.descricao, p.codigo AS product_codigo, p.image_url
+            p.descricao, p.codigo AS product_codigo, p.image_url,
+            uc.name AS counted_by_name
      FROM stock_inventory_counts c
      JOIN stock_variants v ON v.id = c.variant_id
      JOIN stock_products p ON p.id = v.product_id
+     LEFT JOIN users uc ON uc.id = c.counted_by
      WHERE c.session_id = $1
      ORDER BY p.codigo, v.sort_order, v.tamanho`,
     [id]
@@ -350,25 +393,27 @@ async function getInventorySession(id) {
 }
 
 // Define a contagem absoluta de uma variante (lançamento manual)
-async function setInventoryCount(sessionId, variantId, countedQty) {
+async function setInventoryCount(sessionId, variantId, countedQty, userId = null) {
   const { rows } = await pool.query(
-    `INSERT INTO stock_inventory_counts (session_id, variant_id, counted_qty)
-     VALUES ($1,$2,$3)
-     ON CONFLICT (session_id, variant_id) DO UPDATE SET counted_qty=$3
+    `INSERT INTO stock_inventory_counts (session_id, variant_id, counted_qty, counted_by, counted_at, updated_at)
+     VALUES ($1,$2,$3,$4, now(), now())
+     ON CONFLICT (session_id, variant_id)
+       DO UPDATE SET counted_qty=$3, counted_by=$4, updated_at=now()
      RETURNING *`,
-    [sessionId, variantId, Math.max(0, Number(countedQty) || 0)]
+    [sessionId, variantId, Math.max(0, Number(countedQty) || 0), userId]
   );
   return rows[0];
 }
 
 // Incrementa a contagem de uma variante (bipagem: +by)
-async function incrementInventoryCount(sessionId, variantId, by = 1) {
+async function incrementInventoryCount(sessionId, variantId, by = 1, userId = null) {
   const { rows } = await pool.query(
-    `INSERT INTO stock_inventory_counts (session_id, variant_id, counted_qty)
-     VALUES ($1,$2,$3)
-     ON CONFLICT (session_id, variant_id) DO UPDATE SET counted_qty = stock_inventory_counts.counted_qty + $3
+    `INSERT INTO stock_inventory_counts (session_id, variant_id, counted_qty, counted_by, counted_at, updated_at)
+     VALUES ($1,$2,$3,$4, now(), now())
+     ON CONFLICT (session_id, variant_id)
+       DO UPDATE SET counted_qty = stock_inventory_counts.counted_qty + $3, counted_by=$4, updated_at=now()
      RETURNING *`,
-    [sessionId, variantId, Number(by) || 1]
+    [sessionId, variantId, Number(by) || 1, userId]
   );
   return rows[0];
 }
@@ -491,6 +536,7 @@ module.exports = {
   // movimentos
   applyMovement,
   getMovements,
+  getMovementsReport,
   // inventário
   openInventorySession,
   listInventorySessions,

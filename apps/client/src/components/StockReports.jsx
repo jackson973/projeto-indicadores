@@ -6,14 +6,19 @@ import {
   Flex,
   FormControl,
   FormLabel,
-  HStack,
   Input,
+  Select,
   SimpleGrid,
   Spinner,
   Stat,
   StatLabel,
   StatNumber,
   Table,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
   Tbody,
   Td,
   Th,
@@ -23,7 +28,8 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react";
 import useAppToast from "../hooks/useAppToast";
-import { fetchStockConsumption, fetchStockLowStock } from "../api";
+import { fetchStockConsumption, fetchStockLowStock, fetchStockMovementsReport } from "../api";
+import { formatSaoPaulo } from "../utils/timezone";
 
 function toISO(d) {
   const y = d.getFullYear();
@@ -37,7 +43,39 @@ function fmt(n, dec = 1) {
   return Number(n).toLocaleString("pt-BR", { minimumFractionDigits: dec, maximumFractionDigits: dec });
 }
 
+const TIPO_LABEL = { entrada: "Entrada", saida: "Saída", ajuste: "Ajuste" };
+const TIPO_COLOR = { entrada: "green", saida: "red", ajuste: "purple" };
+
 export default function StockReports() {
+  const subtle = useColorModeValue("gray.500", "gray.400");
+
+  return (
+    <Box>
+      <Text fontSize="xl" fontWeight="bold" mb={1}>Relatórios de Estoque</Text>
+      <Text fontSize="sm" color={subtle} mb={4}>
+        Alterne entre o consumo/cobertura e o histórico de movimentações (bipagens, entradas e saídas).
+      </Text>
+
+      <Tabs colorScheme="blue" isLazy>
+        <TabList>
+          <Tab>Consumo &amp; cobertura</Tab>
+          <Tab>Movimentações</Tab>
+        </TabList>
+        <TabPanels>
+          <TabPanel px={0}>
+            <ConsumptionReport />
+          </TabPanel>
+          <TabPanel px={0}>
+            <MovementsReport />
+          </TabPanel>
+        </TabPanels>
+      </Tabs>
+    </Box>
+  );
+}
+
+// ─── Aba 1: Consumo médio & cobertura ────────────────────────────────────────
+function ConsumptionReport() {
   const today = new Date();
   const past = new Date();
   past.setDate(today.getDate() - 29);
@@ -82,11 +120,6 @@ export default function StockReports() {
 
   return (
     <Box>
-      <Text fontSize="xl" fontWeight="bold" mb={1}>Relatórios de Estoque</Text>
-      <Text fontSize="sm" color={subtle} mb={4}>
-        Consumo médio (apenas saídas) no período e previsão de cobertura. Alerta de estoque baixo conforme o mínimo de cada produto.
-      </Text>
-
       <Flex gap={3} align="end" wrap="wrap" mb={4}>
         <FormControl maxW="180px">
           <FormLabel fontSize="sm">De</FormLabel>
@@ -181,6 +214,149 @@ export default function StockReports() {
                       </Tr>
                     );
                   })}
+                </Tbody>
+              </Table>
+            </Box>
+          )}
+        </>
+      )}
+    </Box>
+  );
+}
+
+// ─── Aba 2: Movimentações (bipagens / entradas / saídas / ajustes) ───────────
+function MovementsReport() {
+  const today = new Date();
+  const past = new Date();
+  past.setDate(today.getDate() - 29);
+
+  const [from, setFrom] = useState(toISO(past));
+  const [to, setTo] = useState(toISO(today));
+  const [codigo, setCodigo] = useState("");
+  const [tamanho, setTamanho] = useState("");
+  const [q, setQ] = useState("");
+  const [tipo, setTipo] = useState("");
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const toast = useAppToast();
+
+  const cardBg = useColorModeValue("white", "gray.800");
+  const border = useColorModeValue("gray.200", "gray.700");
+  const subtle = useColorModeValue("gray.500", "gray.400");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetchStockMovementsReport({
+        from, to, tipo: tipo || undefined,
+        product_codigo: codigo.trim() || undefined,
+        tamanho: tamanho.trim() || undefined,
+        q: q.trim() || undefined,
+      });
+      setData(res);
+    } catch (e) {
+      toast({ status: "error", title: "Erro ao carregar movimentações", description: e.message });
+    } finally {
+      setLoading(false);
+    }
+  }, [from, to, tipo, codigo, tamanho, q, toast]);
+
+  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const items = data?.items || [];
+
+  return (
+    <Box>
+      <Flex gap={3} align="end" wrap="wrap" mb={4}>
+        <FormControl maxW="160px">
+          <FormLabel fontSize="sm">De</FormLabel>
+          <Input type="date" value={from} onChange={e => setFrom(e.target.value)} />
+        </FormControl>
+        <FormControl maxW="160px">
+          <FormLabel fontSize="sm">Até</FormLabel>
+          <Input type="date" value={to} onChange={e => setTo(e.target.value)} />
+        </FormControl>
+        <FormControl maxW="140px">
+          <FormLabel fontSize="sm">Cód. produto</FormLabel>
+          <Input placeholder="ex: 004" value={codigo} onChange={e => setCodigo(e.target.value)} />
+        </FormControl>
+        <FormControl maxW="110px">
+          <FormLabel fontSize="sm">Tamanho</FormLabel>
+          <Input placeholder="ex: P" value={tamanho} onChange={e => setTamanho(e.target.value)} />
+        </FormControl>
+        <FormControl maxW="200px">
+          <FormLabel fontSize="sm">Produto / descrição</FormLabel>
+          <Input placeholder="buscar" value={q} onChange={e => setQ(e.target.value)} />
+        </FormControl>
+        <FormControl maxW="150px">
+          <FormLabel fontSize="sm">Tipo</FormLabel>
+          <Select value={tipo} onChange={e => setTipo(e.target.value)}>
+            <option value="">Todos</option>
+            <option value="entrada">Entrada</option>
+            <option value="saida">Saída</option>
+            <option value="ajuste">Ajuste</option>
+          </Select>
+        </FormControl>
+        <Button colorScheme="blue" onClick={load}>Filtrar</Button>
+      </Flex>
+
+      {loading ? (
+        <Flex justify="center" py={10}><Spinner /></Flex>
+      ) : (
+        <>
+          <SimpleGrid columns={{ base: 2, md: 3 }} spacing={3} mb={5}>
+            <Stat bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
+              <StatLabel fontSize="xs">Movimentos</StatLabel>
+              <StatNumber fontSize="lg">{data?.count ?? 0}</StatNumber>
+            </Stat>
+            <Stat bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
+              <StatLabel fontSize="xs">Total entradas</StatLabel>
+              <StatNumber fontSize="lg" color="green.500">+{data?.total_in ?? 0}</StatNumber>
+            </Stat>
+            <Stat bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
+              <StatLabel fontSize="xs">Total saídas</StatLabel>
+              <StatNumber fontSize="lg" color="red.500">-{data?.total_out ?? 0}</StatNumber>
+            </Stat>
+          </SimpleGrid>
+
+          {!items.length ? (
+            <Text fontSize="sm" color={subtle}>Nenhuma movimentação no período/filtros.</Text>
+          ) : (
+            <Box overflowX="auto">
+              <Table size="sm">
+                <Thead>
+                  <Tr>
+                    <Th>Data/Hora</Th>
+                    <Th>Produto</Th>
+                    <Th>Tam.</Th>
+                    <Th>Tipo</Th>
+                    <Th isNumeric>Qtd</Th>
+                    <Th isNumeric>Saldo após</Th>
+                    <Th>Motivo</Th>
+                    <Th>Usuário</Th>
+                    <Th>Obs.</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {items.map(m => (
+                    <Tr key={m.id}>
+                      <Td whiteSpace="nowrap" fontSize="xs">{formatSaoPaulo(m.created_at)}</Td>
+                      <Td>{m.product_codigo} · {m.descricao}</Td>
+                      <Td>{m.tamanho}</Td>
+                      <Td>
+                        <Badge colorScheme={TIPO_COLOR[m.tipo] || "gray"}>
+                          {TIPO_LABEL[m.tipo] || m.tipo}
+                        </Badge>
+                      </Td>
+                      <Td isNumeric color={m.qty > 0 ? "green.500" : m.qty < 0 ? "red.500" : undefined}>
+                        {m.qty > 0 ? "+" : ""}{m.qty}
+                      </Td>
+                      <Td isNumeric>{m.resulting_balance}</Td>
+                      <Td fontSize="xs">{m.reason_nome || "—"}</Td>
+                      <Td fontSize="xs" color={subtle}>{m.user_name || "—"}</Td>
+                      <Td fontSize="xs" color={subtle}>{m.note || "—"}</Td>
+                    </Tr>
+                  ))}
                 </Tbody>
               </Table>
             </Box>

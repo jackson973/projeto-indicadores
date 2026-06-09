@@ -25,6 +25,7 @@ import {
 import { AddIcon, DeleteIcon, SearchIcon } from "@chakra-ui/icons";
 import BarcodeScanner from "./BarcodeScanner";
 import useAppToast from "../hooks/useAppToast";
+import { formatSaoPaulo } from "../utils/timezone";
 import {
   fetchStockProducts,
   fetchStockInventorySessions,
@@ -187,7 +188,7 @@ export default function StockInventory() {
               <HStack key={s.id} justify="space-between" bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="md" px={3} py={2}>
                 <HStack>
                   <Badge colorScheme={s.status === "aberta" ? "yellow" : s.status === "finalizada" ? "green" : "gray"}>{s.status}</Badge>
-                  <Text fontSize="sm">#{s.id} · {new Date(s.created_at).toLocaleString("pt-BR")} · {s.items} item(ns)</Text>
+                  <Text fontSize="sm">#{s.id} · {formatSaoPaulo(s.created_at)} · {s.items} item(ns)</Text>
                 </HStack>
                 <Button size="xs" variant="outline" onClick={() => openExisting(s.id)}>Abrir</Button>
               </HStack>
@@ -209,7 +210,7 @@ export default function StockInventory() {
             <Text fontSize="xl" fontWeight="bold">Inventário #{active.id}</Text>
             <Badge colorScheme={isOpen ? "yellow" : active.status === "finalizada" ? "green" : "gray"}>{active.status}</Badge>
           </HStack>
-          <Text fontSize="sm" color={subtle}>{new Date(active.created_at).toLocaleString("pt-BR")}</Text>
+          <Text fontSize="sm" color={subtle}>{formatSaoPaulo(active.created_at)}</Text>
         </Box>
         <HStack>
           <Button size="sm" variant="ghost" onClick={() => setActive(null)}>Voltar</Button>
@@ -271,6 +272,7 @@ export default function StockInventory() {
                 <Th>Produto</Th><Th>Tam.</Th><Th isNumeric>Contado</Th>
                 <Th isNumeric>{isOpen ? "Saldo atual" : "Saldo sistema"}</Th>
                 <Th isNumeric>Diferença</Th>
+                <Th>Usuário</Th><Th>Hora</Th>
                 {isOpen && <Th></Th>}
               </Tr>
             </Thead>
@@ -288,6 +290,10 @@ export default function StockInventory() {
                       <Badge colorScheme={diff === 0 ? "gray" : diff > 0 ? "green" : "red"}>
                         {diff > 0 ? "+" : ""}{diff}
                       </Badge>
+                    </Td>
+                    <Td fontSize="xs" color={subtle}>{c.counted_by_name || "—"}</Td>
+                    <Td fontSize="xs" color={subtle} whiteSpace="nowrap">
+                      {formatSaoPaulo(c.updated_at || c.counted_at) || "—"}
                     </Td>
                     {isOpen && (
                       <Td>

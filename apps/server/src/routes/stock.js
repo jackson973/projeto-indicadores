@@ -225,8 +225,8 @@ router.post('/inventory/:id/count', async (req, res) => {
     const { variant_id, counted_qty, increment } = req.body;
     if (!variant_id) return res.status(400).json({ error: 'Informe a variante' });
     let row;
-    if (increment !== undefined) row = await repo.incrementInventoryCount(req.params.id, variant_id, increment);
-    else row = await repo.setInventoryCount(req.params.id, variant_id, counted_qty);
+    if (increment !== undefined) row = await repo.incrementInventoryCount(req.params.id, variant_id, increment, req.user.id);
+    else row = await repo.setInventoryCount(req.params.id, variant_id, counted_qty, req.user.id);
     res.json(row);
   } catch (err) {
     console.error('stock/inventory count error:', err);
@@ -280,6 +280,24 @@ router.get('/reports/consumption', async (req, res) => {
 router.get('/reports/low-stock', async (req, res) => {
   try { res.json(await repo.getLowStock()); }
   catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/stock/reports/movements?from=&to=&tipo=&product_codigo=&tamanho=&q=&limit=
+// Relatório de movimentações (bipagens/entradas/saídas/ajustes) com filtros.
+router.get('/reports/movements', async (req, res) => {
+  try {
+    const { from, to, tipo, product_codigo, tamanho, q, limit } = req.query;
+    const items = await repo.getMovementsReport({
+      from, to, tipo, product_codigo, tamanho, q,
+      limit: limit ? Math.min(Number(limit) || 1000, 5000) : 1000,
+    });
+    const totalIn = items.filter(m => m.qty > 0).reduce((s, m) => s + m.qty, 0);
+    const totalOut = items.filter(m => m.qty < 0).reduce((s, m) => s + Math.abs(m.qty), 0);
+    res.json({ from, to, count: items.length, total_in: totalIn, total_out: totalOut, items });
+  } catch (err) {
+    console.error('stock/reports/movements error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

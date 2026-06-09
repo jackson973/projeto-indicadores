@@ -1560,3 +1560,17 @@ export const fetchStockLowStock = async () => {
   const r = await authFetch('/api/stock/reports/low-stock');
   return handleResponse(r);
 };
+
+export const fetchStockMovementsReport = async ({ from, to, tipo, product_codigo, tamanho, q, limit } = {}) => {
+  const qs = new URLSearchParams();
+  if (from) qs.set('from', from);
+  if (to) qs.set('to', to);
+  if (tipo) qs.set('tipo', tipo);
+  if (product_codigo) qs.set('product_codigo', product_codigo);
+  if (tamanho) qs.set('tamanho', tamanho);
+  if (q) qs.set('q', q);
+  if (limit) qs.set('limit', limit);
+  const query = qs.toString();
+  const r = await authFetch(`/api/stock/reports/movements${query ? `?${query}` : ''}`);
+  return handleResponse(r);
+};
