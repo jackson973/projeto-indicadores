@@ -233,21 +233,30 @@ export default function StockProductsManagement() {
 
   // Retorna { status, message } para alimentar o beep/feedback do BarcodeScanner
   async function addBarcodeToVariant(variant, code, { silent = false } = {}) {
-    const barcode = String(code).trim();
-    if (!barcode) return { status: "error", message: "Código vazio" };
+    const codes = String(code)
+      .split(",")
+      .map(c => c.trim())
+      .filter(Boolean);
+    if (codes.length === 0) return { status: "error", message: "Código vazio" };
     try {
-      const res = await addStockVariantBarcodes(variant.id, [barcode]);
-      const skipped = res.skipped?.length > 0;
+      const res = await addStockVariantBarcodes(variant.id, codes);
+      const addedCount = res.added?.length || 0;
+      const skippedCount = res.skipped?.length || 0;
       if (!silent) {
-        toast(skipped
-          ? { status: "warning", title: "Código já cadastrado", description: barcode }
-          : { status: "success", title: "Código adicionado", description: barcode });
+        if (addedCount === 0) {
+          toast({ status: "warning", title: "Nenhum código adicionado",
+            description: `${skippedCount} já cadastrado(s)` });
+        } else {
+          toast({ status: "success",
+            title: `${addedCount} código(s) adicionado(s)`,
+            description: skippedCount ? `${skippedCount} já cadastrado(s)` : undefined });
+        }
       }
       setBarcodeInputs(s => ({ ...s, [variant.id]: "" }));
       await refreshDraftBarcodes();
-      return skipped
-        ? { status: "duplicate", message: `${barcode} já existe` }
-        : { status: "success", message: `${barcode} → ${variant.tamanho}` };
+      return addedCount === 0
+        ? { status: "duplicate", message: `${skippedCount} já existe(m)` }
+        : { status: "success", message: `${addedCount} → ${variant.tamanho}${skippedCount ? ` (${skippedCount} dup.)` : ""}` };
     } catch (e) {
       if (!silent) toast({ status: "error", title: "Erro ao adicionar código", description: e.message });
       return { status: "error", message: e.message };
@@ -410,7 +419,7 @@ export default function StockProductsManagement() {
                               ))}
                             </Wrap>
                             <HStack>
-                              <Input size="xs" maxW="200px" placeholder="Código de barras"
+                              <Input size="xs" maxW="260px" placeholder="Código(s) — separar por vírgula"
                                 value={barcodeInputs[v.id] || ""}
                                 onChange={e => setBarcodeInputs(s => ({ ...s, [v.id]: e.target.value }))}
                                 onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addBarcodeToVariant(v, barcodeInputs[v.id]); } }} />
