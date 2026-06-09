@@ -65,13 +65,13 @@ async function getProductById(id) {
 
 // Cria produto-base + variantes da grade.
 // variants: [{ tamanho, codigo?, min_stock? }]
-async function createProduct({ codigo, descricao, image_url = null, variants = [] }) {
+async function createProduct({ codigo, descricao, familia = null, image_url = null, variants = [] }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
     const { rows } = await client.query(
-      `INSERT INTO stock_products (codigo, descricao, image_url) VALUES ($1,$2,$3) RETURNING *`,
-      [codigo, descricao, image_url]
+      `INSERT INTO stock_products (codigo, descricao, familia, image_url) VALUES ($1,$2,$3,$4) RETURNING *`,
+      [codigo, descricao, familia, image_url]
     );
     const product = rows[0];
     await _upsertVariants(client, product.id, codigo, variants);
@@ -87,7 +87,7 @@ async function createProduct({ codigo, descricao, image_url = null, variants = [
 
 // Atualiza produto e reconcilia a grade: insere novos tamanhos, atualiza existentes,
 // desativa os removidos (não apaga — preserva histórico de movimentos/barcodes).
-async function updateProduct(id, { codigo, descricao, image_url, variants }) {
+async function updateProduct(id, { codigo, descricao, familia, image_url, variants }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -95,10 +95,11 @@ async function updateProduct(id, { codigo, descricao, image_url, variants }) {
       `UPDATE stock_products
        SET codigo = COALESCE($1, codigo),
            descricao = COALESCE($2, descricao),
-           image_url = COALESCE($3, image_url),
+           familia = CASE WHEN $3::text IS NULL THEN familia ELSE NULLIF(BTRIM($3), '') END,
+           image_url = COALESCE($4, image_url),
            updated_at = NOW()
-       WHERE id = $4`,
-      [codigo ?? null, descricao ?? null, image_url ?? null, id]
+       WHERE id = $5`,
+      [codigo ?? null, descricao ?? null, familia ?? null, image_url ?? null, id]
     );
     if (variants !== undefined) {
       const baseCodigo = codigo ?? (await client.query('SELECT codigo FROM stock_products WHERE id=$1', [id])).rows[0]?.codigo;
@@ -351,6 +352,169 @@ async function getMovementsReport({ from, to, tipo, product_codigo, tamanho, q, 
   return rows;
 }
 
+// ─── Dashboard de Separação (apenas SAÍDAS) ──────────────────────────────────
+// Tudo aqui considera só m.tipo='saida' (= peça separada). qty da saída é
+// negativo no banco, então peças = ABS(m.qty). Datas no fuso de São Paulo.
+
+// "Família": usa o campo cadastrado; se vazio, cai no 1º termo da descrição.
+const FAMILY_EXPR = `COALESCE(NULLIF(BTRIM(p.familia), ''), INITCAP(SPLIT_PART(BTRIM(p.descricao), ' ', 1)))`;
+
+// Filtro de saída no período (inclusivo no 'to'), no fuso de São Paulo.
+// Aceita filtros opcionais por produto (p.codigo) e família (FAMILY_EXPR).
+// As consultas que usam família/produto precisam dar JOIN em stock_products (alias p).
+function _saidaPeriod(params, { from, to, product_codigo = null, familia = null } = {}) {
+  const conds = [`m.tipo = 'saida'`];
+  params.push(from);
+  conds.push(`m.created_at >= ($${params.length}::date)::timestamp AT TIME ZONE 'America/Sao_Paulo'`);
+  params.push(to);
+  conds.push(`m.created_at < (($${params.length}::date) + 1)::timestamp AT TIME ZONE 'America/Sao_Paulo'`);
+  if (product_codigo) { params.push(product_codigo); conds.push(`p.codigo = $${params.length}`); }
+  if (familia) { params.push(familia); conds.push(`${FAMILY_EXPR} = $${params.length}`); }
+  return conds.join(' AND ');
+}
+
+// Helpers de data (ISO YYYY-MM-DD) — usam meio-dia UTC para evitar bordas de DST.
+function _d(iso) { return new Date(`${iso}T12:00:00Z`); }
+function _iso(d) { return d.toISOString().slice(0, 10); }
+function _addDays(iso, n) { const d = _d(iso); d.setUTCDate(d.getUTCDate() + n); return _iso(d); }
+function _addMonths(iso, n) { const d = _d(iso); d.setUTCMonth(d.getUTCMonth() + n); return _iso(d); }
+function _weekStart(iso) { const d = _d(iso); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow); return _iso(d); } // segunda
+function _monthStart(iso) { return `${iso.slice(0, 8)}01`; }
+function _spToday() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
+function _daysBetween(from, to) { return Math.round((_d(to) - _d(from)) / 86400000); }
+
+// Série diária de peças separadas (saídas) num período (com filtros opcionais).
+async function _dailySaidas(opts) {
+  const params = [];
+  const where = _saidaPeriod(params, opts);
+  const { rows } = await pool.query(
+    `SELECT (m.created_at AT TIME ZONE 'America/Sao_Paulo')::date::text AS dia,
+            SUM(ABS(m.qty))::int AS pcs
+     FROM stock_movements m
+     JOIN stock_variants v ON v.id = m.variant_id
+     JOIN stock_products p ON p.id = v.product_id
+     WHERE ${where}
+     GROUP BY 1 ORDER BY 1`,
+    params
+  );
+  return rows; // [{ dia, pcs }]
+}
+
+async function getSeparationDashboard({ from, to, product_codigo = null, familia = null }) {
+  const F = { from, to, product_codigo, familia };
+  const params1 = []; const w1 = _saidaPeriod(params1, F);
+  const params2 = []; const w2 = _saidaPeriod(params2, F);
+  const params3 = []; const w3 = _saidaPeriod(params3, F);
+  const params4 = []; const w4 = _saidaPeriod(params4, F);
+  const params5 = []; const w5 = _saidaPeriod(params5, F);
+
+  // Período selecionado: série diária + agregações
+  const [series, bySize, byFamily, byProduct, familySize, productSize] = await Promise.all([
+    _dailySaidas(F),
+    pool.query(
+      `SELECT v.tamanho, SUM(ABS(m.qty))::int AS pcs
+       FROM stock_movements m
+       JOIN stock_variants v ON v.id = m.variant_id
+       JOIN stock_products p ON p.id = v.product_id
+       WHERE ${w1}
+       GROUP BY v.tamanho ORDER BY pcs DESC`, params1
+    ).then(r => r.rows),
+    pool.query(
+      `SELECT ${FAMILY_EXPR} AS familia, SUM(ABS(m.qty))::int AS pcs
+       FROM stock_movements m
+       JOIN stock_variants v ON v.id = m.variant_id
+       JOIN stock_products p ON p.id = v.product_id
+       WHERE ${w2}
+       GROUP BY 1 ORDER BY pcs DESC`, params2
+    ).then(r => r.rows),
+    pool.query(
+      `SELECT p.codigo, p.descricao, ${FAMILY_EXPR} AS familia, SUM(ABS(m.qty))::int AS pcs
+       FROM stock_movements m
+       JOIN stock_variants v ON v.id = m.variant_id
+       JOIN stock_products p ON p.id = v.product_id
+       WHERE ${w3}
+       GROUP BY p.id ORDER BY pcs DESC LIMIT 15`, params3
+    ).then(r => r.rows),
+    pool.query(
+      `SELECT ${FAMILY_EXPR} AS familia, v.tamanho, SUM(ABS(m.qty))::int AS pcs
+       FROM stock_movements m
+       JOIN stock_variants v ON v.id = m.variant_id
+       JOIN stock_products p ON p.id = v.product_id
+       WHERE ${w4}
+       GROUP BY 1, v.tamanho`, params4
+    ).then(r => r.rows),
+    pool.query(
+      `SELECT p.codigo, p.descricao, v.tamanho, SUM(ABS(m.qty))::int AS pcs
+       FROM stock_movements m
+       JOIN stock_variants v ON v.id = m.variant_id
+       JOIN stock_products p ON p.id = v.product_id
+       WHERE ${w5}
+       GROUP BY p.codigo, p.descricao, v.tamanho`, params5
+    ).then(r => r.rows),
+  ]);
+
+  // Período anterior de mesmo tamanho (para sobreposição no gráfico)
+  const len = _daysBetween(from, to) + 1;
+  const prevTo = _addDays(from, -1);
+  const prevFrom = _addDays(prevTo, -(len - 1));
+  const prevSeries = await _dailySaidas({ ...F, from: prevFrom, to: prevTo });
+
+  // KPIs (hoje / semana / mês) respeitam os filtros, mas não o período selecionado.
+  const today = _spToday();
+  const winStart = _addDays(today, -75); // janela suficiente p/ mês anterior parcial
+  const dailyMap = {};
+  for (const r of await _dailySaidas({ ...F, from: winStart, to: today })) dailyMap[r.dia] = r.pcs;
+  const sumRange = (a, b) => { // inclusivo
+    let s = 0; let d = a;
+    while (d <= b) { s += dailyMap[d] || 0; d = _addDays(d, 1); }
+    return s;
+  };
+  const wkStart = _weekStart(today);
+  const moStart = _monthStart(today);
+  const prevMoStart = _addMonths(moStart, -1);
+  const elapsed = _daysBetween(moStart, today); // dias decorridos no mês (0-based)
+  const kpis = {
+    today: dailyMap[today] || 0,
+    yesterday: dailyMap[_addDays(today, -1)] || 0,
+    week: sumRange(wkStart, today),
+    prevWeek: sumRange(_addDays(wkStart, -7), _addDays(today, -7)), // mesma janela na semana anterior
+    month: sumRange(moStart, today),
+    prevMonth: sumRange(prevMoStart, _addDays(prevMoStart, elapsed)), // mês anterior até o mesmo dia
+  };
+
+  // Métricas do período selecionado
+  const periodTotal = series.reduce((s, r) => s + r.pcs, 0);
+  const best = series.reduce((m, r) => (r.pcs > (m?.pcs || 0) ? r : m), null);
+  const avgPerActiveDay = series.length ? Math.round(periodTotal / series.length) : 0;
+
+  return {
+    period: { from, to, total: periodTotal, avgPerActiveDay, best },
+    prevPeriod: { from: prevFrom, to: prevTo },
+    series,        // [{ dia, pcs }] período atual
+    prevSeries,    // [{ dia, pcs }] período anterior
+    bySize,        // [{ tamanho, pcs }]
+    byFamily,      // [{ familia, pcs }]
+    byProduct,     // [{ codigo, descricao, familia, pcs }]
+    familySize,    // [{ familia, tamanho, pcs }] (heatmap)
+    productSize,   // [{ codigo, descricao, tamanho, pcs }] (barras empilhadas por tamanho)
+    kpis,
+  };
+}
+
+// Opções para os filtros do dashboard: produtos (codigo+descrição+família)
+// e a lista de famílias distintas (mesma regra de agrupamento do dashboard).
+async function getSeparationFilters() {
+  const { rows } = await pool.query(
+    `SELECT p.codigo, p.descricao, ${FAMILY_EXPR} AS familia
+     FROM stock_products p
+     WHERE p.active = true
+     ORDER BY p.codigo`
+  );
+  const familias = [...new Set(rows.map(r => r.familia).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return { products: rows, familias };
+}
+
 // ─── Inventário (contagem absoluta) ──────────────────────────────────────────
 
 async function openInventorySession({ modo = 'contagem', note = null, user_id = null }) {
@@ -548,5 +712,7 @@ module.exports = {
   cancelInventorySession,
   // relatórios
   getConsumptionReport,
+  getSeparationDashboard,
+  getSeparationFilters,
   getLowStock,
 };

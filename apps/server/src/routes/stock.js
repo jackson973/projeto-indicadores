@@ -54,9 +54,9 @@ router.get('/products/:id', async (req, res) => {
 // POST /api/stock/products
 router.post('/products', requireAdmin, async (req, res) => {
   try {
-    const { codigo, descricao, variants } = req.body;
+    const { codigo, descricao, familia, variants } = req.body;
     if (!codigo || !descricao) return res.status(400).json({ error: 'Informe código e descrição' });
-    const product = await repo.createProduct({ codigo, descricao, variants });
+    const product = await repo.createProduct({ codigo, descricao, familia, variants });
     res.json(product);
   } catch (err) {
     console.error('stock/products POST error:', err);
@@ -68,8 +68,8 @@ router.post('/products', requireAdmin, async (req, res) => {
 // PUT /api/stock/products/:id
 router.put('/products/:id', requireAdmin, async (req, res) => {
   try {
-    const { codigo, descricao, variants } = req.body;
-    const product = await repo.updateProduct(req.params.id, { codigo, descricao, variants });
+    const { codigo, descricao, familia, variants } = req.body;
+    const product = await repo.updateProduct(req.params.id, { codigo, descricao, familia, variants });
     res.json(product);
   } catch (err) {
     console.error('stock/products/:id PUT error:', err);
@@ -296,6 +296,32 @@ router.get('/reports/movements', async (req, res) => {
     res.json({ from, to, count: items.length, total_in: totalIn, total_out: totalOut, items });
   } catch (err) {
     console.error('stock/reports/movements error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/stock/reports/separation?from=&to=&product_codigo=&familia=
+// Dashboard de Separação: agregações sobre as SAÍDAS bipadas no período.
+router.get('/reports/separation', async (req, res) => {
+  try {
+    const { from, to, product_codigo, familia } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'Informe o período (from/to)' });
+    res.json(await repo.getSeparationDashboard({
+      from, to,
+      product_codigo: product_codigo || null,
+      familia: familia || null,
+    }));
+  } catch (err) {
+    console.error('stock/reports/separation error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/stock/reports/separation-options — produtos e famílias p/ os filtros.
+router.get('/reports/separation-options', async (req, res) => {
+  try { res.json(await repo.getSeparationFilters()); }
+  catch (err) {
+    console.error('stock/reports/separation-options error:', err);
     res.status(500).json({ error: err.message });
   }
 });

@@ -114,11 +114,11 @@ export default function StockControl() {
         </Box>
       </Flex>
 
-      {/* Movimentos recentes (sessão atual) */}
+      {/* Bipagens desta sessão (conferência ao vivo; não é o histórico — veja Relatórios) */}
       <Box mt={5}>
-        <Text fontWeight="semibold" mb={2}>Movimentos recentes</Text>
+        <Text fontWeight="semibold" mb={2}>Bipagens desta sessão</Text>
         {recent.length === 0 ? (
-          <Text fontSize="sm" color={subtle}>Nenhum movimento ainda nesta sessão.</Text>
+          <Text fontSize="sm" color={subtle}>Nenhuma bipagem ainda nesta sessão.</Text>
         ) : (
           <VStack align="stretch" spacing={2}>
             {recent.map(m => (

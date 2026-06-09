@@ -55,6 +55,7 @@ const emptyDraft = () => ({
   id: null,
   codigo: "",
   descricao: "",
+  familia: "",
   image_url: null,
   _photoFile: null,
   _photoPreview: null,
@@ -111,6 +112,7 @@ export default function StockProductsManagement() {
       id: p.id,
       codigo: p.codigo,
       descricao: p.descricao,
+      familia: p.familia || "",
       image_url: p.image_url,
       _photoFile: null,
       _photoPreview: null,
@@ -183,6 +185,7 @@ export default function StockProductsManagement() {
       const payload = {
         codigo: draft.codigo.trim(),
         descricao: draft.descricao.trim(),
+        familia: draft.familia.trim(),
         variants: draft.variants.map(v => ({ tamanho: v.tamanho, min_stock: Number(v.min_stock) || 0 })),
       };
       let saved;
@@ -362,6 +365,17 @@ export default function StockProductsManagement() {
                   <Input value={draft.descricao} placeholder="ex: Trijunto de verão Menina" onChange={e => setDraft(d => ({ ...d, descricao: e.target.value }))} />
                 </FormControl>
               </SimpleGrid>
+
+              <FormControl mt={3}>
+                <FormLabel fontSize="sm">
+                  Família
+                  <Text as="span" fontWeight="400" color="gray.500" ml={2}>
+                    (agrupa linhas no Dashboard de Separação — ex.: "Soft")
+                  </Text>
+                </FormLabel>
+                <Input value={draft.familia} placeholder="ex: Soft — deixe vazio para usar o 1º termo da descrição"
+                  onChange={e => setDraft(d => ({ ...d, familia: e.target.value }))} />
+              </FormControl>
 
               {/* Grade de tamanhos */}
               <Box>

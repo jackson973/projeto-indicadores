@@ -1574,3 +1574,16 @@ export const fetchStockMovementsReport = async ({ from, to, tipo, product_codigo
   const r = await authFetch(`/api/stock/reports/movements${query ? `?${query}` : ''}`);
   return handleResponse(r);
 };
+
+export const fetchStockSeparationDashboard = async (from, to, { product_codigo, familia } = {}) => {
+  const qs = new URLSearchParams({ from, to });
+  if (product_codigo) qs.set('product_codigo', product_codigo);
+  if (familia) qs.set('familia', familia);
+  const r = await authFetch(`/api/stock/reports/separation?${qs.toString()}`);
+  return handleResponse(r);
+};
+
+export const fetchStockSeparationOptions = async () => {
+  const r = await authFetch('/api/stock/reports/separation-options');
+  return handleResponse(r);
+};

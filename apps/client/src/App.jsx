@@ -77,6 +77,7 @@ import ProductDashboard from "./components/ProductDashboard";
 import ProductGroups from "./components/ProductGroups";
 import StockProductsManagement from "./components/StockProductsManagement";
 import StockControl from "./components/StockControl";
+import StockSeparationDashboard from "./components/StockSeparationDashboard";
 import StockInventory from "./components/StockInventory";
 import StockReports from "./components/StockReports";
 import StockSettings from "./components/StockSettings";
@@ -483,7 +484,8 @@ const App = () => {
       icon: <StockIcon />,
       show: true,
       submenu: [
-        { label: "Controle de Estoque",  view: "stock-control" },
+        { label: "Dashboard de Separação", view: "stock-separation" },
+        { label: "Entradas/Saídas",       view: "stock-control" },
         { label: "Inventário / Acerto",  view: "stock-inventory" },
         { label: "Relatórios",           view: "stock-reports" },
         { label: "Cadastro de Produtos", view: "stock-products",  show: user?.role === "admin" },
@@ -968,6 +970,10 @@ const App = () => {
 
         {activeView === "validador-shopee" && user?.role === "admin" && (
           <ShopeeValidator />
+        )}
+
+        {activeView === "stock-separation" && (
+          <StockSeparationDashboard />
         )}
 
         {activeView === "stock-control" && (
