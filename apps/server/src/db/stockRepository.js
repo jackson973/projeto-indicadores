@@ -1,4 +1,5 @@
 const db = require('./connection');
+const { getSaoPauloDate } = require('../lib/timezone');
 // Wrap to match pool API used throughout the repositories
 const pool = {
   query: db.query,
@@ -380,7 +381,9 @@ function _addDays(iso, n) { const d = _d(iso); d.setUTCDate(d.getUTCDate() + n);
 function _addMonths(iso, n) { const d = _d(iso); d.setUTCMonth(d.getUTCMonth() + n); return _iso(d); }
 function _weekStart(iso) { const d = _d(iso); const dow = (d.getUTCDay() + 6) % 7; d.setUTCDate(d.getUTCDate() - dow); return _iso(d); } // segunda
 function _monthStart(iso) { return `${iso.slice(0, 8)}01`; }
-function _spToday() { return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }); }
+// Data de hoje (YYYY-MM-DD) no fuso de São Paulo. Usa o helper do projeto, que
+// é ICU-build-independent (não depende de 'en-CA', que quebra em small-icu/prod).
+function _spToday() { return getSaoPauloDate(); }
 function _daysBetween(from, to) { return Math.round((_d(to) - _d(from)) / 86400000); }
 
 // Série diária de peças separadas (saídas) num período (com filtros opcionais).
