@@ -1304,7 +1304,7 @@ export const integrateOrderSisplan = async (orderId) => {
   return handleResponse(r);
 };
 
-export const getOrderPdfUrl = (order) => {
+export const getOrderPdfUrl = (order, { detailed = false } = {}) => {
   const token = getToken();
   const d = new Date(order.created_at);
   const dd = String(d.getDate()).padStart(2, '0');
@@ -1313,7 +1313,8 @@ export const getOrderPdfUrl = (order) => {
   const clientName = (order.customer_snapshot?.fantasy_name || order.customer_snapshot?.company_name || '').replace(/[^a-zA-Z0-9À-ÿ\s]/g, '').trim();
   const fileType = order.type === 'pedido' ? 'Pedido' : 'Orçamento';
   const filename = encodeURIComponent(`${fileType} ${dd}_${mm}_${yy} - ${clientName}.pdf`);
-  return `/api/orders/${order.id}/pdf/${filename}?token=${token}`;
+  const modeParam = detailed ? '&mode=completo' : '';
+  return `/api/orders/${order.id}/pdf/${filename}?token=${token}${modeParam}`;
 };
 
 // ── Validador de Pedidos: Shopee ─────────────────────────────────────────────
@@ -1336,15 +1337,16 @@ export const reconciliateShopee = async ({ start, end, store, incomeReport }) =>
   return handleResponse(r);
 };
 
-export const downloadOrderPdf = async (order) => {
-  const url = getOrderPdfUrl(order);
+export const downloadOrderPdf = async (order, { detailed = false } = {}) => {
+  const url = getOrderPdfUrl(order, { detailed });
   const d = new Date(order.created_at);
   const dd = String(d.getDate()).padStart(2, '0');
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const yy = String(d.getFullYear()).slice(2);
   const clientName = (order.customer_snapshot?.fantasy_name || order.customer_snapshot?.company_name || '').replace(/[^a-zA-Z0-9À-ÿ\s]/g, '').trim();
   const fileType = order.type === 'pedido' ? 'Pedido' : 'Orçamento';
-  const filename = `${fileType} ${dd}_${mm}_${yy} - ${clientName}.pdf`;
+  const suffix = detailed ? ' (Completo)' : '';
+  const filename = `${fileType} ${dd}_${mm}_${yy} - ${clientName}${suffix}.pdf`;
 
   const response = await fetch(url);
   if (!response.ok) throw new Error('Erro ao gerar PDF');

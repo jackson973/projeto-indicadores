@@ -9,6 +9,10 @@ import {
   Input,
   InputGroup,
   InputLeftElement,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuList,
   Modal,
   ModalBody,
   ModalCloseButton,
@@ -107,10 +111,10 @@ export default function OrdersList() {
     }
   }
 
-  async function handleOpenPdf() {
+  async function handleOpenPdf(detailed = false) {
     if (!selected) return;
     try {
-      await downloadOrderPdf(selected);
+      await downloadOrderPdf(selected, { detailed });
     } catch {
       toast({  status: "error", description: "Erro ao gerar PDF.", duration: 3000 });
     }
@@ -467,12 +471,22 @@ export default function OrdersList() {
                   const canEdit = selected.status !== "deletado_erp" && (selected.status === "rascunho" || selected.type === "orcamento");
                   return (
                     <SimpleGrid columns={canEdit ? 4 : 2} gap={2} w="full">
-                      <Button
-                        variant="outline" colorScheme="gray" size="md" borderRadius="xl"
-                        onClick={handleOpenPdf}
-                      >
-                        📄 PDF
-                      </Button>
+                      <Menu>
+                        <MenuButton
+                          as={Button}
+                          variant="outline" colorScheme="gray" size="md" borderRadius="xl"
+                        >
+                          📄 PDF
+                        </MenuButton>
+                        <MenuList>
+                          <MenuItem onClick={() => handleOpenPdf(false)}>
+                            Relatório simplificado
+                          </MenuItem>
+                          <MenuItem onClick={() => handleOpenPdf(true)}>
+                            Relatório completo (por grade)
+                          </MenuItem>
+                        </MenuList>
+                      </Menu>
                       {canEdit && (
                         <Button
                           variant="outline" colorScheme="blue" size="md" borderRadius="xl"

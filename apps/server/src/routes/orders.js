@@ -415,6 +415,15 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     const order = await repo.getOrderById(req.params.id);
     if (!order) return res.status(404).json({ error: 'Pedido não encontrado' });
 
+    // Relatório completo (abre a grade de tamanhos por produto) vs simplificado (atual)
+    const detailed = req.query.mode === 'completo' || req.query.detailed === '1';
+    // Ordem fixa de exibição dos tamanhos; desconhecidos vão para o fim
+    const SIZE_ORDER = ['PRE', 'RN', 'P', 'M', 'G', 'GG', '1', '2', '3', '4', '6', '8', '10'];
+    const sizeRank = (name) => {
+      const idx = SIZE_ORDER.indexOf(String(name || '').trim().toUpperCase());
+      return idx === -1 ? SIZE_ORDER.length : idx;
+    };
+
     // Fetch logged-in user's phone
     const db = require('../db/connection');
     const { rows: userRows } = await db.query(
@@ -638,6 +647,26 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
       const unitPrice = Number(sizes[0].unit_price);
       const bg        = rowIdx % 2 === 0 ? WHITE : ROWALT;
 
+      // Relatório completo: grade de tamanhos (só com quantidade), na ordem definida
+      const textX  = M + IMG_COL + 6;
+      const nameW  = NM_COL - 8;
+      let gradeStr = '';
+      if (detailed) {
+        gradeStr = sizes
+          .filter((i) => i.qty > 0)
+          .sort((a, b) => sizeRank(a.size_name) - sizeRank(b.size_name) || String(a.size_name).localeCompare(String(b.size_name)))
+          .map((i) => `${i.size_name}: ${i.qty}`)
+          .join('   |   ');
+      }
+
+      // Altura da linha: cresce se nome + grade ocupar mais de uma linha
+      let rowH = ROW_H;
+      if (detailed && gradeStr) {
+        const nameGradeStr = `${productName}    ${gradeStr}`;
+        const measured = doc.font('Helvetica-Bold').fontSize(9).heightOfString(nameGradeStr, { width: nameW });
+        rowH = Math.max(ROW_H, measured + 12);
+      }
+
       // Observação do produto (mesma para todos os tamanhos)
       const cpid = sizes[0].catalog_product_id;
       const obsText = cpid ? obsByCatalogId.get(String(cpid)) : null;
@@ -648,38 +677,48 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
         obsH = Math.min(40, measured + 4);
       }
 
-      ensureSpace(ROW_H + obsH);
+      ensureSpace(rowH + obsH);
 
-      fillRect(M, curY, PW, ROW_H + obsH, bg);
+      fillRect(M, curY, PW, rowH + obsH, bg);
 
       // Photo (from cache)
       const imgData = imageCache[productName];
       if (imgData) {
         try {
-          doc.image(imgData, M + 3, curY + 3, { fit: [IMG_COL - 6, ROW_H - 6] });
+          doc.image(imgData, M + 3, curY + 3, { fit: [IMG_COL - 6, rowH - 6] });
         } catch (_) { /* skip if image fails */ }
       }
 
-      // Product name
-      const textX = M + IMG_COL + 6;
-      txt(productName, textX, curY + (ROW_H - 9) / 2, { size: 9, font: 'Helvetica-Bold', color: DARK, w: NM_COL - 8 });
+      // Product name (+ grade na mesma linha, no relatório completo)
+      // Multi-linha (grade quebrou): alinha ao topo; senão centraliza verticalmente
+      const nameY = rowH > ROW_H ? curY + 6 : curY + (rowH - 9) / 2;
+      if (detailed && gradeStr) {
+        doc.save()
+          .font('Helvetica-Bold').fontSize(9).fillColor(DARK)
+          .text(`${productName}    `, textX, nameY, { width: nameW, continued: true })
+          .font('Helvetica').fontSize(8).fillColor(MID)
+          .text(gradeStr, { width: nameW })
+          .restore();
+      } else {
+        txt(productName, textX, nameY, { size: 9, font: 'Helvetica-Bold', color: DARK, w: nameW });
+      }
 
       // Qty
       txt(String(prodQty),
-        M + IMG_COL + NM_COL, curY + (ROW_H - 9) / 2,
+        M + IMG_COL + NM_COL, curY + (rowH - 9) / 2,
         { size: 9, font: 'Helvetica-Bold', color: DARK, align: 'center', w: QT_COL });
 
       // Unit price
       txt(`R$ ${fmtBRL(unitPrice)}`,
-        M + IMG_COL + NM_COL + QT_COL, curY + (ROW_H - 9) / 2,
+        M + IMG_COL + NM_COL + QT_COL, curY + (rowH - 9) / 2,
         { size: 9, color: MID, align: 'right', w: PR_COL });
 
       // Total
       txt(`R$ ${fmtBRL(prodTotal)}`,
-        M + IMG_COL + NM_COL + QT_COL + PR_COL, curY + (ROW_H - 9) / 2,
+        M + IMG_COL + NM_COL + QT_COL + PR_COL, curY + (rowH - 9) / 2,
         { size: 9, font: 'Helvetica-Bold', color: ACCENT, align: 'right', w: TOT_COL });
 
-      curY += ROW_H;
+      curY += rowH;
 
       if (obsText) {
         txt(`Obs: ${obsText}`, M + IMG_COL + 6, curY, {
