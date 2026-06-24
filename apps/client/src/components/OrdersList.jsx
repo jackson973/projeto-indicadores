@@ -9,10 +9,6 @@ import {
   Input,
   InputGroup,
   InputLeftElement,
-  Menu,
-  MenuButton,
-  MenuItem,
-  MenuList,
   Modal,
   ModalBody,
   ModalCloseButton,
@@ -467,26 +463,24 @@ export default function OrdersList() {
                     Integrar Sisplan
                   </Button>
                 )}
+                <SimpleGrid columns={2} gap={2} w="full">
+                  <Button
+                    variant="outline" colorScheme="gray" size="md" borderRadius="xl"
+                    onClick={() => handleOpenPdf(false)}
+                  >
+                    📄 Simplificado
+                  </Button>
+                  <Button
+                    variant="outline" colorScheme="gray" size="md" borderRadius="xl"
+                    onClick={() => handleOpenPdf(true)}
+                  >
+                    📋 Completo (grade)
+                  </Button>
+                </SimpleGrid>
                 {(() => {
                   const canEdit = selected.status !== "deletado_erp" && (selected.status === "rascunho" || selected.type === "orcamento");
                   return (
-                    <SimpleGrid columns={canEdit ? 4 : 2} gap={2} w="full">
-                      <Menu>
-                        <MenuButton
-                          as={Button}
-                          variant="outline" colorScheme="gray" size="md" borderRadius="xl"
-                        >
-                          📄 PDF
-                        </MenuButton>
-                        <MenuList>
-                          <MenuItem onClick={() => handleOpenPdf(false)}>
-                            Relatório simplificado
-                          </MenuItem>
-                          <MenuItem onClick={() => handleOpenPdf(true)}>
-                            Relatório completo (por grade)
-                          </MenuItem>
-                        </MenuList>
-                      </Menu>
+                    <SimpleGrid columns={canEdit ? 3 : 1} gap={2} w="full">
                       {canEdit && (
                         <Button
                           variant="outline" colorScheme="blue" size="md" borderRadius="xl"
