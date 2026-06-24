@@ -1348,36 +1348,36 @@ export const downloadOrderPdf = async (order, { detailed = false } = {}) => {
   const suffix = detailed ? ' (Completo)' : '';
   const filename = `${fileType} ${dd}_${mm}_${yy} - ${clientName}${suffix}.pdf`;
 
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Erro ao gerar PDF');
-  const blob = await response.blob();
+  // Abre a aba já no clique (preserva o gesto do usuário e evita bloqueio de pop-up)
+  const viewer = window.open('', '_blank');
 
-  // Mobile: usar share sheet nativa se disponível
+  let blob;
   try {
-    if (navigator.share) {
-      const file = new File([blob], filename, { type: 'application/pdf' });
-      if (!navigator.canShare || navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: filename });
-        return;
-      }
-    }
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('Erro ao gerar PDF');
+    blob = await response.blob();
   } catch (e) {
-    // Share cancelado ou não suportado — segue para download
-    if (e.name === 'AbortError') return; // usuário cancelou, não faz nada
+    if (viewer) viewer.close();
+    throw e;
   }
 
-  // Fallback: download na mesma aba (sem abrir nova)
   const blobUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = blobUrl;
-  link.download = filename;
-  link.style.display = 'none';
-  document.body.appendChild(link);
-  link.click();
-  setTimeout(() => {
-    document.body.removeChild(link);
-    URL.revokeObjectURL(blobUrl);
-  }, 100);
+
+  if (viewer) {
+    // Abre o PDF inline numa nova aba — não dispara o bloqueio do Chrome de "vários downloads"
+    viewer.location.href = blobUrl;
+  } else {
+    // Pop-up bloqueado: cai para download direto
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => document.body.removeChild(link), 100);
+  }
+  // Libera o blob depois de um tempo (a aba precisa carregar primeiro)
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 };
 
 // ─── Estoque: Produtos ────────────────────────────────────────────────────────

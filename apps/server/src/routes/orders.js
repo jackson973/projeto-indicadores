@@ -647,24 +647,33 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
       const unitPrice = Number(sizes[0].unit_price);
       const bg        = rowIdx % 2 === 0 ? WHITE : ROWALT;
 
-      // Relatório completo: grade de tamanhos (só com quantidade), na ordem definida
+      // Relatório completo: grade de tamanhos como mini-tabela (nome em cima, qtd embaixo)
       const textX  = M + IMG_COL + 6;
       const nameW  = NM_COL - 8;
-      let gradeStr = '';
+
+      // Dimensões da mini-tabela da grade
+      const CELL_W   = 38;
+      const HDR_H    = 13;   // célula do nome do tamanho
+      const QTY_H    = 14;   // célula da quantidade
+      const CELL_H   = HDR_H + QTY_H;
+      const perLine  = Math.max(1, Math.floor((NM_COL - 12) / CELL_W));
+      const NAME_GAP = 6 + 12 + 4; // padding topo + linha do nome + respiro até a grade
+
+      let gridSizes = [];
+      let gridH     = 0;
       if (detailed) {
-        gradeStr = sizes
+        gridSizes = sizes
           .filter((i) => i.qty > 0)
-          .sort((a, b) => sizeRank(a.size_name) - sizeRank(b.size_name) || String(a.size_name).localeCompare(String(b.size_name)))
-          .map((i) => `${i.size_name}: ${i.qty}`)
-          .join('   |   ');
+          .sort((a, b) => sizeRank(a.size_name) - sizeRank(b.size_name) || String(a.size_name).localeCompare(String(b.size_name)));
+        if (gridSizes.length) {
+          gridH = Math.ceil(gridSizes.length / perLine) * CELL_H;
+        }
       }
 
-      // Altura da linha: cresce se nome + grade ocupar mais de uma linha
+      // Altura da linha: no completo abre espaço p/ nome + mini-tabela
       let rowH = ROW_H;
-      if (detailed && gradeStr) {
-        const nameGradeStr = `${productName}    ${gradeStr}`;
-        const measured = doc.font('Helvetica-Bold').fontSize(9).heightOfString(nameGradeStr, { width: nameW });
-        rowH = Math.max(ROW_H, measured + 12);
+      if (detailed && gridH) {
+        rowH = Math.max(ROW_H, NAME_GAP + gridH + 6);
       }
 
       // Observação do produto (mesma para todos os tamanhos)
@@ -689,18 +698,26 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
         } catch (_) { /* skip if image fails */ }
       }
 
-      // Product name (+ grade na mesma linha, no relatório completo)
-      // Multi-linha (grade quebrou): alinha ao topo; senão centraliza verticalmente
-      const nameY = rowH > ROW_H ? curY + 6 : curY + (rowH - 9) / 2;
-      if (detailed && gradeStr) {
-        doc.save()
-          .font('Helvetica-Bold').fontSize(9).fillColor(DARK)
-          .text(`${productName}    `, textX, nameY, { width: nameW, continued: true })
-          .font('Helvetica').fontSize(8).fillColor(MID)
-          .text(gradeStr, { width: nameW })
-          .restore();
+      // Product name (+ mini-tabela da grade, no relatório completo)
+      if (detailed && gridH) {
+        txt(productName, textX, curY + 6, { size: 9, font: 'Helvetica-Bold', color: DARK, w: nameW });
+
+        const gridY0 = curY + NAME_GAP;
+        gridSizes.forEach((s, i) => {
+          const cx = textX + (i % perLine) * CELL_W;
+          const cy = gridY0 + Math.floor(i / perLine) * CELL_H;
+          // cabeçalho: nome do tamanho
+          fillRect(cx, cy, CELL_W, HDR_H, THBG);
+          txt(String(s.size_name), cx, cy + 3, { size: 7, font: 'Helvetica-Bold', color: ACCENT, align: 'center', w: CELL_W });
+          // valor: quantidade
+          fillRect(cx, cy + HDR_H, CELL_W, QTY_H, WHITE);
+          txt(String(s.qty), cx, cy + HDR_H + 4, { size: 8, font: 'Helvetica-Bold', color: DARK, align: 'center', w: CELL_W });
+          // bordas da célula
+          strokeRect(cx, cy, CELL_W, CELL_H, RULE, 0.5);
+          hline(cy + HDR_H, cx, cx + CELL_W, RULE, 0.5);
+        });
       } else {
-        txt(productName, textX, nameY, { size: 9, font: 'Helvetica-Bold', color: DARK, w: nameW });
+        txt(productName, textX, curY + (rowH - 9) / 2, { size: 9, font: 'Helvetica-Bold', color: DARK, w: nameW });
       }
 
       // Qty
