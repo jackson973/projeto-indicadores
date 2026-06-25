@@ -1348,8 +1348,15 @@ export const downloadOrderPdf = async (order, { detailed = false } = {}) => {
   const suffix = detailed ? ' (Completo)' : '';
   const filename = `${fileType} ${dd}_${mm}_${yy} - ${clientName}${suffix}.pdf`;
 
-  // Abre a aba já no clique (preserva o gesto do usuário e evita bloqueio de pop-up)
-  const viewer = window.open('', '_blank');
+  // Detecta suporte a compartilhar ARQUIVOS (mobile) ainda dentro do gesto do clique
+  let canShareFiles = false;
+  try {
+    canShareFiles = !!(navigator.canShare &&
+      navigator.canShare({ files: [new File([''], filename, { type: 'application/pdf' })] }));
+  } catch { canShareFiles = false; }
+
+  // Desktop: abre uma aba já no clique (preserva o gesto e evita bloqueio de pop-up)
+  const viewer = canShareFiles ? null : window.open('', '_blank');
 
   let blob;
   try {
@@ -1361,13 +1368,25 @@ export const downloadOrderPdf = async (order, { detailed = false } = {}) => {
     throw e;
   }
 
+  // Mobile: abre a folha de compartilhamento nativa com o PDF (igual antes)
+  if (canShareFiles) {
+    try {
+      const file = new File([blob], filename, { type: 'application/pdf' });
+      await navigator.share({ files: [file], title: filename });
+      return;
+    } catch (e) {
+      if (e.name === 'AbortError') return; // usuário cancelou
+      // share falhou — segue para download como fallback
+    }
+  }
+
   const blobUrl = URL.createObjectURL(blob);
 
   if (viewer) {
     // Abre o PDF inline numa nova aba — não dispara o bloqueio do Chrome de "vários downloads"
     viewer.location.href = blobUrl;
   } else {
-    // Pop-up bloqueado: cai para download direto
+    // Pop-up bloqueado / fallback: download direto
     const link = document.createElement('a');
     link.href = blobUrl;
     link.download = filename;
