@@ -470,28 +470,37 @@ router.get('/:id/pdf/:filename?', async (req, res) => {
     // ── Helpers ──────────────────────────────────────────────────────────────
     const fmtBRL = (v) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    // Fetch image via HTTP, resize and convert to JPEG for small file size
-    const PORT = process.env.PORT || 4000;
+    // Carrega imagem (disco para /uploads, HTTP para URLs externas), redimensiona e converte p/ JPEG
     const loadImage = async (urlPath, maxW = 100, maxH = 100) => {
       if (!urlPath) return null;
-      const http = require('http');
-      return new Promise((resolve) => {
-        http.get(`http://127.0.0.1:${PORT}${urlPath}`, (resp) => {
-          if (resp.statusCode !== 200) { resp.resume(); return resolve(null); }
-          const chunks = [];
-          resp.on('data', (c) => chunks.push(c));
-          resp.on('end', async () => {
-            try {
-              const buf = await sharp(Buffer.concat(chunks))
-                .resize(maxW, maxH, { fit: 'inside', withoutEnlargement: true })
-                .jpeg({ quality: 70 })
-                .toBuffer();
-              resolve(buf);
-            } catch (_) { resolve(null); }
+      try {
+        let input = null;
+        if (/^https?:\/\//i.test(urlPath)) {
+          // URL externa: baixa via HTTP/HTTPS
+          const client = urlPath.startsWith('https') ? require('https') : require('http');
+          input = await new Promise((resolve) => {
+            client.get(urlPath, (resp) => {
+              if (resp.statusCode !== 200) { resp.resume(); return resolve(null); }
+              const chunks = [];
+              resp.on('data', (c) => chunks.push(c));
+              resp.on('end', () => resolve(Buffer.concat(chunks)));
+              resp.on('error', () => resolve(null));
+            }).on('error', () => resolve(null));
           });
-          resp.on('error', () => resolve(null));
-        }).on('error', () => resolve(null));
-      });
+        } else if (urlPath.startsWith('/uploads/')) {
+          // Arquivo local em disco — mais confiável que auto-chamada HTTP (independe de porta/nginx)
+          const filePath = path.join(UPLOADS_ROOT, urlPath.replace(/^\/uploads\//, ''));
+          if (!fs.existsSync(filePath)) return null;
+          input = await fs.promises.readFile(filePath);
+        }
+        if (!input) return null;
+        return await sharp(input)
+          .resize(maxW, maxH, { fit: 'inside', withoutEnlargement: true })
+          .jpeg({ quality: 70 })
+          .toBuffer();
+      } catch (_) {
+        return null;
+      }
     };
 
     const hline = (y, x1 = M, x2 = M + PW, color = RULE, lw = 0.5) =>
