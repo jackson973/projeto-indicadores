@@ -40,7 +40,7 @@ async function main() {
   page.on('response', async (response) => {
     const url = response.url();
 
-    if (url.includes('/api/vcode')) {
+    if (url.includes('/vcode')) {
       try {
         const data = await response.json();
         captchaBase64 = data?.data?.replace(/^data:image\/[^;]+;base64,/, '');
@@ -129,7 +129,7 @@ async function main() {
 
         // Wait for new captcha from API
         await page.waitForResponse(
-          (res) => res.url().includes('/api/vcode') && res.status() === 200,
+          (res) => res.url().includes('/vcode') && res.status() === 200,
           { timeout: 10000 },
         ).catch(() => logger.warn('Timeout waiting for new captcha'));
 

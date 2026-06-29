@@ -92,7 +92,7 @@ async function fullLogin() {
 
   // Intercept CAPTCHA from API response
   page.on('response', async (response) => {
-    if (response.url().includes('/api/vcode')) {
+    if (response.url().includes('/vcode')) {
       try {
         const data = await response.json();
         captchaBase64 = data?.data?.replace(/^data:image\/[^;]+;base64,/, '');
@@ -146,7 +146,7 @@ async function fullLogin() {
       if (captchaError) {
         logger.warn({ attempt }, 'CAPTCHA invalid, retrying...');
         await page.waitForResponse(
-          (res) => res.url().includes('/api/vcode') && res.status() === 200,
+          (res) => res.url().includes('/vcode') && res.status() === 200,
           { timeout: 10000 },
         ).catch(() => {});
         continue;
