@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Badge,
   Box,
@@ -25,8 +25,10 @@ import {
   Thead,
   Tr,
   Text,
+  Tooltip,
   useColorModeValue,
 } from "@chakra-ui/react";
+import { InfoIcon } from "@chakra-ui/icons";
 import useAppToast from "../hooks/useAppToast";
 import { fetchStockConsumption, fetchStockLowStock, fetchStockMovementsReport } from "../api";
 import { formatSaoPaulo } from "../utils/timezone";
@@ -45,6 +47,18 @@ function fmt(n, dec = 1) {
 
 const TIPO_LABEL = { entrada: "Entrada", saida: "Saída", ajuste: "Ajuste" };
 const TIPO_COLOR = { entrada: "green", saida: "red", ajuste: "purple" };
+
+// Ordem canônica da grade de tamanhos (PRE, RN, P, M, G, GG, 1..16)
+const SIZE_ORDER = ["PRE", "RN", "P", "M", "G", "GG", "XG", "XGG", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "12", "14", "16"];
+function sizeRank(s) {
+  const idx = SIZE_ORDER.indexOf(String(s ?? "").trim().toUpperCase());
+  return idx === -1 ? SIZE_ORDER.length : idx;
+}
+
+const COBERTURA_INFO =
+  "Cobertura = saldo atual ÷ média de saídas por dia (média/dia = saídas do período ÷ dias do período). " +
+  "Indica por quantos dias o estoque atual deve durar mantido o ritmo de vendas do período. " +
+  "\"—\" significa que não houve saídas no período (sem consumo para estimar).";
 
 export default function StockReports() {
   const subtle = useColorModeValue("gray.500", "gray.400");
@@ -85,6 +99,7 @@ function ConsumptionReport() {
   const [report, setReport] = useState(null);
   const [lowStock, setLowStock] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [sortBy, setSortBy] = useState("codigo");
   const toast = useAppToast();
 
   const cardBg = useColorModeValue("white", "gray.800");
@@ -99,14 +114,6 @@ function ConsumptionReport() {
         fetchStockConsumption(from, to),
         fetchStockLowStock(),
       ]);
-      // Ordena por menor cobertura (risco de ruptura) primeiro; sem saída vai ao fim
-      rep.items.sort((a, b) => {
-        const ca = a.coverage_days, cb = b.coverage_days;
-        if (ca === null && cb === null) return 0;
-        if (ca === null) return 1;
-        if (cb === null) return -1;
-        return ca - cb;
-      });
       setReport(rep);
       setLowStock(low);
     } catch (e) {
@@ -118,6 +125,30 @@ function ConsumptionReport() {
 
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Ordenação aplicada no cliente; a grade (RN, P, M, G, GG...) é sempre o critério de desempate
+  const sortedItems = useMemo(() => {
+    const items = [...(report?.items || [])];
+    const byGrade = (a, b) => sizeRank(a.tamanho) - sizeRank(b.tamanho);
+    const cmp = {
+      nome: (a, b) =>
+        String(a.descricao ?? "").localeCompare(String(b.descricao ?? ""), "pt-BR", { sensitivity: "base" })
+        || byGrade(a, b),
+      codigo: (a, b) =>
+        String(a.product_codigo ?? "").localeCompare(String(b.product_codigo ?? ""), "pt-BR", { numeric: true, sensitivity: "base" })
+        || byGrade(a, b),
+      saldo: (a, b) => (a.balance - b.balance) || byGrade(a, b),
+      cobertura: (a, b) => {
+        const ca = a.coverage_days, cb = b.coverage_days;
+        if (ca === null && cb === null) return byGrade(a, b);
+        if (ca === null) return 1;
+        if (cb === null) return -1;
+        return (ca - cb) || byGrade(a, b);
+      },
+    };
+    items.sort(cmp[sortBy] || cmp.codigo);
+    return items;
+  }, [report, sortBy]);
+
   return (
     <Box>
       <Flex gap={3} align="end" wrap="wrap" mb={4}>
@@ -128,6 +159,15 @@ function ConsumptionReport() {
         <FormControl maxW="180px">
           <FormLabel fontSize="sm">Até</FormLabel>
           <Input type="date" value={to} onChange={e => setTo(e.target.value)} />
+        </FormControl>
+        <FormControl maxW="180px">
+          <FormLabel fontSize="sm">Ordenar por</FormLabel>
+          <Select value={sortBy} onChange={e => setSortBy(e.target.value)}>
+            <option value="codigo">Código</option>
+            <option value="nome">Nome</option>
+            <option value="saldo">Saldo</option>
+            <option value="cobertura">Cobertura</option>
+          </Select>
         </FormControl>
         <Button colorScheme="blue" onClick={load}>Atualizar</Button>
       </Flex>
@@ -189,11 +229,20 @@ function ConsumptionReport() {
                   <Tr>
                     <Th>Produto</Th><Th>Tam.</Th>
                     <Th isNumeric>Saldo</Th><Th isNumeric>Saídas (período)</Th>
-                    <Th isNumeric>Média/dia</Th><Th isNumeric>Cobertura (dias)</Th><Th isNumeric>Mínimo</Th>
+                    <Th isNumeric>Média/dia</Th>
+                    <Th isNumeric>
+                      <Tooltip hasArrow placement="top" openDelay={200} maxW="320px" label={COBERTURA_INFO}>
+                        <Box as="span" display="inline-flex" alignItems="center" gap={1} cursor="help">
+                          Cobertura (dias)
+                          <InfoIcon boxSize={3} color={subtle} />
+                        </Box>
+                      </Tooltip>
+                    </Th>
+                    <Th isNumeric>Mínimo</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {report.items.map(i => {
+                  {sortedItems.map(i => {
                     const low = i.min_stock > 0 && i.balance <= i.min_stock;
                     const riscoCobertura = i.coverage_days !== null && i.coverage_days < 7;
                     return (
