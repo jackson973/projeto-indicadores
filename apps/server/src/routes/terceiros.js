@@ -872,6 +872,10 @@ router.post('/settlements', async (req, res) => {
     return res.status(201).json(result);
   } catch (error) {
     console.error('Create settlement error:', error);
+    // Erros de saldo/validação vêm com mensagem própria — surface para o usuário.
+    if (/saldo|excede|Quantidade|não encontrada/i.test(error.message || '')) {
+      return res.status(400).json({ message: error.message });
+    }
     return res.status(500).json({ message: 'Erro ao criar fechamento.' });
   }
 });
@@ -953,6 +957,9 @@ router.put('/settlements/:id/items/:itemId', async (req, res) => {
     return res.json(result);
   } catch (error) {
     console.error('Update settlement item error:', error);
+    if (/saldo|excede|Quantidade/i.test(error.message || '')) {
+      return res.status(400).json({ message: error.message });
+    }
     return res.status(500).json({ message: 'Erro ao atualizar item.' });
   }
 });
@@ -976,6 +983,9 @@ router.post('/settlements/:id/items', async (req, res) => {
     return res.json(result);
   } catch (error) {
     console.error('Add settlement items error:', error);
+    if (/saldo|excede|Quantidade|não encontrada/i.test(error.message || '')) {
+      return res.status(400).json({ message: error.message });
+    }
     return res.status(500).json({ message: 'Erro ao adicionar itens.' });
   }
 });
@@ -1392,6 +1402,17 @@ router.get('/rastreio-of/:ofNumero', async (req, res) => {
   } catch (error) {
     console.error('Rastreio OF error:', error);
     return res.status(500).json({ message: 'Erro ao buscar rastreio da OF.' });
+  }
+});
+
+// Histórico de fechamentos (parciais) de uma linha de OF — usado no alerta de saldo remanescente.
+router.get('/ofs/:id/settlement-history', async (req, res) => {
+  try {
+    const data = await repo.getOfSettlementHistory(parseInt(req.params.id, 10));
+    return res.json(data);
+  } catch (error) {
+    console.error('OF settlement history error:', error);
+    return res.status(500).json({ message: 'Erro ao buscar histórico da OF.' });
   }
 });
 

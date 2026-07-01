@@ -34,6 +34,13 @@ import {
   ModalCloseButton,
   ModalBody,
   ModalFooter,
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+  PopoverArrow,
+  PopoverBody,
+  PopoverHeader,
+  Portal,
 } from "@chakra-ui/react";
 import {
   AddIcon,
@@ -68,7 +75,8 @@ import {
   fetchTerceirosSuppliers,
   fetchTerceirosPricesForOfs,
   saveTerceirosDraft,
-  fetchTerceirosDraft
+  fetchTerceirosDraft,
+  fetchOfSettlementHistory
 } from "../api";
 import { getToken } from "../api";
 import { getSaoPauloYear, getSaoPauloMonth } from "../utils/timezone";
@@ -111,6 +119,82 @@ const monthNames = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
+
+const shortMonth = (m) => (m ? ["jan","fev","mar","abr","mai","jun","jul","ago","set","out","nov","dez"][m - 1] : "");
+
+// Saldo disponível para fechar de uma linha de OF: quando houve fechamento(s) parcial(is),
+// é o remanescente (fac_quant − pago − ajuste); senão a quantidade total da OF.
+const availableQty = (of) => {
+  if (!of) return 0;
+  if (of.remainingQty != null) return Math.max(0, parseFloat(of.remainingQty) || 0);
+  return parseFloat(of.fac_quant) || 0;
+};
+const paidQtyOf = (of) => (of && of.paidQty != null ? parseFloat(of.paidQty) || 0 : 0);
+// Linha com saldo remanescente: já teve pagamento parcial e ainda sobra saldo.
+const isRemnantOf = (of) => paidQtyOf(of) > 0 && availableQty(of) > 0;
+
+// Badge "Saldo remanescente" com popover que carrega (lazy) a linha do tempo dos
+// fechamentos parciais anteriores de cada tamanho da OF.
+const RemnantHistoryPopover = ({ sizes }) => {
+  const [histories, setHistories] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const loadAll = async () => {
+    if (loaded || loading) return;
+    setLoading(true);
+    try {
+      const entries = await Promise.all(sizes.map(async (s) => {
+        try { const r = await fetchOfSettlementHistory(s.ofId); return [s.ofId, r?.history || []]; }
+        catch { return [s.ofId, []]; }
+      }));
+      setHistories(Object.fromEntries(entries));
+      setLoaded(true);
+    } finally { setLoading(false); }
+  };
+
+  const totalPaid = sizes.reduce((s, x) => s + (x.paidQty || 0), 0);
+  const totalSaldo = sizes.reduce((s, x) => s + (x.saldo || 0), 0);
+
+  return (
+    <Popover isLazy placement="bottom-start" trigger="hover" onOpen={loadAll}>
+      <PopoverTrigger>
+        <Badge colorScheme="purple" variant="subtle" display="flex" alignItems="center" gap={1} whiteSpace="nowrap" cursor="pointer">
+          <WarningIcon boxSize={3} />
+          Saldo remanescente: {totalSaldo} {totalSaldo === 1 ? "pç" : "pçs"}{totalPaid > 0 ? ` (${totalPaid} já pagas)` : ""}
+        </Badge>
+      </PopoverTrigger>
+      <Portal>
+        <PopoverContent fontSize="sm" w="340px" onClick={(e) => e.stopPropagation()}>
+          <PopoverArrow />
+          <PopoverHeader fontWeight="bold">Histórico de fechamentos</PopoverHeader>
+          <PopoverBody maxH="280px" overflowY="auto">
+            {loading && <Text color="gray.500" fontSize="xs">Carregando…</Text>}
+            {!loading && sizes.map((s) => {
+              const hist = histories[s.ofId] || [];
+              return (
+                <Box key={s.ofId} mb={2}>
+                  <Text fontWeight="medium" fontSize="xs">
+                    {s.cor ? `${s.cor} · ` : ""}Tam {s.tam} — saldo {s.saldo} pç
+                  </Text>
+                  {hist.length === 0 ? (
+                    <Text color="gray.500" fontSize="xs">Sem lançamentos registrados.</Text>
+                  ) : hist.map((h, i) => (
+                    <Text key={i} fontSize="xs" color="gray.600">
+                      • {shortMonth(h.referenceMonth)}/{h.referenceYear}: {parseFloat(h.quantity)} pç pago
+                      {parseFloat(h.writeoffQuantity) > 0 ? ` · ${parseFloat(h.writeoffQuantity)} ajuste` : ""}
+                      {h.status === "paid" ? " ✓" : ""}
+                    </Text>
+                  ))}
+                </Box>
+              );
+            })}
+          </PopoverBody>
+        </PopoverContent>
+      </Portal>
+    </Popover>
+  );
+};
 
 const TerceirosSettlement = () => {
   // ── Filters (mês anterior por padrão) ───────────────────────────────────
@@ -187,8 +271,13 @@ const TerceirosSettlement = () => {
   const [exportingOfsPdf, setExportingOfsPdf] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [editedQuantities, setEditedQuantities] = useState({});
+  // Por índice de OF: o que fazer com a diferença quando fecha menos que o saldo —
+  // 'remainder' (deixa saldo, default) ou 'final' (ajuste final/perda).
+  const [shortfallActions, setShortfallActions] = useState({});
   const [editedGroupPrices, setEditedGroupPrices] = useState({});
   const [editingSize, setEditingSize] = useState(null);
+  // Cache do histórico de fechamentos por ofId (para o popover de saldo remanescente).
+  const [ofHistory, setOfHistory] = useState({});
 
   const [savingDraft, setSavingDraft] = useState(false);
   const [restoringDraft, setRestoringDraft] = useState(false);
@@ -470,7 +559,7 @@ const TerceirosSettlement = () => {
       .filter((_, idx) => editSelectedOfs.has(idx))
       .map((of) => {
         const price = editOfPrices[`${of.fac_codigo_produto}|${of.fac_parte}|${of.fac_cor}|${of.fac_tam || ''}`]?.price ?? 0;
-        return { ofId: of.id, quantity: parseFloat(of.fac_quant) || 0, unitPrice: price, priceSource: "table" };
+        return { ofId: of.id, quantity: availableQty(of), unitPrice: price, priceSource: "table" };
       });
     try {
       await addSettlementItems(editingSettlement.id, ofsToAdd);
@@ -508,7 +597,7 @@ const TerceirosSettlement = () => {
         map.set(key, g);
         groups.push(g);
       }
-      map.get(key).sizes.push({ index: idx, of, tam: of.fac_tam, qty: parseFloat(of.fac_quant) || 0 });
+      map.get(key).sizes.push({ index: idx, of, tam: of.fac_tam, qty: availableQty(of) });
     });
     return groups;
   }, [editUnsettledOfs]);
@@ -678,6 +767,7 @@ const TerceirosSettlement = () => {
         return next;
       };
       setEditedQuantities((prev) => remapByIndex(prev));
+      setShortfallActions((prev) => remapByIndex(prev));
       setManualPrices((prev) => remapByIndex(prev));
       setEditingSize(null);
 
@@ -880,7 +970,7 @@ const TerceirosSettlement = () => {
       const price = getOfPrice(of, index);
       const qty = editedQuantities[index] !== undefined
         ? (parseFloat(editedQuantities[index]) || 0)
-        : (parseFloat(of.fac_quant) || 0);
+        : availableQty(of);
       if (price != null && price > 0) {
         total += price * qty;
       }
@@ -895,7 +985,7 @@ const TerceirosSettlement = () => {
       if (!of) return;
       const qty = editedQuantities[index] !== undefined
         ? (parseFloat(editedQuantities[index]) || 0)
-        : (parseFloat(of.fac_quant) || 0);
+        : availableQty(of);
       pcs += qty;
     });
     return pcs;
@@ -937,7 +1027,8 @@ const TerceirosSettlement = () => {
         missingPrices = true;
         return;
       }
-      const originalQty = parseFloat(of.fac_quant) || 0;
+      // Baseline = saldo disponível (remanescente quando houve fechamento parcial anterior).
+      const originalQty = availableQty(of);
       const effectiveQty = editedQuantities[index] !== undefined
         ? (parseFloat(editedQuantities[index]) || 0)
         : originalQty;
@@ -947,6 +1038,13 @@ const TerceirosSettlement = () => {
       const originalPrice = getOfPriceInfo(of)?.price ?? null;
       const isPriceEdited = isPriceManual || (editedGroupPrices[`${of.fac_numero}|${of.fac_codsetor || ''}|${of.fac_codigo_produto}|${of.fac_cor}|${of.fac_parte}`] !== undefined);
       const manuallyEdited = isQtyEdited || isPriceEdited;
+      // Fechou menos que o saldo → declarar o que é a diferença: saldo a fechar depois
+      // ('remainder', default) ou ajuste final/perda ('final', gera writeoff que encerra a OF).
+      const isShort = effectiveQty < originalQty - 0.0001;
+      const shortfallAction = isShort ? (shortfallActions[index] || "remainder") : "remainder";
+      const writeoffQuantity = isShort && shortfallAction === "final"
+        ? parseFloat((originalQty - effectiveQty).toFixed(2))
+        : 0;
       items.push({
         ofId: of.id,
         quantity: effectiveQty,
@@ -954,7 +1052,9 @@ const TerceirosSettlement = () => {
         priceSource: isPriceManual ? "manual" : "table",
         manuallyEdited,
         originalQuantity: manuallyEdited ? originalQty : undefined,
-        originalUnitPrice: manuallyEdited ? (originalPrice ?? price) : undefined
+        originalUnitPrice: manuallyEdited ? (originalPrice ?? price) : undefined,
+        shortfallAction,
+        writeoffQuantity
       });
     });
 
@@ -1000,6 +1100,7 @@ const TerceirosSettlement = () => {
       setOfPrices({});
       setManualPrices({});
       setEditedQuantities({});
+      setShortfallActions({});
       setEditedGroupPrices({});
       setEditingSize(null);
       setExpandedOfGroups(new Set());
@@ -1014,7 +1115,7 @@ const TerceirosSettlement = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [newSupplier, selectedOfs, unsettledOfs, getOfPrice, getOfPriceInfo, editedQuantities, editedGroupPrices, manualPrices, suppliers, newMonth, newYear, prevMonth, prevYear, notes, newDiscounts, newSurcharges, loadSettlements, toast]);
+  }, [newSupplier, selectedOfs, unsettledOfs, getOfPrice, getOfPriceInfo, editedQuantities, shortfallActions, editedGroupPrices, manualPrices, suppliers, newMonth, newYear, prevMonth, prevYear, notes, newDiscounts, newSurcharges, loadSettlements, toast]);
 
   // ── Draft auto-save ──────────────────────────────────────────────────────
   // Background save triggered by state changes while the new-settlement modal
@@ -1044,6 +1145,11 @@ const TerceirosSettlement = () => {
       const of = unsettledOfs[idx];
       if (of?.id != null) manualPricesById[of.id] = val;
     });
+    const shortfallActionsById = {};
+    Object.entries(shortfallActions).forEach(([idx, val]) => {
+      const of = unsettledOfs[idx];
+      if (of?.id != null) shortfallActionsById[of.id] = val;
+    });
 
     const payload = {
       codcli: newSupplier,
@@ -1055,7 +1161,7 @@ const TerceirosSettlement = () => {
         dateFrom, dateTo, ofSearchNew, etapaFilter,
         newMonth, newYear,
         selectedOfIds: ofIds,
-        editedQuantitiesById, manualPricesById, editedGroupPrices,
+        editedQuantitiesById, manualPricesById, shortfallActionsById, editedGroupPrices,
         newDiscounts,
         newSurcharges
       }
@@ -1108,7 +1214,7 @@ const TerceirosSettlement = () => {
         autoSaveTimerRef.current = null;
       }
     };
-  }, [creating, newSupplier, selectedOfs, unsettledOfs, manualPrices, editedQuantities,
+  }, [creating, newSupplier, selectedOfs, unsettledOfs, manualPrices, editedQuantities, shortfallActions,
       editedGroupPrices, newDiscounts, newSurcharges, notes, newMonth, newYear, dateFrom, dateTo,
       ofSearchNew, etapaFilter, submitting, restoringDraft, savingDraft, persistDraft]);
 
@@ -1141,12 +1247,17 @@ const TerceirosSettlement = () => {
       const of = unsettledOfs[idx];
       if (of?.id != null) manualPricesById[of.id] = val;
     });
+    const shortfallActionsById = {};
+    Object.entries(shortfallActions).forEach(([idx, val]) => {
+      const of = unsettledOfs[idx];
+      if (of?.id != null) shortfallActionsById[of.id] = val;
+    });
 
     const draftData = {
       dateFrom, dateTo, ofSearchNew, etapaFilter,
       newMonth, newYear,
       selectedOfIds: ofIds,
-      editedQuantitiesById, manualPricesById, editedGroupPrices,
+      editedQuantitiesById, manualPricesById, shortfallActionsById, editedGroupPrices,
       newDiscounts,
       newSurcharges
     };
@@ -1173,7 +1284,7 @@ const TerceirosSettlement = () => {
     } finally {
       setSavingDraft(false);
     }
-  }, [newSupplier, dateFrom, dateTo, ofSearchNew, etapaFilter, selectedOfs, unsettledOfs, manualPrices, editedQuantities, editedGroupPrices, notes, newDiscounts, newSurcharges, suppliers, newMonth, newYear, activeDraftId, loadSettlements, toast]);
+  }, [newSupplier, dateFrom, dateTo, ofSearchNew, etapaFilter, selectedOfs, unsettledOfs, manualPrices, editedQuantities, shortfallActions, editedGroupPrices, notes, newDiscounts, newSurcharges, suppliers, newMonth, newYear, activeDraftId, loadSettlements, toast]);
 
   const handleRestoreDraft = useCallback(async (draftId) => {
     setRestoringDraft(true);
@@ -1299,6 +1410,16 @@ const TerceirosSettlement = () => {
       } else {
         setManualPrices(dd.manualPrices || {});
       }
+      if (dd.shortfallActionsById && typeof dd.shortfallActionsById === "object") {
+        const sa = {};
+        Object.entries(dd.shortfallActionsById).forEach(([id, val]) => {
+          const idx = idToIndex[id];
+          if (idx !== undefined) sa[idx] = val;
+        });
+        setShortfallActions(sa);
+      } else {
+        setShortfallActions({});
+      }
       setEditedGroupPrices(dd.editedGroupPrices || {});
 
       setLoadingOfs(false);
@@ -1330,6 +1451,7 @@ const TerceirosSettlement = () => {
     setOfPrices({});
     setManualPrices({});
     setEditedQuantities({});
+    setShortfallActions({});
     setEditedGroupPrices({});
     setEditingSize(null);
     setExpandedOfGroups(new Set());
@@ -2140,7 +2262,11 @@ const TerceirosSettlement = () => {
       g.sizes.push({
         index: globalIndex,
         tam: of.fac_tam,
-        qty: parseFloat(of.fac_quant) || 0,
+        // qty = saldo disponível a fechar (remanescente quando houve parcial anterior)
+        qty: availableQty(of),
+        facQuant: parseFloat(of.fac_quant) || 0,
+        paidQty: paidQtyOf(of),
+        isRemnant: isRemnantOf(of),
         ofId: of.id,
         settlementId: of.settlementId || null,
         settlementMonth: of.settlementMonth || null,
@@ -3011,6 +3137,12 @@ const TerceirosSettlement = () => {
                 });
                 if (allOfIndices.length === 0) ofGroupAllSelected = false;
 
+                // Tamanhos com saldo remanescente (fechamento parcial anterior deixou saldo).
+                const remnantSizes = [];
+                ofGroup.colorGroups.forEach((cg) => cg.sizes.forEach((sz) => {
+                  if (sz.isRemnant) remnantSizes.push({ ofId: sz.ofId, tam: sz.tam, cor: cg.facCor, paidQty: sz.paidQty, saldo: sz.qty });
+                }));
+
                 const isExpanded = expandedOfGroups.has(ofGroup.key);
 
                 const toggleOfGroupSelect = () => {
@@ -3091,6 +3223,11 @@ const TerceirosSettlement = () => {
                           <WarningIcon boxSize={3} />
                           Pago parcial em {monthNames[(ofGroup.settlementMonth || 1) - 1]}/{ofGroup.settlementYear}
                         </Badge>
+                      )}
+                      {remnantSizes.length > 0 && !ofGroup.isSettled && (
+                        <Box onClick={(e) => e.stopPropagation()}>
+                          <RemnantHistoryPopover sizes={remnantSizes} />
+                        </Box>
                       )}
                       {hasMissingPrice && !ofGroup.isSettled && (
                         <Tooltip label={missingPriceError || "Sem preço definido para este item"} hasArrow>
@@ -3206,8 +3343,13 @@ const TerceirosSettlement = () => {
                           const editedQty = editedQuantities[sz.index];
                           const displayQty = editedQty !== undefined ? parseFloat(editedQty) || 0 : sz.qty;
                           const isQtyEdited = editedQty !== undefined && parseFloat(editedQty) !== sz.qty;
+                          const tipLabel = isSizeSettled
+                            ? `Pago em ${monthNames[(sz.settlementMonth || 1) - 1]}/${sz.settlementYear}`
+                            : sz.isRemnant
+                              ? `Saldo remanescente: ${sz.qty} pç · ${sz.paidQty} já pagas`
+                              : "";
                           return (
-                            <Tooltip key={sz.index} label={isSizeSettled ? `Pago em ${monthNames[(sz.settlementMonth || 1) - 1]}/${sz.settlementYear}` : ""} isDisabled={!isSizeSettled} hasArrow>
+                            <Tooltip key={sz.index} label={tipLabel} isDisabled={!tipLabel} hasArrow>
                             <Box
                               textAlign="center"
                               minW="52px"
@@ -3316,6 +3458,40 @@ const TerceirosSettlement = () => {
                           );
                         })}
                       </Flex>
+
+                      {/* Shortfall: quando fecha menos que o saldo, declarar o destino da diferença */}
+                      {(() => {
+                        const shortSizes = group.sizes.filter((sz) => {
+                          if (sz.settlementId || !selectedOfs.has(sz.index)) return false;
+                          const eq = editedQuantities[sz.index];
+                          return eq !== undefined && (parseFloat(eq) || 0) < sz.qty - 0.0001;
+                        });
+                        if (shortSizes.length === 0) return null;
+                        return (
+                          <VStack align="stretch" spacing={1} flex="1 1 100%" mt={1}>
+                            {shortSizes.map((sz) => {
+                              const paid = parseFloat(editedQuantities[sz.index]) || 0;
+                              const diff = parseFloat((sz.qty - paid).toFixed(2));
+                              const action = shortfallActions[sz.index] || "remainder";
+                              return (
+                                <HStack key={sz.index} spacing={2} fontSize="xs" bg="orange.50" borderWidth="1px" borderColor="orange.200" borderRadius="md" px={2} py={1} wrap="wrap">
+                                  <Text>Tam <b>{sz.tam}</b>: fechando {paid} de {sz.qty} — sobram <b>{diff}</b> pç</Text>
+                                  <HStack spacing={1} ml="auto">
+                                    <Button size="xs" variant={action === "remainder" ? "solid" : "outline"} colorScheme="purple"
+                                      onClick={() => setShortfallActions((p) => ({ ...p, [sz.index]: "remainder" }))}>
+                                      Deixar saldo
+                                    </Button>
+                                    <Button size="xs" variant={action === "final" ? "solid" : "outline"} colorScheme="gray"
+                                      onClick={() => setShortfallActions((p) => ({ ...p, [sz.index]: "final" }))}>
+                                      Ajuste final
+                                    </Button>
+                                  </HStack>
+                                </HStack>
+                              );
+                            })}
+                          </VStack>
+                        );
+                      })()}
 
                       {/* Right: Price + Total */}
                       <Box

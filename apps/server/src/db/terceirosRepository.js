@@ -210,13 +210,30 @@ async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, ids, u
     ? `, s.reference_month AS "settlementMonth", s.reference_year AS "settlementYear", s.id AS "settlementId"`
     : '';
 
+  // Per-OF settlement balance across all FINALIZED (non-draft) settlements. An OF may be
+  // settled in several partial pieces, so availability is driven by the remaining balance:
+  //   remainingQty = fac_quant − Σ(quantity) − Σ(writeoff_quantity)
+  // paidQty > 0 && remainingQty > 0  →  saldo remanescente (partial remnant to close later).
+  const balanceJoin = `LEFT JOIN LATERAL (
+      SELECT COALESCE(SUM(si.quantity), 0) AS paid_qty,
+             COALESCE(SUM(si.writeoff_quantity), 0) AS writeoff_qty
+      FROM terceiros_settlement_items si
+      JOIN terceiros_settlements s2 ON s2.id = si.settlement_id AND s2.status <> 'draft'
+      WHERE si.of_id = o.id
+    ) bal ON true`;
+  const balanceColumns = `,
+            bal.paid_qty AS "paidQty",
+            bal.writeoff_qty AS "writeoffQty",
+            (COALESCE(o.fac_quant, 0) - bal.paid_qty - bal.writeoff_qty) AS "remainingQty"`;
+  const remainingExpr = '(COALESCE(o.fac_quant, 0) - bal.paid_qty - bal.writeoff_qty)';
+
   const countResult = await db.query(
     `SELECT COUNT(*)::int AS total FROM terceiros_ofs o WHERE ${conditions.join(' AND ')}`,
     params
   );
 
   const orderBy = (unsettledOnly === true || unsettledOnly === 'true')
-    ? 'ORDER BY (o.settlement_id IS NOT NULL), o.fac_numero, o.fac_codigo_produto'
+    ? `ORDER BY (${remainingExpr} <= 0), o.fac_numero, o.fac_codigo_produto`
     : 'ORDER BY o.fac_numero, o.fac_codigo_produto';
   let limitClause = '';
   if (limit) {
@@ -228,10 +245,12 @@ async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, ids, u
     `SELECT o.*,
             gp.group_id AS "groupId",
             pg.name AS "groupName"
+            ${balanceColumns}
             ${settledColumns}
      FROM terceiros_ofs o
      LEFT JOIN terceiros_group_products gp ON gp.product_code = o.fac_codigo_produto
      LEFT JOIN terceiros_product_groups pg ON pg.id = gp.group_id AND pg.active = true
+     ${balanceJoin}
      ${settledJoin}
      WHERE ${conditions.join(' AND ')}
      ${orderBy}${limitClause}`,
@@ -700,6 +719,7 @@ async function getSettlement(id) {
     `SELECT si.id, si.of_id AS "ofId", si.quantity, si.unit_price AS "unitPrice",
             si.total_price AS "totalPrice", si.price_source AS "priceSource",
             si.manually_edited AS "manuallyEdited",
+            si.writeoff_quantity AS "writeoffQuantity",
             si.original_quantity AS "originalQuantity",
             si.original_unit_price AS "originalUnitPrice",
             o.fac_numero AS "facNumero", o.fac_codsetor AS "facCodsetor",
@@ -760,6 +780,99 @@ async function getSettlement(id) {
   return { ...settlement.rows[0], items: items.rows, missingOfs: missingOfs.rows, discounts: discounts.rows, surcharges: surcharges.rows };
 }
 
+// ── Saldo de OF (fechamento parcial / remanescente) ───────────────────────
+//
+// Uma OF pode ser fechada em várias parcelas. O saldo disponível é o que ainda pode
+// ser lançado num novo fechamento:
+//   saldo = fac_quant − Σ(quantity + writeoff_quantity) dos itens em fechamentos != draft
+async function computeOfBalance(queryFn, ofId) {
+  const r = await queryFn(
+    `SELECT COALESCE(o.fac_quant, 0) AS fac_quant,
+            COALESCE((
+              SELECT SUM(si.quantity + si.writeoff_quantity)
+              FROM terceiros_settlement_items si
+              JOIN terceiros_settlements s2 ON s2.id = si.settlement_id AND s2.status <> 'draft'
+              WHERE si.of_id = o.id
+            ), 0) AS consumed
+     FROM terceiros_ofs o WHERE o.id = $1`,
+    [ofId]
+  );
+  if (r.rows.length === 0) return null;
+  const facQuant = parseFloat(r.rows[0].fac_quant) || 0;
+  const consumed = parseFloat(r.rows[0].consumed) || 0;
+  return { facQuant, consumed, remaining: parseFloat((facQuant - consumed).toFixed(2)) };
+}
+
+// Resolve quanto deste lançamento é "ajuste final/perda" (writeoff). Fonte de verdade é o
+// servidor: para 'final' consome todo o saldo restante além do pago; caso contrário 0.
+function resolveWriteoff(item, availableBalance) {
+  const qty = parseFloat(item.quantity) || 0;
+  if (item.shortfallAction === 'final') {
+    return Math.max(0, parseFloat((availableBalance - qty).toFixed(2)));
+  }
+  if (item.writeoffQuantity != null) {
+    const w = parseFloat(item.writeoffQuantity) || 0;
+    return Math.max(0, Math.min(w, Math.max(0, parseFloat((availableBalance - qty).toFixed(2)))));
+  }
+  return 0; // 'remainder' ou fechamento total → deixa saldo (se houver) disponível
+}
+
+// Valida o lançamento contra o saldo disponível e devolve o writeoff resolvido.
+async function prepareItemBalance(queryFn, item) {
+  const bal = await computeOfBalance(queryFn, item.ofId);
+  if (!bal) throw new Error(`OF ${item.ofId} não encontrada.`);
+  const qty = parseFloat(item.quantity) || 0;
+  if (qty <= 0) throw new Error('Quantidade do lançamento deve ser maior que zero.');
+  if (qty > bal.remaining + 0.0001) {
+    throw new Error(`Quantidade (${qty}) excede o saldo disponível (${bal.remaining}) da OF.`);
+  }
+  const writeoff = resolveWriteoff(item, bal.remaining);
+  if (qty + writeoff > bal.remaining + 0.0001) {
+    throw new Error(`Lançamento + ajuste (${qty + writeoff}) excede o saldo disponível (${bal.remaining}).`);
+  }
+  return { writeoff };
+}
+
+// Mantém terceiros_ofs.settlement_id como marca de "linha totalmente consumida": aponta
+// para o último fechamento que zerou o saldo; fica NULL enquanto houver saldo disponível.
+async function syncOfSettlementFlag(queryFn, ofId) {
+  const bal = await computeOfBalance(queryFn, ofId);
+  if (!bal) return;
+  if (bal.remaining > 0.0001) {
+    await queryFn('UPDATE terceiros_ofs SET settlement_id = NULL WHERE id = $1', [ofId]);
+  } else {
+    await queryFn(
+      `UPDATE terceiros_ofs SET settlement_id = (
+         SELECT si.settlement_id FROM terceiros_settlement_items si
+         JOIN terceiros_settlements s2 ON s2.id = si.settlement_id AND s2.status <> 'draft'
+         WHERE si.of_id = $1
+         ORDER BY s2.reference_year DESC, s2.reference_month DESC, si.id DESC
+         LIMIT 1
+       ) WHERE id = $1`,
+      [ofId]
+    );
+  }
+}
+
+// Linha do tempo de fechamentos de uma OF (para o alerta de saldo remanescente).
+async function getOfSettlementHistory(ofId) {
+  const result = await db.query(
+    `SELECT si.settlement_id AS "settlementId",
+            si.quantity, si.writeoff_quantity AS "writeoffQuantity",
+            si.total_price AS "totalPrice",
+            s.reference_month AS "referenceMonth", s.reference_year AS "referenceYear",
+            s.status, s.paid_at AS "paidAt", s.created_at AS "createdAt",
+            s.supplier_name AS "supplierName"
+     FROM terceiros_settlement_items si
+     JOIN terceiros_settlements s ON s.id = si.settlement_id
+     WHERE si.of_id = $1 AND s.status <> 'draft'
+     ORDER BY s.reference_year ASC, s.reference_month ASC, si.id ASC`,
+    [ofId]
+  );
+  const bal = await computeOfBalance((sql, p) => db.query(sql, p), ofId);
+  return { history: result.rows, balance: bal };
+}
+
 async function createSettlement({ codcli, supplierName, referenceMonth, referenceYear, notes, createdBy, items, discounts, surcharges }) {
   const client = await db.getClient();
 
@@ -780,22 +893,20 @@ async function createSettlement({ codcli, supplierName, referenceMonth, referenc
 
     // Insert items
     for (const item of items) {
+      const { writeoff } = await prepareItemBalance(client.query.bind(client), item);
       const totalPrice = parseFloat((item.quantity * item.unitPrice).toFixed(2));
       const manuallyEdited = item.manuallyEdited || false;
       await client.query(
-        `INSERT INTO terceiros_settlement_items (settlement_id, of_id, quantity, unit_price, total_price, price_source, original_quantity, original_unit_price, manually_edited)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        `INSERT INTO terceiros_settlement_items (settlement_id, of_id, quantity, unit_price, total_price, price_source, original_quantity, original_unit_price, manually_edited, writeoff_quantity)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [settlementId, item.ofId, item.quantity, item.unitPrice, totalPrice, item.priceSource || 'table',
          manuallyEdited ? item.originalQuantity : null,
          manuallyEdited ? item.originalUnitPrice : null,
-         manuallyEdited]
+         manuallyEdited, writeoff]
       );
 
-      // Mark OF as settled
-      await client.query(
-        'UPDATE terceiros_ofs SET settlement_id = $1 WHERE id = $2',
-        [settlementId, item.ofId]
-      );
+      // Marca a OF como totalmente consumida somente se o saldo zerou (senão deixa saldo remanescente)
+      await syncOfSettlementFlag(client.query.bind(client), item.ofId);
 
       totalAmount += totalPrice;
       totalItems += parseFloat(item.quantity) || 0;
@@ -893,18 +1004,18 @@ async function promoteDraft(id, { items, discounts, surcharges }) {
     let totalItems = 0;
 
     for (const item of items) {
+      const { writeoff } = await prepareItemBalance(client.query.bind(client), item);
       const totalPrice = parseFloat((item.quantity * item.unitPrice).toFixed(2));
       const manuallyEdited = item.manuallyEdited || false;
       await client.query(
-        `INSERT INTO terceiros_settlement_items (settlement_id, of_id, quantity, unit_price, total_price, price_source, original_quantity, original_unit_price, manually_edited)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        `INSERT INTO terceiros_settlement_items (settlement_id, of_id, quantity, unit_price, total_price, price_source, original_quantity, original_unit_price, manually_edited, writeoff_quantity)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [id, item.ofId, item.quantity, item.unitPrice, totalPrice, item.priceSource || 'table',
          manuallyEdited ? item.originalQuantity : null,
          manuallyEdited ? item.originalUnitPrice : null,
-         manuallyEdited]
+         manuallyEdited, writeoff]
       );
 
-      await client.query('UPDATE terceiros_ofs SET settlement_id = $1 WHERE id = $2', [id, item.ofId]);
       totalAmount += totalPrice;
       totalItems += parseFloat(item.quantity) || 0;
     }
@@ -938,6 +1049,12 @@ async function promoteDraft(id, { items, discounts, surcharges }) {
        WHERE id = $1`,
       [id, totalAmount, totalItems]
     );
+
+    // Agora que o fechamento deixou de ser draft, seus itens contam no saldo: marca as OFs
+    // totalmente consumidas (settlement_id) e deixa as com saldo remanescente disponíveis.
+    for (const item of items) {
+      await syncOfSettlementFlag(client.query.bind(client), item.ofId);
+    }
 
     const totals = await recalcSettlementTotals(client.query.bind(client), id);
     await client.query('COMMIT');
@@ -1039,11 +1156,10 @@ async function removeSettlementItem(settlementId, itemId) {
 
     const { of_id, total_price } = item.rows[0];
 
-    // Remove settlement reference from OF
-    await client.query('UPDATE terceiros_ofs SET settlement_id = NULL WHERE id = $1', [of_id]);
-
-    // Delete item
+    // Delete item, then re-evaluate the OF's consumed balance across the remaining
+    // settlements (it may still be fully/partially settled by another fechamento).
     await client.query('DELETE FROM terceiros_settlement_items WHERE id = $1', [itemId]);
+    await syncOfSettlementFlag(client.query.bind(client), of_id);
 
     // Recalculate totals
     const totals = await recalcSettlementTotals(client.query.bind(client), settlementId);
@@ -1065,7 +1181,7 @@ async function updateSettlementItem(settlementId, itemId, { quantity, unitPrice 
 
     // Get current item
     const item = await client.query(
-      'SELECT id, quantity, unit_price, original_quantity, original_unit_price, manually_edited FROM terceiros_settlement_items WHERE id = $1 AND settlement_id = $2',
+      'SELECT id, of_id, quantity, unit_price, writeoff_quantity, original_quantity, original_unit_price, manually_edited FROM terceiros_settlement_items WHERE id = $1 AND settlement_id = $2',
       [itemId, settlementId]
     );
     if (item.rows.length === 0) {
@@ -1078,6 +1194,14 @@ async function updateSettlementItem(settlementId, itemId, { quantity, unitPrice 
     const newPrice = unitPrice != null ? parseFloat(unitPrice) : parseFloat(current.unit_price);
     const newTotal = parseFloat((newQty * newPrice).toFixed(2));
 
+    // Saldo disponível para este item = saldo atual + o que este próprio item já consome.
+    const bal = await computeOfBalance(client.query.bind(client), current.of_id);
+    const writeoff = parseFloat(current.writeoff_quantity) || 0;
+    const availableForItem = bal.remaining + (parseFloat(current.quantity) || 0) + writeoff;
+    if (newQty + writeoff > availableForItem + 0.0001) {
+      throw new Error(`Quantidade (${newQty}) excede o saldo disponível (${parseFloat((availableForItem - writeoff).toFixed(2))}) da OF.`);
+    }
+
     // Store original values on first manual edit
     const origQty = current.original_quantity != null ? current.original_quantity : current.quantity;
     const origPrice = current.original_unit_price != null ? current.original_unit_price : current.unit_price;
@@ -1089,6 +1213,9 @@ async function updateSettlementItem(settlementId, itemId, { quantity, unitPrice 
        WHERE id = $6`,
       [newQty, newPrice, newTotal, origQty, origPrice, itemId]
     );
+
+    // Alterar a quantidade paga muda o saldo consumido → religa/desliga a marca de PAGO.
+    await syncOfSettlementFlag(client.query.bind(client), current.of_id);
 
     const totals = await recalcSettlementTotals(client.query.bind(client), settlementId);
 
@@ -1108,20 +1235,18 @@ async function addSettlementItems(settlementId, items) {
     await client.query('BEGIN');
 
     for (const item of items) {
+      const { writeoff } = await prepareItemBalance(client.query.bind(client), item);
       const totalPrice = parseFloat((item.quantity * item.unitPrice).toFixed(2));
       const manuallyEdited = item.manuallyEdited || false;
       await client.query(
-        `INSERT INTO terceiros_settlement_items (settlement_id, of_id, quantity, unit_price, total_price, price_source, original_quantity, original_unit_price, manually_edited)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        `INSERT INTO terceiros_settlement_items (settlement_id, of_id, quantity, unit_price, total_price, price_source, original_quantity, original_unit_price, manually_edited, writeoff_quantity)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
         [settlementId, item.ofId, item.quantity, item.unitPrice, totalPrice, item.priceSource || 'table',
          manuallyEdited ? item.originalQuantity : null,
          manuallyEdited ? item.originalUnitPrice : null,
-         manuallyEdited]
+         manuallyEdited, writeoff]
       );
-      await client.query(
-        'UPDATE terceiros_ofs SET settlement_id = $1 WHERE id = $2',
-        [settlementId, item.ofId]
-      );
+      await syncOfSettlementFlag(client.query.bind(client), item.ofId);
     }
 
     // Recalculate totals
@@ -1492,6 +1617,7 @@ module.exports = {
   updateSettlementItem,
   addSettlementItems,
   getSettlementExportData,
+  getOfSettlementHistory,
   // Drafts
   saveDraft,
   getDraft,

@@ -1012,6 +1012,12 @@ export const fetchOFRastreio = async (ofNumero) => {
   return handleResponse(response);
 };
 
+// Histórico de fechamentos (parciais) de uma linha de OF — usado no alerta de saldo remanescente.
+export const fetchOfSettlementHistory = async (ofId) => {
+  const response = await authFetch(`/api/terceiros/ofs/${ofId}/settlement-history`);
+  return handleResponse(response);
+};
+
 // ── Products Management ──────────────────────────────────────────────────────
 
 export const fetchProducts = async ({ codigo, nome, lojas, page, limit } = {}) => {
