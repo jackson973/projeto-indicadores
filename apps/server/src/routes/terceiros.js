@@ -1416,6 +1416,22 @@ router.get('/ofs/:id/settlement-history', async (req, res) => {
   }
 });
 
+// Reabrir saldo de OFs fechadas antes da feature de saldo remanescente (limpa settlement_id
+// quando ainda há saldo; o pagamento já feito é preservado).
+router.post('/ofs/reopen-balance', async (req, res) => {
+  try {
+    const { ofIds } = req.body;
+    if (!ofIds || (Array.isArray(ofIds) && ofIds.length === 0)) {
+      return res.status(400).json({ message: 'Informe ofIds.' });
+    }
+    const result = await repo.reopenOfBalance(ofIds);
+    return res.json(result);
+  } catch (error) {
+    console.error('Reopen OF balance error:', error);
+    return res.status(500).json({ message: 'Erro ao reabrir saldo da OF.' });
+  }
+});
+
 function formatNum(val) {
   const n = parseFloat(val) || 0;
   return n.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });

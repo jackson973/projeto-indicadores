@@ -1018,6 +1018,16 @@ export const fetchOfSettlementHistory = async (ofId) => {
   return handleResponse(response);
 };
 
+// Reabre o saldo de OFs fechadas antes da feature de saldo remanescente (preserva o pago).
+export const reopenOfBalance = async (ofIds) => {
+  const response = await authFetch(`/api/terceiros/ofs/reopen-balance`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ofIds })
+  });
+  return handleResponse(response);
+};
+
 // ── Products Management ──────────────────────────────────────────────────────
 
 export const fetchProducts = async ({ codigo, nome, lojas, page, limit } = {}) => {

@@ -854,6 +854,37 @@ async function syncOfSettlementFlag(queryFn, ofId) {
   }
 }
 
+// Reabre o saldo de OFs fechadas ANTES desta feature (marcadas como pagas mesmo tendo
+// sido um fechamento parcial). Apenas limpa o settlement_id quando ainda há saldo — o
+// pagamento já registrado nos settlement_items é preservado, então a OF reaparece como
+// "saldo remanescente" (saldo = fac_quant − pago) sem duplicar valor.
+async function reopenOfBalance(ofIds) {
+  const ids = (Array.isArray(ofIds) ? ofIds : [ofIds])
+    .map((n) => parseInt(n, 10)).filter((n) => Number.isFinite(n));
+  if (ids.length === 0) return { reopened: [], skipped: [] };
+
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const reopened = [];
+    const skipped = [];
+    for (const ofId of ids) {
+      const bal = await computeOfBalance(client.query.bind(client), ofId);
+      if (!bal) { skipped.push({ ofId, reason: 'not_found' }); continue; }
+      if (bal.remaining <= 0.0001) { skipped.push({ ofId, reason: 'no_balance' }); continue; }
+      await client.query('UPDATE terceiros_ofs SET settlement_id = NULL WHERE id = $1', [ofId]);
+      reopened.push({ ofId, remaining: bal.remaining });
+    }
+    await client.query('COMMIT');
+    return { reopened, skipped };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 // Linha do tempo de fechamentos de uma OF (para o alerta de saldo remanescente).
 async function getOfSettlementHistory(ofId) {
   const result = await db.query(
@@ -1618,6 +1649,7 @@ module.exports = {
   addSettlementItems,
   getSettlementExportData,
   getOfSettlementHistory,
+  reopenOfBalance,
   // Drafts
   saveDraft,
   getDraft,

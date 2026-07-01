@@ -76,7 +76,8 @@ import {
   fetchTerceirosPricesForOfs,
   saveTerceirosDraft,
   fetchTerceirosDraft,
-  fetchOfSettlementHistory
+  fetchOfSettlementHistory,
+  reopenOfBalance
 } from "../api";
 import { getToken } from "../api";
 import { getSaoPauloYear, getSaoPauloMonth } from "../utils/timezone";
@@ -840,6 +841,24 @@ const TerceirosSettlement = () => {
       setLoadingOfs(false);
     }
   }, [dateFrom, dateTo, toast]);
+
+  // Reabre o saldo de OFs fechadas antes da feature (fechamento que deveria ter sido parcial).
+  const handleReopenBalance = useCallback(async (ofIds) => {
+    if (!ofIds || ofIds.length === 0) return;
+    try {
+      const res = await reopenOfBalance(ofIds);
+      const n = res?.reopened?.length || 0;
+      if (n > 0) {
+        toast({ title: `Saldo reaberto em ${n} ${n === 1 ? "item" : "itens"}. Já disponível para fechamento.`, status: "success", duration: 3000 });
+      } else {
+        toast({ title: "Nenhum saldo a reabrir (itens já quitados).", status: "info", duration: 3000 });
+      }
+      const currentSearch = ofSearchNewRef.current?.value || ofSearchNew;
+      await loadUnsettledOfs({ codcli: newSupplier || null, ofNumbers: currentSearch });
+    } catch (err) {
+      toast({ title: err.message || "Erro ao reabrir saldo.", status: "error", duration: 4000 });
+    }
+  }, [loadUnsettledOfs, newSupplier, ofSearchNew, toast]);
 
   const handleNewSupplierChange = useCallback((codcli) => {
     setNewSupplier(codcli);
@@ -3139,9 +3158,14 @@ const TerceirosSettlement = () => {
 
                 // Tamanhos com saldo remanescente (fechamento parcial anterior deixou saldo).
                 const remnantSizes = [];
+                // Tamanhos marcados como PAGOS mas que ainda têm saldo (fechamento antigo que
+                // deveria ter sido parcial) — candidatos ao "Reabrir saldo".
+                const reopenableSizes = [];
                 ofGroup.colorGroups.forEach((cg) => cg.sizes.forEach((sz) => {
                   if (sz.isRemnant) remnantSizes.push({ ofId: sz.ofId, tam: sz.tam, cor: cg.facCor, paidQty: sz.paidQty, saldo: sz.qty });
+                  if (sz.settlementId && (parseFloat(sz.qty) || 0) > 0) reopenableSizes.push(sz);
                 }));
+                const reopenablePcs = reopenableSizes.reduce((s, sz) => s + (parseFloat(sz.qty) || 0), 0);
 
                 const isExpanded = expandedOfGroups.has(ofGroup.key);
 
@@ -3217,6 +3241,39 @@ const TerceirosSettlement = () => {
                           <WarningIcon boxSize={3} />
                           Pago em {monthNames[(ofGroup.settlementMonth || 1) - 1]}/{ofGroup.settlementYear}
                         </Badge>
+                      )}
+                      {reopenableSizes.length > 0 && (
+                        <Box onClick={(e) => e.stopPropagation()}>
+                          <Popover placement="bottom-start" isLazy>
+                            {({ onClose }) => (
+                              <>
+                                <PopoverTrigger>
+                                  <Button size="xs" colorScheme="purple" variant="outline" leftIcon={<WarningIcon boxSize={3} />} whiteSpace="nowrap">
+                                    Reabrir saldo ({reopenablePcs} pç)
+                                  </Button>
+                                </PopoverTrigger>
+                                <Portal>
+                                  <PopoverContent fontSize="sm" w="300px" onClick={(e) => e.stopPropagation()}>
+                                    <PopoverArrow />
+                                    <PopoverHeader fontWeight="bold">Reabrir saldo</PopoverHeader>
+                                    <PopoverBody>
+                                      <Text mb={2}>
+                                        Reabrir o saldo de <b>{reopenablePcs} pç</b> desta OF? Esse fechamento foi marcado como pago mas ainda há saldo. O pagamento já feito é <b>mantido</b>; o saldo volta a ficar disponível.
+                                      </Text>
+                                      <HStack justify="flex-end">
+                                        <Button size="xs" variant="ghost" onClick={onClose}>Cancelar</Button>
+                                        <Button size="xs" colorScheme="purple"
+                                          onClick={() => { handleReopenBalance(reopenableSizes.map((s) => s.ofId)); onClose(); }}>
+                                          Confirmar
+                                        </Button>
+                                      </HStack>
+                                    </PopoverBody>
+                                  </PopoverContent>
+                                </Portal>
+                              </>
+                            )}
+                          </Popover>
+                        </Box>
                       )}
                       {isPartial && !ofGroup.isSettled && (
                         <Badge colorScheme="orange" variant="subtle" display="flex" alignItems="center" gap={1} whiteSpace="nowrap">
@@ -3341,7 +3398,9 @@ const TerceirosSettlement = () => {
                           const isSelected = !isSizeSettled && selectedOfs.has(sz.index);
                           const isEditing = !isSizeSettled && editingSize === sz.index;
                           const editedQty = editedQuantities[sz.index];
-                          const displayQty = editedQty !== undefined ? parseFloat(editedQty) || 0 : sz.qty;
+                          // Célula já paga mostra a quantidade original da OF; disponível mostra o saldo.
+                          const baseQty = isSizeSettled ? (sz.facQuant ?? sz.qty) : sz.qty;
+                          const displayQty = editedQty !== undefined ? parseFloat(editedQty) || 0 : baseQty;
                           const isQtyEdited = editedQty !== undefined && parseFloat(editedQty) !== sz.qty;
                           const tipLabel = isSizeSettled
                             ? `Pago em ${monthNames[(sz.settlementMonth || 1) - 1]}/${sz.settlementYear}`
