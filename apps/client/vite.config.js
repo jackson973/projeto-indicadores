@@ -1,8 +1,20 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { execSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+
+// Versão exibida na UI — permite confirmar rapidamente qual build está no ar.
+const pkgVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
+let gitSha = "nogit";
+try { gitSha = execSync("git rev-parse --short HEAD").toString().trim(); } catch { /* build sem git */ }
+const buildLabel = `${new Date().toISOString().slice(0, 16).replace("T", " ")}Z · ${gitSha}`;
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(pkgVersion),
+    __BUILD_LABEL__: JSON.stringify(buildLabel),
+  },
   plugins: [
     react(),
     VitePWA({

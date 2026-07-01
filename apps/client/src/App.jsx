@@ -106,6 +106,11 @@ import {
 const SIDEBAR_EXPANDED = "220px";
 const SIDEBAR_COLLAPSED = "60px";
 
+// Versão do build (injetada pelo Vite em vite.config.js). Serve para confirmar qual
+// build está no ar após um deploy.
+const APP_VERSION = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
+const APP_BUILD_LABEL = typeof __BUILD_LABEL__ !== "undefined" ? __BUILD_LABEL__ : "local";
+
 const MONTH_NAMES = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
@@ -731,6 +736,11 @@ const App = () => {
           <Box flexShrink={0} fontSize="md"><SmallCloseIcon /></Box>
           Sair
         </Box>
+        {sidebarOpen && (
+          <Text fontSize="10px" color="gray.400" px={3} pt={1} whiteSpace="nowrap" overflow="hidden" textOverflow="ellipsis" title={APP_BUILD_LABEL}>
+            v{APP_VERSION} · {APP_BUILD_LABEL}
+          </Text>
+        )}
       </VStack>
     </>
   );
