@@ -1186,14 +1186,23 @@ async function deleteSettlement(id) {
   try {
     await client.query('BEGIN');
 
-    // Remove settlement reference from OFs
-    await client.query('UPDATE terceiros_ofs SET settlement_id = NULL WHERE settlement_id = $1', [id]);
+    // OFs tocadas por este fechamento — precisam ter o flag recalculado depois.
+    const affected = await client.query(
+      'SELECT DISTINCT of_id FROM terceiros_settlement_items WHERE settlement_id = $1', [id]
+    );
 
     // Delete items (cascaded, but explicit for clarity)
     await client.query('DELETE FROM terceiros_settlement_items WHERE settlement_id = $1', [id]);
 
     // Delete settlement
     await client.query('DELETE FROM terceiros_settlements WHERE id = $1', [id]);
+
+    // Recalcula o settlement_id de cada OF afetada (pode continuar consumida por OUTRO
+    // fechamento, ou voltar a ter saldo). Substitui o antigo "SET NULL" cego, que deixava
+    // flags velhos quando a OF estava marcada por um fechamento diferente do deletado.
+    for (const row of affected.rows) {
+      await syncOfSettlementFlag(client.query.bind(client), row.of_id);
+    }
 
     await client.query('COMMIT');
     return true;

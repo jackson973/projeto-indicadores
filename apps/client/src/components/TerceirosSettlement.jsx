@@ -154,7 +154,6 @@ const RemnantHistoryPopover = ({ sizes }) => {
     } finally { setLoading(false); }
   };
 
-  const totalPaid = sizes.reduce((s, x) => s + (x.paidQty || 0), 0);
   const totalSaldo = sizes.reduce((s, x) => s + (x.saldo || 0), 0);
 
   return (
@@ -162,7 +161,7 @@ const RemnantHistoryPopover = ({ sizes }) => {
       <PopoverTrigger>
         <Badge colorScheme="purple" variant="subtle" display="flex" alignItems="center" gap={1} whiteSpace="nowrap" cursor="pointer">
           <WarningIcon boxSize={3} />
-          Saldo remanescente: {totalSaldo} {totalSaldo === 1 ? "pç" : "pçs"}{totalPaid > 0 ? ` (${totalPaid} já pagas)` : ""}
+          Saldo remanescente: {totalSaldo} {totalSaldo === 1 ? "pç" : "pçs"}
         </Badge>
       </PopoverTrigger>
       <Portal>
