@@ -1896,15 +1896,24 @@ const TerceirosSettlement = () => {
 
           {/* Center: Sizes grid inline */}
           <Flex wrap="wrap" gap={1} flex={{ base: "1 1 100%", md: "1 1 auto" }} justify={{ base: "flex-start", md: "center" }}>
-            {group.sizes.map((sz) => (
+            {group.sizes.map((sz) => {
+              // Contexto da OF para exibir OF / pago / saldo na edição.
+              const hasCtx = !sz.missing && (parseFloat(sz.baseQty) || 0) > 0;
+              const saldoAfter = hasCtx
+                ? Math.max(0, (parseFloat(sz.baseQty) || 0) - (parseFloat(sz.paidOther) || 0) - (parseFloat(sz.qty) || 0) - (parseFloat(sz.writeoffQuantity) || 0) - (parseFloat(sz.writeoffOther) || 0))
+                : 0;
+              const ctxTip = hasCtx
+                ? `OF ${sz.baseQty} · pago outros ${sz.paidOther} · este ${sz.qty}${(parseFloat(sz.writeoffQuantity) || 0) > 0 ? ` · ajuste ${sz.writeoffQuantity}` : ""} · saldo ${saldoAfter}`
+                : "";
+              return (
               <Tooltip
                 key={sz.id}
-                label={sz.missing ? "Tamanho nao incluido no fechamento" : sz.manuallyEdited && sz.originalQuantity != null ? `Qtde original: ${sz.originalQuantity}` : ""}
-                isDisabled={!sz.missing && !sz.manuallyEdited}
+                label={sz.missing ? "Tamanho nao incluido no fechamento" : ctxTip || (sz.manuallyEdited && sz.originalQuantity != null ? `Qtde original: ${sz.originalQuantity}` : "")}
+                isDisabled={sz.missing ? false : !ctxTip && !sz.manuallyEdited}
               >
                 <Box
                   textAlign="center"
-                  minW="52px"
+                  minW={hasCtx ? "72px" : "52px"}
                   borderWidth={sz.missing ? "2px" : sz.manuallyEdited ? "2px" : "1px"}
                   borderColor={sz.missing ? "red.400" : sz.manuallyEdited ? "orange.400" : "gray.200"}
                   borderRadius="md"
@@ -1958,6 +1967,14 @@ const TerceirosSettlement = () => {
                     />
                   )}
                   <Text fontSize="xs" fontWeight="bold" color={sz.missing ? "red.600" : "gray.600"}>{sz.tam}</Text>
+                  {hasCtx && (
+                    <>
+                      <Text fontSize="10px" fontWeight="bold" color="gray.700" lineHeight="1.15">{sz.baseQty}</Text>
+                      {(parseFloat(sz.paidOther) || 0) > 0 && (
+                        <Text fontSize="8px" color="gray.500" lineHeight="1.2">pago {sz.paidOther}</Text>
+                      )}
+                    </>
+                  )}
                   {editable && !sz.missing && editingItemId === sz.id && editingItemField === "qty" ? (
                     <Input
                       size="xs"
@@ -2002,9 +2019,13 @@ const TerceirosSettlement = () => {
                       {sz.qty}
                     </Text>
                   )}
-                  {sz.manuallyEdited && sz.originalQuantity != null && sz.originalQuantity !== sz.qty && (
+                  {hasCtx ? (
+                    <Text fontSize="8px" fontWeight={saldoAfter > 0 ? "bold" : "normal"} color={saldoAfter > 0 ? "purple.600" : "green.600"} lineHeight="1.2">
+                      {saldoAfter > 0 ? `saldo ${saldoAfter}` : "quitado"}
+                    </Text>
+                  ) : (sz.manuallyEdited && sz.originalQuantity != null && sz.originalQuantity !== sz.qty && (
                     <Text fontSize="8px" color="orange.500" lineHeight="1">{sz.originalQuantity}</Text>
-                  )}
+                  ))}
                   {editable && !sz.missing && (
                     <Box
                       position="absolute"
@@ -2029,8 +2050,35 @@ const TerceirosSettlement = () => {
                   )}
                 </Box>
               </Tooltip>
-            ))}
+              );
+            })}
           </Flex>
+
+          {/* Shortfall na edição: destino da diferença (saldo vs ajuste final) por tamanho */}
+          {editable && group.sizes.some((sz) => !sz.missing && (parseFloat(sz.baseQty) || 0) > 0 && ((parseFloat(sz.baseQty) || 0) - (parseFloat(sz.paidOther) || 0) - (parseFloat(sz.qty) || 0)) > 0.0001) && (
+            <VStack align="stretch" spacing={1} flex="1 1 100%" mt={1}>
+              {group.sizes.filter((sz) => !sz.missing && (parseFloat(sz.baseQty) || 0) > 0 && ((parseFloat(sz.baseQty) || 0) - (parseFloat(sz.paidOther) || 0) - (parseFloat(sz.qty) || 0)) > 0.0001).map((sz) => {
+                const available = parseFloat(((parseFloat(sz.baseQty) || 0) - (parseFloat(sz.paidOther) || 0)).toFixed(2));
+                const diff = parseFloat((available - (parseFloat(sz.qty) || 0)).toFixed(2));
+                const isFinal = (parseFloat(sz.writeoffQuantity) || 0) > 0;
+                return (
+                  <HStack key={sz.id} spacing={2} fontSize="xs" bg="orange.50" borderWidth="1px" borderColor="orange.200" borderRadius="md" px={2} py={1} wrap="wrap">
+                    <Text>Tam <b>{sz.tam}</b>: pago {sz.qty} de {available} — {diff} {isFinal ? "em ajuste final" : "em saldo"}</Text>
+                    <HStack spacing={1} ml="auto">
+                      <Button size="xs" variant={!isFinal ? "solid" : "outline"} colorScheme="purple"
+                        onClick={() => handleUpdateItem(sz.id, { quantity: sz.qty, shortfallAction: "remainder" })}>
+                        Deixar saldo
+                      </Button>
+                      <Button size="xs" variant={isFinal ? "solid" : "outline"} colorScheme="gray"
+                        onClick={() => handleUpdateItem(sz.id, { quantity: sz.qty, shortfallAction: "final" })}>
+                        Ajuste final
+                      </Button>
+                    </HStack>
+                  </HStack>
+                );
+              })}
+            </VStack>
+          )}
 
           {/* Right: Price + Total */}
           <Box
@@ -2291,6 +2339,7 @@ const TerceirosSettlement = () => {
         facQuant: parseFloat(of.fac_quant) || 0,
         paidQty: paidQtyOf(of),
         isRemnant: isRemnantOf(of),
+        paidPeriods: Array.isArray(of.paidPeriods) ? of.paidPeriods : (typeof of.paidPeriods === "string" ? (() => { try { return JSON.parse(of.paidPeriods); } catch { return []; } })() : []),
         ofId: of.id,
         settlementId: of.settlementId || null,
         settlementMonth: of.settlementMonth || null,
@@ -2340,7 +2389,12 @@ const TerceirosSettlement = () => {
         missing: false,
         manuallyEdited: isEdited,
         originalQuantity: isEdited ? parseFloat(item.originalQuantity) || null : null,
-        originalUnitPrice: isEdited ? parseFloat(item.originalUnitPrice) || null : null
+        originalUnitPrice: isEdited ? parseFloat(item.originalUnitPrice) || null : null,
+        // Contexto da OF para exibir OF / pago / saldo e permitir ajuste final na edição.
+        baseQty: item.baseQty != null ? parseFloat(item.baseQty) || 0 : (parseFloat(item.facQtOrig) || parseFloat(item.facQuant) || 0),
+        paidOther: parseFloat(item.paidOther) || 0,
+        writeoffQuantity: parseFloat(item.writeoffQuantity) || 0,
+        writeoffOther: parseFloat(item.writeoffOther) || 0
       });
     }
     // Add missing OFs as missing sizes
@@ -3166,11 +3220,21 @@ const TerceirosSettlement = () => {
                 // Tamanhos marcados como PAGOS mas que ainda têm saldo (fechamento antigo que
                 // deveria ter sido parcial) — candidatos ao "Reabrir saldo".
                 const reopenableSizes = [];
+                // Meses em que houve pagamento (agregado por mês/ano entre tamanhos e cores),
+                // para exibir os informativos empilhados (ex.: maio, junho).
+                const periodMap = new Map();
                 ofGroup.colorGroups.forEach((cg) => cg.sizes.forEach((sz) => {
                   if (sz.isRemnant) remnantSizes.push({ ofId: sz.ofId, tam: sz.tam, cor: cg.facCor, paidQty: sz.paidQty, saldo: sz.qty });
                   if (sz.settlementId && (parseFloat(sz.qty) || 0) > 0) reopenableSizes.push(sz);
+                  (sz.paidPeriods || []).forEach((p) => {
+                    const k = `${p.year}-${p.month}`;
+                    const e = periodMap.get(k) || { month: Number(p.month), year: Number(p.year), qty: 0 };
+                    e.qty += parseFloat(p.qty) || 0;
+                    periodMap.set(k, e);
+                  });
                 }));
                 const reopenablePcs = reopenableSizes.reduce((s, sz) => s + (parseFloat(sz.qty) || 0), 0);
+                const paidPeriodsAgg = [...periodMap.values()].sort((a, b) => (a.year - b.year) || (a.month - b.month));
 
                 const isExpanded = expandedOfGroups.has(ofGroup.key);
 
@@ -3241,55 +3305,51 @@ const TerceirosSettlement = () => {
                           <Text color="gray.500">Parte: {ofGroup.facParte}{ofGroup.facDescparte && ofGroup.facDescparte !== ofGroup.facParte ? ` - ${ofGroup.facDescparte}` : ""}</Text>
                         )}
                       </HStack>
-                      {ofGroup.isSettled && (
-                        <Badge colorScheme="orange" variant="solid" display="flex" alignItems="center" gap={1} whiteSpace="nowrap">
-                          <WarningIcon boxSize={3} />
-                          Pago em {monthNames[(ofGroup.settlementMonth || 1) - 1]}/{ofGroup.settlementYear}
-                        </Badge>
-                      )}
-                      {reopenableSizes.length > 0 && (
-                        <Box onClick={(e) => e.stopPropagation()}>
-                          <Popover placement="bottom-start" isLazy>
-                            {({ onClose }) => (
-                              <>
-                                <PopoverTrigger>
-                                  <Button size="xs" colorScheme="purple" variant="outline" leftIcon={<WarningIcon boxSize={3} />} whiteSpace="nowrap">
-                                    Reabrir saldo ({reopenablePcs} pç)
-                                  </Button>
-                                </PopoverTrigger>
-                                <Portal>
-                                  <PopoverContent fontSize="sm" w="300px" onClick={(e) => e.stopPropagation()}>
-                                    <PopoverArrow />
-                                    <PopoverHeader fontWeight="bold">Reabrir saldo</PopoverHeader>
-                                    <PopoverBody>
-                                      <Text mb={2}>
-                                        Reabrir o saldo de <b>{reopenablePcs} pç</b> desta OF? Esse fechamento foi marcado como pago mas ainda há saldo. O pagamento já feito é <b>mantido</b>; o saldo volta a ficar disponível.
-                                      </Text>
-                                      <HStack justify="flex-end">
-                                        <Button size="xs" variant="ghost" onClick={onClose}>Cancelar</Button>
-                                        <Button size="xs" colorScheme="purple"
-                                          onClick={() => { handleReopenBalance(reopenableSizes.map((s) => s.ofId)); onClose(); }}>
-                                          Confirmar
-                                        </Button>
-                                      </HStack>
-                                    </PopoverBody>
-                                  </PopoverContent>
-                                </Portal>
-                              </>
-                            )}
-                          </Popover>
-                        </Box>
-                      )}
-                      {isPartial && !ofGroup.isSettled && (
-                        <Badge colorScheme="orange" variant="subtle" display="flex" alignItems="center" gap={1} whiteSpace="nowrap">
-                          <WarningIcon boxSize={3} />
-                          Pago parcial em {monthNames[(ofGroup.settlementMonth || 1) - 1]}/{ofGroup.settlementYear}
-                        </Badge>
-                      )}
-                      {remnantSizes.length > 0 && !ofGroup.isSettled && (
-                        <Box onClick={(e) => e.stopPropagation()}>
-                          <RemnantHistoryPopover sizes={remnantSizes} />
-                        </Box>
+                      {(paidPeriodsAgg.length > 0 || reopenableSizes.length > 0 || (remnantSizes.length > 0 && !ofGroup.isSettled)) && (
+                        <VStack align="flex-end" spacing={1} onClick={(e) => e.stopPropagation()}>
+                          {/* Um informativo por mês em que houve pagamento (empilhados) */}
+                          {paidPeriodsAgg.map((p) => (
+                            <Badge key={`${p.year}-${p.month}`} colorScheme="orange" variant={ofGroup.isSettled ? "solid" : "subtle"}
+                                   display="flex" alignItems="center" gap={1} whiteSpace="nowrap">
+                              <WarningIcon boxSize={3} />
+                              Pago em {monthNames[(p.month || 1) - 1]}/{p.year}: {p.qty} pç
+                            </Badge>
+                          ))}
+                          {remnantSizes.length > 0 && !ofGroup.isSettled && (
+                            <RemnantHistoryPopover sizes={remnantSizes} />
+                          )}
+                          {reopenableSizes.length > 0 && (
+                            <Popover placement="bottom-start" isLazy>
+                              {({ onClose }) => (
+                                <>
+                                  <PopoverTrigger>
+                                    <Button size="xs" colorScheme="purple" variant="outline" leftIcon={<WarningIcon boxSize={3} />} whiteSpace="nowrap">
+                                      Reabrir saldo ({reopenablePcs} pç)
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <Portal>
+                                    <PopoverContent fontSize="sm" w="300px" onClick={(e) => e.stopPropagation()}>
+                                      <PopoverArrow />
+                                      <PopoverHeader fontWeight="bold">Reabrir saldo</PopoverHeader>
+                                      <PopoverBody>
+                                        <Text mb={2}>
+                                          Reabrir o saldo de <b>{reopenablePcs} pç</b> desta OF? Esse fechamento foi marcado como pago mas ainda há saldo. O pagamento já feito é <b>mantido</b>; o saldo volta a ficar disponível.
+                                        </Text>
+                                        <HStack justify="flex-end">
+                                          <Button size="xs" variant="ghost" onClick={onClose}>Cancelar</Button>
+                                          <Button size="xs" colorScheme="purple"
+                                            onClick={() => { handleReopenBalance(reopenableSizes.map((s) => s.ofId)); onClose(); }}>
+                                            Confirmar
+                                          </Button>
+                                        </HStack>
+                                      </PopoverBody>
+                                    </PopoverContent>
+                                  </Portal>
+                                </>
+                              )}
+                            </Popover>
+                          )}
+                        </VStack>
                       )}
                       {hasMissingPrice && !ofGroup.isSettled && (
                         <Tooltip label={missingPriceError || "Sem preço definido para este item"} hasArrow>
