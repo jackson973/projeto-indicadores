@@ -54,6 +54,9 @@ Múltiplos fechamentos parciais são nativos: cada parcial é uma linha própria
 - `reopenOfBalance(ofIds)` → limpa `settlement_id` das OFs com saldo (reabre; **preserva o
   pago**). Usada pelo botão "Reabrir saldo".
 - `getOfSettlementHistory(ofId)` → linha do tempo dos fechamentos da OF.
+- `deleteSettlement(id)` → deleta itens/fechamento e **recalcula `syncOfSettlementFlag` de cada
+  OF afetada** (não zera `settlement_id` cegamente). Assim o saldo volta ao estado correto ao
+  deletar (deletar todos os fechamentos de uma OF → volta ao original).
 - `getOfs(...)` (ramo `unsettledOnly`) expõe por linha: `paidQty`, `writeoffQty`, `baseQty`,
   `remainingQty` e **`paidPeriods`** (JSON `[{month,year,qty}]` — meses pagos, para o informativo
   multi-mês).
@@ -182,6 +185,7 @@ ORDER BY FACCAO3.lancto;
 | `d1fa40a` | 1.3.0 | UI multi-mês empilhado + edição com toggle |
 | `c47e858` | 1.3.1 | rótulo "pagar N" na edição |
 | `529d1ff` | 1.4.0 | forçar atualização: nginx no-cache + /api/version + VersionGate |
+| `c07ffab` | 1.4.1 | `deleteSettlement` recalcula flag (syncOfSettlementFlag) + badge de saldo sem "(N já pagas)" |
 
 ## 10. Pontos de atenção
 
