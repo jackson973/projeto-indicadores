@@ -948,11 +948,11 @@ router.put('/settlements/:id', async (req, res) => {
 
 router.put('/settlements/:id/items/:itemId', async (req, res) => {
   try {
-    const { quantity, unitPrice } = req.body;
+    const { quantity, unitPrice, shortfallAction, writeoffQuantity } = req.body;
     if (quantity == null && unitPrice == null) {
       return res.status(400).json({ message: 'Informe quantity ou unitPrice.' });
     }
-    const result = await repo.updateSettlementItem(req.params.id, req.params.itemId, { quantity, unitPrice });
+    const result = await repo.updateSettlementItem(req.params.id, req.params.itemId, { quantity, unitPrice, shortfallAction, writeoffQuantity });
     if (!result) return res.status(404).json({ message: 'Item nao encontrado.' });
     return res.json(result);
   } catch (error) {

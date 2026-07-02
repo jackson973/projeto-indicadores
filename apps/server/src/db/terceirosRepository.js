@@ -269,7 +269,17 @@ async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, ids, u
             bal.paid_qty AS "paidQty",
             bal.writeoff_qty AS "writeoffQty",
             ${baseQtyExpr} AS "baseQty",
-            (${baseQtyExpr} - bal.paid_qty - bal.writeoff_qty) AS "remainingQty"`;
+            (${baseQtyExpr} - bal.paid_qty - bal.writeoff_qty) AS "remainingQty",
+            COALESCE((
+              SELECT json_agg(json_build_object('month', t.m, 'year', t.y, 'qty', t.q) ORDER BY t.y, t.m)
+              FROM (
+                SELECT s3.reference_month AS m, s3.reference_year AS y, SUM(si3.quantity) AS q
+                FROM terceiros_settlement_items si3
+                JOIN terceiros_settlements s3 ON s3.id = si3.settlement_id AND s3.status <> 'draft'
+                WHERE si3.of_id = o.id
+                GROUP BY s3.reference_month, s3.reference_year
+              ) t
+            ), '[]') AS "paidPeriods"`;
   const remainingExpr = `(${baseQtyExpr} - bal.paid_qty - bal.writeoff_qty)`;
 
   const countResult = await db.query(
@@ -773,6 +783,13 @@ async function getSettlement(id) {
             o.fac_cor AS "facCor", o.fac_desccor AS "facDesccor",
             o.fac_parte AS "facParte", o.fac_descparte AS "facDescparte",
             o.fac_tam AS "facTam", o.fac_qt_orig AS "facQtOrig", o.fac_quant AS "facQuant",
+            ${BASE_QTY_EXPR} AS "baseQty",
+            COALESCE((SELECT SUM(sio.quantity) FROM terceiros_settlement_items sio
+                      JOIN terceiros_settlements so ON so.id = sio.settlement_id AND so.status <> 'draft'
+                      WHERE sio.of_id = si.of_id AND sio.settlement_id <> $1), 0) AS "paidOther",
+            COALESCE((SELECT SUM(sio.writeoff_quantity) FROM terceiros_settlement_items sio
+                      JOIN terceiros_settlements so ON so.id = sio.settlement_id AND so.status <> 'draft'
+                      WHERE sio.of_id = si.of_id AND sio.settlement_id <> $1), 0) AS "writeoffOther",
             o.fac_dt_lan AS "facDtLan", o.fac_dt_prev_ret AS "facDtPrevRet"
      FROM terceiros_settlement_items si
      INNER JOIN terceiros_ofs o ON o.id = si.of_id
@@ -1252,7 +1269,7 @@ async function removeSettlementItem(settlementId, itemId) {
   }
 }
 
-async function updateSettlementItem(settlementId, itemId, { quantity, unitPrice }) {
+async function updateSettlementItem(settlementId, itemId, { quantity, unitPrice, shortfallAction, writeoffQuantity }) {
   const client = await db.getClient();
   try {
     await client.query('BEGIN');
@@ -1274,10 +1291,25 @@ async function updateSettlementItem(settlementId, itemId, { quantity, unitPrice 
 
     // Saldo disponível para este item = saldo atual + o que este próprio item já consome.
     const bal = await computeOfBalance(client.query.bind(client), current.of_id);
-    const writeoff = parseFloat(current.writeoff_quantity) || 0;
-    const availableForItem = bal.remaining + (parseFloat(current.quantity) || 0) + writeoff;
+    const availableForItem = bal.remaining + (parseFloat(current.quantity) || 0) + (parseFloat(current.writeoff_quantity) || 0);
+    if (newQty > availableForItem + 0.0001) {
+      throw new Error(`Quantidade (${newQty}) excede o saldo disponível (${parseFloat(availableForItem.toFixed(2))}) da OF.`);
+    }
+
+    // Destino da diferença (availableForItem − newQty): 'final' = ajuste/perda (writeoff que
+    // encerra a linha); caso contrário volta como saldo. Mantém o writeoff atual se não vier ação.
+    let writeoff;
+    if (shortfallAction === 'final') {
+      writeoff = Math.max(0, parseFloat((availableForItem - newQty).toFixed(2)));
+    } else if (shortfallAction === 'remainder') {
+      writeoff = 0;
+    } else if (writeoffQuantity != null) {
+      writeoff = Math.max(0, Math.min(parseFloat(writeoffQuantity) || 0, Math.max(0, availableForItem - newQty)));
+    } else {
+      writeoff = parseFloat(current.writeoff_quantity) || 0;
+    }
     if (newQty + writeoff > availableForItem + 0.0001) {
-      throw new Error(`Quantidade (${newQty}) excede o saldo disponível (${parseFloat((availableForItem - writeoff).toFixed(2))}) da OF.`);
+      throw new Error(`Lançamento + ajuste (${newQty + writeoff}) excede o saldo disponível (${parseFloat(availableForItem.toFixed(2))}) da OF.`);
     }
 
     // Store original values on first manual edit
@@ -1287,9 +1319,10 @@ async function updateSettlementItem(settlementId, itemId, { quantity, unitPrice 
     await client.query(
       `UPDATE terceiros_settlement_items
        SET quantity = $1, unit_price = $2, total_price = $3,
-           manually_edited = true, original_quantity = $4, original_unit_price = $5
-       WHERE id = $6`,
-      [newQty, newPrice, newTotal, origQty, origPrice, itemId]
+           manually_edited = true, original_quantity = $4, original_unit_price = $5,
+           writeoff_quantity = $6
+       WHERE id = $7`,
+      [newQty, newPrice, newTotal, origQty, origPrice, writeoff, itemId]
     );
 
     // Alterar a quantidade paga muda o saldo consumido → religa/desliga a marca de PAGO.
