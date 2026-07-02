@@ -2,6 +2,27 @@ const db = require('./connection');
 
 const BATCH_SIZE = 500;
 
+// Base de quantidade de uma linha de OF (alias "o") para cálculo de saldo a pagar.
+// Regra: usa a quantidade ORIGINAL da OF (fac_qt_orig) — é o "valor da OF" que se paga ao
+// terceiro. Exceção: quando a mesma OF/etapa/produto/cor/parte/tamanho é dividida entre
+// 2+ fornecedores, fac_qt_orig é o total da OF; aí usa o produzido deste fornecedor
+// (fac_quant) para não cobrar a OF inteira de cada um. Fallback p/ fac_quant se não houver
+// fac_qt_orig.
+const BASE_QTY_EXPR = `
+  CASE
+    WHEN COALESCE(o.fac_qt_orig, 0) <= 0 THEN COALESCE(o.fac_quant, 0)
+    WHEN (
+      SELECT COUNT(DISTINCT COALESCE(o2.fac_codcli, '')) FROM terceiros_ofs o2
+      WHERE o2.fac_numero = o.fac_numero
+        AND COALESCE(o2.fac_codsetor, '')        = COALESCE(o.fac_codsetor, '')
+        AND COALESCE(o2.fac_codigo_produto, '')  = COALESCE(o.fac_codigo_produto, '')
+        AND COALESCE(o2.fac_cor, '')             = COALESCE(o.fac_cor, '')
+        AND COALESCE(o2.fac_parte, '')           = COALESCE(o.fac_parte, '')
+        AND COALESCE(o2.fac_tam, '')             = COALESCE(o.fac_tam, '')
+    ) > 1 THEN COALESCE(o.fac_quant, 0)
+    ELSE COALESCE(o.fac_qt_orig, 0)
+  END`;
+
 // ── OFs ─────────────────────────────────────────────────────────────────────
 
 async function batchUpsertOfs(ofsData) {
@@ -230,7 +251,7 @@ async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, ids, u
 
   // Per-OF settlement balance across all FINALIZED (non-draft) settlements. An OF may be
   // settled in several partial pieces, so availability is driven by the remaining balance:
-  //   remainingQty = fac_quant − Σ(quantity) − Σ(writeoff_quantity)
+  //   remainingQty = baseQty − Σ(quantity) − Σ(writeoff_quantity)
   // paidQty > 0 && remainingQty > 0  →  saldo remanescente (partial remnant to close later).
   const balanceJoin = `LEFT JOIN LATERAL (
       SELECT COALESCE(SUM(si.quantity), 0) AS paid_qty,
@@ -239,11 +260,17 @@ async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, ids, u
       JOIN terceiros_settlements s2 ON s2.id = si.settlement_id AND s2.status <> 'draft'
       WHERE si.of_id = o.id
     ) bal ON true`;
+  // Base do saldo = quantidade da OF (fac_qt_orig). Quando a OF/tamanho é dividida entre
+  // 2+ fornecedores, fac_qt_orig é o total da OF, então cobrar o total de cada um seria
+  // errado — nesse caso usa o produzido deste fornecedor (fac_quant). Fallback p/ fac_quant
+  // quando não há fac_qt_orig.
+  const baseQtyExpr = BASE_QTY_EXPR;
   const balanceColumns = `,
             bal.paid_qty AS "paidQty",
             bal.writeoff_qty AS "writeoffQty",
-            (COALESCE(o.fac_quant, 0) - bal.paid_qty - bal.writeoff_qty) AS "remainingQty"`;
-  const remainingExpr = '(COALESCE(o.fac_quant, 0) - bal.paid_qty - bal.writeoff_qty)';
+            ${baseQtyExpr} AS "baseQty",
+            (${baseQtyExpr} - bal.paid_qty - bal.writeoff_qty) AS "remainingQty"`;
+  const remainingExpr = `(${baseQtyExpr} - bal.paid_qty - bal.writeoff_qty)`;
 
   const countResult = await db.query(
     `SELECT COUNT(*)::int AS total FROM terceiros_ofs o WHERE ${conditions.join(' AND ')}`,
@@ -802,10 +829,12 @@ async function getSettlement(id) {
 //
 // Uma OF pode ser fechada em várias parcelas. O saldo disponível é o que ainda pode
 // ser lançado num novo fechamento:
-//   saldo = fac_quant − Σ(quantity + writeoff_quantity) dos itens em fechamentos != draft
+//   saldo = baseQty − Σ(quantity + writeoff_quantity) dos itens em fechamentos != draft
+// onde baseQty = quantidade da OF (fac_qt_orig), ou o produzido do fornecedor quando a
+// OF/tamanho é dividida entre vários (ver BASE_QTY_EXPR).
 async function computeOfBalance(queryFn, ofId) {
   const r = await queryFn(
-    `SELECT COALESCE(o.fac_quant, 0) AS fac_quant,
+    `SELECT ${BASE_QTY_EXPR} AS base_qty,
             COALESCE((
               SELECT SUM(si.quantity + si.writeoff_quantity)
               FROM terceiros_settlement_items si
@@ -816,7 +845,7 @@ async function computeOfBalance(queryFn, ofId) {
     [ofId]
   );
   if (r.rows.length === 0) return null;
-  const facQuant = parseFloat(r.rows[0].fac_quant) || 0;
+  const facQuant = parseFloat(r.rows[0].base_qty) || 0;
   const consumed = parseFloat(r.rows[0].consumed) || 0;
   return { facQuant, consumed, remaining: parseFloat((facQuant - consumed).toFixed(2)) };
 }
