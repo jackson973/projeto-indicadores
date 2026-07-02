@@ -2283,6 +2283,8 @@ const TerceirosSettlement = () => {
         tam: of.fac_tam,
         // qty = saldo disponível a fechar (remanescente quando houve parcial anterior)
         qty: availableQty(of),
+        // baseQty = valor da OF (fac_qt_orig) usado como base do saldo
+        baseQty: of.baseQty != null ? (parseFloat(of.baseQty) || 0) : (parseFloat(of.fac_qt_orig) || parseFloat(of.fac_quant) || 0),
         facQuant: parseFloat(of.fac_quant) || 0,
         paidQty: paidQtyOf(of),
         isRemnant: isRemnantOf(of),
@@ -3398,20 +3400,39 @@ const TerceirosSettlement = () => {
                           const isSelected = !isSizeSettled && selectedOfs.has(sz.index);
                           const isEditing = !isSizeSettled && editingSize === sz.index;
                           const editedQty = editedQuantities[sz.index];
-                          // Célula já paga mostra a quantidade original da OF; disponível mostra o saldo.
-                          const baseQty = isSizeSettled ? (sz.facQuant ?? sz.qty) : sz.qty;
-                          const displayQty = editedQty !== undefined ? parseFloat(editedQty) || 0 : baseQty;
-                          const isQtyEdited = editedQty !== undefined && parseFloat(editedQty) !== sz.qty;
-                          const tipLabel = isSizeSettled
-                            ? `Pago em ${monthNames[(sz.settlementMonth || 1) - 1]}/${sz.settlementYear}`
-                            : sz.isRemnant
-                              ? `Saldo remanescente: ${sz.qty} pç · ${sz.paidQty} já pagas`
-                              : "";
+                          // hasPayment: já houve pagamento nesta OF/tamanho → mostra o resumo OF/pago/saldo.
+                          const hasPayment = (parseFloat(sz.paidQty) || 0) > 0;
+                          const saldo = parseFloat(sz.qty) || 0; // saldo disponível (valor da OF − pago − ajuste)
+                          // displayQty = o que o usuário edita (para célula sem histórico ou remanescente reaberto)
+                          const displayQty = editedQty !== undefined ? parseFloat(editedQty) || 0 : saldo;
+                          const isQtyEdited = editedQty !== undefined && parseFloat(editedQty) !== saldo;
+                          const tipLabel = hasPayment
+                            ? `OF ${sz.baseQty} · pago ${sz.paidQty}${saldo > 0 ? ` · saldo ${saldo}` : " · quitado"}${isSizeSettled && saldo > 0 ? ' — use "Reabrir saldo"' : ""}`
+                            : "";
+                          const editInput = (
+                            <Input
+                              size="xs"
+                              w="48px"
+                              textAlign="center"
+                              ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
+                              value={editedQty !== undefined ? editedQty : String(saldo)}
+                              onChange={(e) => {
+                                const val = e.target.value.replace(/[^0-9]/g, "");
+                                setEditedQuantities((prev) => ({ ...prev, [sz.index]: val }));
+                              }}
+                              onBlur={() => setTimeout(() => setEditingSize((cur) => cur === sz.index ? null : cur), 150)}
+                              onKeyDown={(e) => { if (e.key === "Enter") setEditingSize(null); if (e.key === "Escape") { setEditedQuantities((prev) => { const n = { ...prev }; delete n[sz.index]; return n; }); setEditingSize(null); } }}
+                              p={0}
+                              h="20px"
+                              fontSize="sm"
+                              borderColor="blue.400"
+                            />
+                          );
                           return (
                             <Tooltip key={sz.index} label={tipLabel} isDisabled={!tipLabel} hasArrow>
                             <Box
                               textAlign="center"
-                              minW="52px"
+                              minW={hasPayment ? "68px" : "52px"}
                               borderWidth={isSizeSettled ? "2px" : isQtyEdited ? "2px" : "1px"}
                               borderColor={isSizeSettled ? "orange.400" : !isSelected ? "gray.200" : isQtyEdited ? "orange.400" : "blue.400"}
                               borderRadius="md"
@@ -3478,39 +3499,50 @@ const TerceirosSettlement = () => {
                                 </Box>
                               )}
                               <Text fontSize="xs" fontWeight="bold" color={isSizeSettled ? "orange.600" : isSelected ? "blue.700" : "gray.400"}>{sz.tam}</Text>
-                              {isEditing ? (
-                                <Input
-                                  size="xs"
-                                  w="48px"
-                                  textAlign="center"
-                                  ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
-                                  value={editedQty !== undefined ? editedQty : String(sz.qty)}
-                                  onChange={(e) => {
-                                    const val = e.target.value.replace(/[^0-9]/g, "");
-                                    setEditedQuantities((prev) => ({ ...prev, [sz.index]: val }));
-                                  }}
-                                  onBlur={() => setTimeout(() => setEditingSize((cur) => cur === sz.index ? null : cur), 150)}
-                                  onKeyDown={(e) => { if (e.key === "Enter") setEditingSize(null); if (e.key === "Escape") { setEditedQuantities((prev) => { const n = { ...prev }; delete n[sz.index]; return n; }); setEditingSize(null); } }}
-                                  p={0}
-                                  h="20px"
-                                  fontSize="sm"
-                                  borderColor="blue.400"
-                                />
+                              {hasPayment ? (
+                                // Célula com histórico: resumo sugestivo OF / pago / saldo
+                                <Box>
+                                  <Text fontSize="11px" fontWeight="bold" color="gray.700" lineHeight="1.15">{sz.baseQty}</Text>
+                                  <Text fontSize="9px" color="gray.500" lineHeight="1.2">pago {sz.paidQty}</Text>
+                                  {isSizeSettled ? (
+                                    saldo > 0
+                                      ? <Text fontSize="9px" fontWeight="bold" color="purple.600" lineHeight="1.2">saldo {saldo}</Text>
+                                      : <Text fontSize="9px" color="green.600" lineHeight="1.2">quitado</Text>
+                                  ) : isEditing ? (
+                                    editInput
+                                  ) : (
+                                    <Text
+                                      fontSize="10px"
+                                      fontWeight="bold"
+                                      color={!isSelected ? "gray.400" : isQtyEdited ? "orange.600" : "purple.700"}
+                                      cursor={isSelected ? "pointer" : "default"}
+                                      onClick={() => { if (isSelected) setEditingSize(sz.index); }}
+                                      _hover={isSelected ? { textDecoration: "underline" } : undefined}
+                                      title={isSelected ? "Clique para editar a quantidade a pagar" : ""}
+                                    >
+                                      saldo {displayQty}
+                                    </Text>
+                                  )}
+                                </Box>
+                              ) : isEditing ? (
+                                editInput
                               ) : (
-                                <Text
-                                  fontSize="sm"
-                                  fontWeight="medium"
-                                  color={!isSelected ? "gray.400" : isQtyEdited ? "orange.600" : "inherit"}
-                                  cursor={isSelected ? "pointer" : "default"}
-                                  onClick={() => { if (isSelected) setEditingSize(sz.index); }}
-                                  _hover={isSelected ? { textDecoration: "underline" } : undefined}
-                                  title={isSelected ? "Clique para editar quantidade" : ""}
-                                >
-                                  {displayQty}
-                                </Text>
-                              )}
-                              {isQtyEdited && (
-                                <Text fontSize="8px" color="orange.500" lineHeight="1">{sz.qty}</Text>
+                                <>
+                                  <Text
+                                    fontSize="sm"
+                                    fontWeight="medium"
+                                    color={!isSelected ? "gray.400" : isQtyEdited ? "orange.600" : "inherit"}
+                                    cursor={isSelected ? "pointer" : "default"}
+                                    onClick={() => { if (isSelected) setEditingSize(sz.index); }}
+                                    _hover={isSelected ? { textDecoration: "underline" } : undefined}
+                                    title={isSelected ? "Clique para editar quantidade" : ""}
+                                  >
+                                    {displayQty}
+                                  </Text>
+                                  {isQtyEdited && (
+                                    <Text fontSize="8px" color="orange.500" lineHeight="1">{saldo}</Text>
+                                  )}
+                                </>
                               )}
                             </Box>
                             </Tooltip>
