@@ -9,12 +9,30 @@ async function batchUpsertOfs(ofsData) {
     return { inserted: 0, updated: 0 };
   }
 
-  // Deduplicate by composite key — fac_codcli included so an OF split across two
+  // Aggregate by composite key — fac_codcli included so an OF split across two
   // fornecedores in the same stage keeps both rows instead of dropping the first.
+  //
+  // A faccao3 pode ter VÁRIOS movimentos (lançamentos) para o mesmo tamanho/cor/etapa/
+  // fornecedor (ex.: OF 006087, cor 00077, tam G: 226 em mai + 50 em jun). A chave não
+  // inclui lançamento, então antes esses movimentos colidiam e o "último vencia", perdendo
+  // quantidade. Agora somamos a quantidade conferida (fac_quant) e mantemos a maior
+  // quantidade original (fac_qt_orig é a da OF, igual em todos os movimentos — não soma).
   const deduped = new Map();
   ofsData.forEach((of) => {
     const key = `${of.facNumero}|${of.facCodsetor || ''}|${of.facCodigoProduto || ''}|${of.facCor || ''}|${of.facParte || ''}|${of.facTam || ''}|${of.facCodcli || ''}`;
-    deduped.set(key, of);
+    const existing = deduped.get(key);
+    if (existing) {
+      existing.facQuant = (parseFloat(existing.facQuant) || 0) + (parseFloat(of.facQuant) || 0);
+      existing.facQtOrig = Math.max(parseFloat(existing.facQtOrig) || 0, parseFloat(of.facQtOrig) || 0);
+      // Mantém a referência mais recente (lançamento/datas) para exibição.
+      if ((of.facDtLan || '') > (existing.facDtLan || '')) {
+        existing.facDtLan = of.facDtLan;
+        existing.facLancto = of.facLancto;
+        existing.facDtPrevRet = of.facDtPrevRet;
+      }
+    } else {
+      deduped.set(key, { ...of });
+    }
   });
 
   const uniqueData = Array.from(deduped.values());
