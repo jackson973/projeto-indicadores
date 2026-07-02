@@ -14,6 +14,7 @@ export default defineConfig({
   define: {
     __APP_VERSION__: JSON.stringify(pkgVersion),
     __BUILD_LABEL__: JSON.stringify(buildLabel),
+    __GIT_SHA__: JSON.stringify(gitSha),
   },
   plugins: [
     react(),

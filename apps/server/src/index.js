@@ -74,12 +74,23 @@ async function start() {
     console.error('[WhatsApp Bot] Failed to auto-start:', error.message);
   }
 
+  // Versão do deploy — o servidor reinicia a cada deploy, então reflete o commit atual.
+  // Usada pela trava de versão do cliente para forçar atualização quando há bundle novo.
+  const { execSync } = require('child_process');
+  let APP_SHA = process.env.APP_SHA || 'nogit';
+  try { APP_SHA = execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim(); } catch { /* sem git */ }
+  const APP_STARTED_AT = new Date().toISOString();
+
   const app = express();
 
   app.use(cors());
   app.use(express.json({ limit: '10mb' }));
 
   // Public routes (no auth required)
+  app.get("/api/version", (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json({ sha: APP_SHA, startedAt: APP_STARTED_AT });
+  });
   app.use("/api/auth", authRouter);
 
   // Protected routes (require valid JWT)

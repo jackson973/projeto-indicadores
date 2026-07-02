@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import VersionGate from "./VersionGate";
 import {
   Alert,
   AlertDescription,
@@ -748,6 +749,7 @@ const App = () => {
   // Authenticated content
   return (
     <Flex minH="100vh">
+      <VersionGate />
       {/* Mobile: hamburger button + Drawer menu */}
       {isMobile && (
         <>
