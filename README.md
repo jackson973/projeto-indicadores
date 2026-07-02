@@ -49,3 +49,8 @@ npm run test
 - Se a planilha não tiver loja/produto, o sistema assume "Todas" e "Geral".
 - Se a planilha não tiver estado, o sistema assume "Não informado".
 - Para produção, recomendo persistência em banco e autenticação.
+
+## 📚 Documentação por módulo/contexto
+- [Terceiros — Saldo remanescente / fechamento parcial](CONTEXTO_TERCEIROS_SALDO_REMANESCENTE.md) — modelo de dados, fluxos, fix de sync, force-update (cache PWA), SQL de diagnóstico e histórico de deploys.
+- [AdManager (contexto)](CONTEXTO_ADMANAGER.md) · [AdManager (completo)](CONTEXTO_COMPLETO_ADMANAGER.md)
+- [Deploy](DEPLOY.md) · [Checklist](CHECKLIST.md) · [Quick start](QUICK_START.md)
