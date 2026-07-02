@@ -2014,9 +2014,9 @@ const TerceirosSettlement = () => {
                         }
                       }}
                       _hover={editable && !sz.missing ? { textDecoration: "underline" } : undefined}
-                      title={editable && !sz.missing ? "Clique para editar quantidade" : ""}
+                      title={editable && !sz.missing ? "Clique para editar a quantidade a pagar" : ""}
                     >
-                      {sz.qty}
+                      {hasCtx ? `pagar ${sz.qty}` : sz.qty}
                     </Text>
                   )}
                   {hasCtx ? (
