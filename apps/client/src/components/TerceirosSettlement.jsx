@@ -987,9 +987,10 @@ const TerceirosSettlement = () => {
       const of = unsettledOfs[index];
       if (!of) return;
       const price = getOfPrice(of, index);
+      const avail = availableQty(of);
       const qty = editedQuantities[index] !== undefined
-        ? (parseFloat(editedQuantities[index]) || 0)
-        : availableQty(of);
+        ? Math.min(parseFloat(editedQuantities[index]) || 0, avail)
+        : avail;
       if (price != null && price > 0) {
         total += price * qty;
       }
@@ -1002,9 +1003,10 @@ const TerceirosSettlement = () => {
     selectedOfs.forEach((index) => {
       const of = unsettledOfs[index];
       if (!of) return;
+      const avail = availableQty(of);
       const qty = editedQuantities[index] !== undefined
-        ? (parseFloat(editedQuantities[index]) || 0)
-        : availableQty(of);
+        ? Math.min(parseFloat(editedQuantities[index]) || 0, avail)
+        : avail;
       pcs += qty;
     });
     return pcs;
@@ -1048,8 +1050,9 @@ const TerceirosSettlement = () => {
       }
       // Baseline = saldo disponível (remanescente quando houve fechamento parcial anterior).
       const originalQty = availableQty(of);
+      // Nunca lançar mais que o saldo disponível (trava também contra valores antigos/rascunho).
       const effectiveQty = editedQuantities[index] !== undefined
-        ? (parseFloat(editedQuantities[index]) || 0)
+        ? Math.min(parseFloat(editedQuantities[index]) || 0, originalQty)
         : originalQty;
       const manualKey = `${index}`;
       const isPriceManual = manualPrices[manualKey] !== undefined && manualPrices[manualKey] !== "";
@@ -3417,9 +3420,12 @@ const TerceirosSettlement = () => {
                               ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
                               value={editedQty !== undefined ? editedQty : String(saldo)}
                               onChange={(e) => {
-                                const val = e.target.value.replace(/[^0-9]/g, "");
+                                let val = e.target.value.replace(/[^0-9]/g, "");
+                                // Não permite lançar mais do que o saldo disponível da OF.
+                                if (val !== "" && parseFloat(val) > saldo) val = String(saldo);
                                 setEditedQuantities((prev) => ({ ...prev, [sz.index]: val }));
                               }}
+                              max={saldo}
                               onBlur={() => setTimeout(() => setEditingSize((cur) => cur === sz.index ? null : cur), 150)}
                               onKeyDown={(e) => { if (e.key === "Enter") setEditingSize(null); if (e.key === "Escape") { setEditedQuantities((prev) => { const n = { ...prev }; delete n[sz.index]; return n; }); setEditingSize(null); } }}
                               p={0}
@@ -3514,13 +3520,13 @@ const TerceirosSettlement = () => {
                                     <Text
                                       fontSize="10px"
                                       fontWeight="bold"
-                                      color={!isSelected ? "gray.400" : isQtyEdited ? "orange.600" : "purple.700"}
+                                      color={!isSelected ? "purple.600" : isQtyEdited ? "orange.600" : "purple.700"}
                                       cursor={isSelected ? "pointer" : "default"}
                                       onClick={() => { if (isSelected) setEditingSize(sz.index); }}
                                       _hover={isSelected ? { textDecoration: "underline" } : undefined}
                                       title={isSelected ? "Clique para editar a quantidade a pagar" : ""}
                                     >
-                                      saldo {displayQty}
+                                      {isSelected ? `pagar ${displayQty}` : `saldo ${saldo}`}
                                     </Text>
                                   )}
                                 </Box>
