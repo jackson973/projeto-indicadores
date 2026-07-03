@@ -1,7 +1,8 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireModule } = require('../middleware/auth');
+const requireAdmin = requireModule('produtos');
 const productsRepo = require('../db/productsRepository');
 
 const router = express.Router();

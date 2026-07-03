@@ -33,7 +33,7 @@ import {
   useDisclosure
 } from "@chakra-ui/react";
 import { AddIcon, EditIcon, DeleteIcon } from "@chakra-ui/icons";
-import { fetchUsers, createUser, updateUser, updateUserPassword, deleteUser } from "../api";
+import { fetchUsers, createUser, updateUser, updateUserPassword, deleteUser, fetchAccessProfiles, assignUserProfile } from "../api";
 import useAppToast from "../hooks/useAppToast";
 
 const formatPhoneDisplay = (value) => {
@@ -70,7 +70,8 @@ const UsersManagement = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editingUser, setEditingUser] = useState(null);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "user", active: true, whatsapp: "", isRep: false, repCode: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", profile_id: "", active: true, whatsapp: "", isRep: false, repCode: "" });
+  const [profiles, setProfiles] = useState([]);
   const [saving, setSaving] = useState(false);
   const modal = useDisclosure();
   const toast = useAppToast();
@@ -82,8 +83,9 @@ const UsersManagement = () => {
     setLoading(true);
     setError("");
     try {
-      const data = await fetchUsers();
+      const [data, profs] = await Promise.all([fetchUsers(), fetchAccessProfiles().catch(() => [])]);
       setUsers(data);
+      setProfiles(profs);
     } catch (err) {
       setError(err.message || "Erro ao carregar usuários.");
     } finally {
@@ -95,13 +97,13 @@ const UsersManagement = () => {
 
   const openCreate = () => {
     setEditingUser(null);
-    setForm({ name: "", email: "", password: "", role: "user", active: true, whatsapp: "", isRep: false, repCode: "" });
+    setForm({ name: "", email: "", password: "", profile_id: "", active: true, whatsapp: "", isRep: false, repCode: "" });
     modal.onOpen();
   };
 
   const openEdit = (user) => {
     setEditingUser(user);
-    setForm({ name: user.name, email: user.email, password: "", role: user.role, active: user.active, whatsapp: user.whatsapp || "", isRep: !!user.repCode, repCode: user.repCode || "" });
+    setForm({ name: user.name, email: user.email, password: "", profile_id: user.profile_id || "", active: user.active, whatsapp: user.whatsapp || "", isRep: !!user.repCode, repCode: user.repCode || "" });
     modal.onOpen();
   };
 
@@ -112,7 +114,7 @@ const UsersManagement = () => {
         await updateUser(editingUser.id, {
           name: form.name,
           email: form.email,
-          role: form.role,
+          role: editingUser.role, // role legado mantido; acesso é definido pelo perfil
           active: form.active,
           whatsapp: form.whatsapp,
           repCode: form.isRep ? form.repCode : null
@@ -120,16 +122,18 @@ const UsersManagement = () => {
         if (form.password) {
           await updateUserPassword(editingUser.id, form.password);
         }
+        await assignUserProfile(editingUser.id, form.profile_id ? Number(form.profile_id) : null);
         toast({  title: "Usuário atualizado.", status: "success", duration: 3000 });
       } else {
-        await createUser({
+        const created = await createUser({
           name: form.name,
           email: form.email,
           password: form.password,
-          role: form.role,
+          role: "user",
           whatsapp: form.whatsapp,
           repCode: form.isRep ? form.repCode : null
         });
+        if (created?.id && form.profile_id) await assignUserProfile(created.id, Number(form.profile_id));
         toast({  title: "Usuário criado.", status: "success", duration: 3000 });
       }
       modal.onClose();
@@ -193,9 +197,12 @@ const UsersManagement = () => {
                 <Td>{user.email}</Td>
                 <Td>{formatPhoneDisplay(user.whatsapp)}</Td>
                 <Td>
-                  <Badge colorScheme={user.role === "admin" ? "purple" : "gray"}>
-                    {user.role === "admin" ? "Admin" : "Usuário"}
-                  </Badge>
+                  {(() => {
+                    const prof = profiles.find(p => p.id === user.profile_id);
+                    return prof
+                      ? <Badge colorScheme={prof.is_admin ? "purple" : "blue"}>{prof.name}</Badge>
+                      : <Badge colorScheme="red">Sem perfil</Badge>;
+                  })()}
                 </Td>
                 <Td>
                   <Badge colorScheme={user.active ? "green" : "red"}>
@@ -268,13 +275,15 @@ const UsersManagement = () => {
                 />
               </FormControl>
               <FormControl>
-                <FormLabel>Perfil</FormLabel>
+                <FormLabel>Perfil de acesso</FormLabel>
                 <Select
-                  value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value })}
+                  placeholder="— sem perfil (sem acesso) —"
+                  value={form.profile_id}
+                  onChange={(e) => setForm({ ...form, profile_id: e.target.value })}
                 >
-                  <option value="user">Usuário</option>
-                  <option value="admin">Administrador</option>
+                  {profiles.map((p) => (
+                    <option key={p.id} value={p.id}>{p.name}{p.is_admin ? " (acesso total)" : ""}</option>
+                  ))}
                 </Select>
               </FormControl>
               <FormControl display="flex" alignItems="center">

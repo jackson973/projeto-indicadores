@@ -1,7 +1,8 @@
 const express = require("express");
 const multer = require("multer");
 const xlsx = require("xlsx");
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireModule } = require('../middleware/auth');
+const requireAdmin = requireModule('configuracoes');
 const { setSales, hasSales } = require("../lib/dataStore");
 const {
   getSalesByPeriod,

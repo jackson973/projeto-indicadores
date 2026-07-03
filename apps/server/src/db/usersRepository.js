@@ -22,7 +22,7 @@ async function findById(id) {
 
 async function findAll() {
   const result = await db.query(
-    `SELECT id, name, email, role, active, whatsapp, rep_code AS "repCode",
+    `SELECT id, name, email, role, active, whatsapp, rep_code AS "repCode", profile_id,
             created_at AS "createdAt", updated_at AS "updatedAt"
      FROM users ORDER BY name`
   );

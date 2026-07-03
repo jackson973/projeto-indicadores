@@ -1,5 +1,6 @@
 const express = require('express');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireModule } = require('../middleware/auth');
+const requireAdmin = requireModule('configuracoes');
 const upsellerRepo = require('../db/upsellerRepository');
 const axios = require('axios');
 const {

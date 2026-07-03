@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireModule } = require('../middleware/auth');
+const requireAdmin = requireModule('validador');
 const {
   processReconciliation,
   fetchShopeeStores,

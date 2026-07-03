@@ -1,7 +1,8 @@
 const express = require('express');
 const multer = require('multer');
 const xlsx = require('xlsx');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireModule } = require('../middleware/auth');
+const requireAdmin = requireModule('financeiro');
 const repo = require('../db/cashflowRepository');
 const { getSaoPauloYear, getSaoPauloMonth } = require('../lib/timezone');
 

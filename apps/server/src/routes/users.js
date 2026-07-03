@@ -1,7 +1,8 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const usersRepository = require('../db/usersRepository');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireModule } = require('../middleware/auth');
+const requireAdmin = requireModule('configuracoes');
 const { sendWelcomeEmail } = require('../services/emailService');
 
 const router = express.Router();

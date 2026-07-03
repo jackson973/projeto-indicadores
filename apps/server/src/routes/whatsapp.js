@@ -1,6 +1,7 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireModule } = require('../middleware/auth');
+const requireAdmin = requireModule('configuracoes');
 const whatsappRepo = require('../db/whatsappRepository');
 const alertsRepo = require('../db/whatsappSalesAlertsRepository');
 const {
