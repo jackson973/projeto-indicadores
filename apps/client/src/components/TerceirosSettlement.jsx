@@ -987,8 +987,9 @@ const TerceirosSettlement = () => {
       if (!of) return;
       const price = getOfPrice(of, index);
       const avail = availableQty(of);
+      // Pode lançar acima do saldo (excedente) — o valor cobrado inclui as peças a mais.
       const qty = editedQuantities[index] !== undefined
-        ? Math.min(parseFloat(editedQuantities[index]) || 0, avail)
+        ? (parseFloat(editedQuantities[index]) || 0)
         : avail;
       if (price != null && price > 0) {
         total += price * qty;
@@ -1004,7 +1005,7 @@ const TerceirosSettlement = () => {
       if (!of) return;
       const avail = availableQty(of);
       const qty = editedQuantities[index] !== undefined
-        ? Math.min(parseFloat(editedQuantities[index]) || 0, avail)
+        ? (parseFloat(editedQuantities[index]) || 0)
         : avail;
       pcs += qty;
     });
@@ -1049,9 +1050,9 @@ const TerceirosSettlement = () => {
       }
       // Baseline = saldo disponível (remanescente quando houve fechamento parcial anterior).
       const originalQty = availableQty(of);
-      // Nunca lançar mais que o saldo disponível (trava também contra valores antigos/rascunho).
+      // Permite lançar acima do saldo (excedente / peças a mais que a OF) — sinalizado no relatório.
       const effectiveQty = editedQuantities[index] !== undefined
-        ? Math.min(parseFloat(editedQuantities[index]) || 0, originalQty)
+        ? (parseFloat(editedQuantities[index]) || 0)
         : originalQty;
       const manualKey = `${index}`;
       const isPriceManual = manualPrices[manualKey] !== undefined && manualPrices[manualKey] !== "";
@@ -1686,6 +1687,11 @@ const TerceirosSettlement = () => {
                       </Box>
                     </Tooltip>
                   )}
+                  {s.overageCount > 0 && (
+                    <Tooltip label={`${s.overageCount} tamanho(s) com peças a mais que a OF (excedente)`}>
+                      <Badge colorScheme="red" fontSize="2xs">excedente</Badge>
+                    </Tooltip>
+                  )}
                 </HStack>
                 <Badge colorScheme={s.status === "paid" ? "green" : s.status === "draft" ? "purple" : "yellow"} fontSize="xs">
                   {s.status === "paid" ? "Pago" : s.status === "draft" ? "Rascunho" : "Em Aberto"}
@@ -1771,6 +1777,11 @@ const TerceirosSettlement = () => {
                           <Box as="span">
                             <WarningIcon color="red.500" boxSize={3.5} />
                           </Box>
+                        </Tooltip>
+                      )}
+                      {s.overageCount > 0 && (
+                        <Tooltip label={`${s.overageCount} tamanho(s) com peças a mais que a OF (excedente)`}>
+                          <Badge colorScheme="red" fontSize="2xs">excedente</Badge>
                         </Tooltip>
                       )}
                     </HStack>
@@ -1898,11 +1909,19 @@ const TerceirosSettlement = () => {
             {group.sizes.map((sz) => {
               // Contexto da OF para exibir OF / pago / saldo na edição.
               const hasCtx = !sz.missing && (parseFloat(sz.baseQty) || 0) > 0;
+              // Disponível para este item = valor da OF − pago/ajuste em OUTROS fechamentos.
+              const availEdit = hasCtx
+                ? Math.max(0, parseFloat(((parseFloat(sz.baseQty) || 0) - (parseFloat(sz.paidOther) || 0) - (parseFloat(sz.writeoffOther) || 0)).toFixed(2)))
+                : 0;
               const saldoAfter = hasCtx
                 ? Math.max(0, (parseFloat(sz.baseQty) || 0) - (parseFloat(sz.paidOther) || 0) - (parseFloat(sz.qty) || 0) - (parseFloat(sz.writeoffQuantity) || 0) - (parseFloat(sz.writeoffOther) || 0))
                 : 0;
+              // Excedente: este item paga mais que o disponível da OF (peças a mais que a OF).
+              const overEdit = hasCtx
+                ? Math.max(0, parseFloat(((parseFloat(sz.qty) || 0) + (parseFloat(sz.writeoffQuantity) || 0) - availEdit).toFixed(2)))
+                : 0;
               const ctxTip = hasCtx
-                ? `OF ${sz.baseQty} · pago outros ${sz.paidOther} · este ${sz.qty}${(parseFloat(sz.writeoffQuantity) || 0) > 0 ? ` · ajuste ${sz.writeoffQuantity}` : ""} · saldo ${saldoAfter}`
+                ? `OF ${sz.baseQty} · pago outros ${sz.paidOther} · este ${sz.qty}${(parseFloat(sz.writeoffQuantity) || 0) > 0 ? ` · ajuste ${sz.writeoffQuantity}` : ""}${overEdit > 0 ? ` · excedente ${overEdit}` : ` · saldo ${saldoAfter}`}`
                 : "";
               return (
               <Tooltip
@@ -1913,12 +1932,12 @@ const TerceirosSettlement = () => {
                 <Box
                   textAlign="center"
                   minW={hasCtx ? "72px" : "52px"}
-                  borderWidth={sz.missing ? "2px" : sz.manuallyEdited ? "2px" : "1px"}
-                  borderColor={sz.missing ? "red.400" : sz.manuallyEdited ? "orange.400" : "gray.200"}
+                  borderWidth={sz.missing ? "2px" : (sz.manuallyEdited || overEdit > 0) ? "2px" : "1px"}
+                  borderColor={sz.missing ? "red.400" : overEdit > 0 ? "red.400" : sz.manuallyEdited ? "orange.400" : "gray.200"}
                   borderRadius="md"
                   px={2}
                   py={1}
-                  bg={sz.missing ? "red.50" : sz.manuallyEdited ? "orange.50" : "gray.50"}
+                  bg={sz.missing ? "red.50" : overEdit > 0 ? "red.50" : sz.manuallyEdited ? "orange.50" : "gray.50"}
                   position="relative"
                   opacity={sz.missing ? 0.85 : 1}
                 >
@@ -1985,7 +2004,12 @@ const TerceirosSettlement = () => {
                       onBlur={() => {
                         const newQty = parseFloat(editingItemValue);
                         if (newQty > 0 && newQty !== sz.qty) {
-                          handleUpdateItem(sz.id, { quantity: newQty });
+                          let ok = true;
+                          if (hasCtx && newQty > availEdit + 0.0001) {
+                            const extra = parseFloat((newQty - availEdit).toFixed(2));
+                            ok = window.confirm(`Lançar ${newQty} peças no tam ${sz.tam} — ${extra} a mais que a OF (disponível ${availEdit}). Confirmar o excedente? Ele será sinalizado no relatório.`);
+                          }
+                          if (ok) handleUpdateItem(sz.id, { quantity: newQty });
                         }
                         setEditingItemId(null);
                         setEditingItemField(null);
@@ -2003,7 +2027,7 @@ const TerceirosSettlement = () => {
                     <Text
                       fontSize="sm"
                       fontWeight="medium"
-                      color={sz.missing ? "red.500" : sz.manuallyEdited ? "orange.600" : "inherit"}
+                      color={sz.missing ? "red.500" : overEdit > 0 ? "red.600" : sz.manuallyEdited ? "orange.600" : "inherit"}
                       cursor={editable && !sz.missing ? "pointer" : "default"}
                       onClick={() => {
                         if (editable && !sz.missing) {
@@ -2019,9 +2043,13 @@ const TerceirosSettlement = () => {
                     </Text>
                   )}
                   {hasCtx ? (
-                    <Text fontSize="8px" fontWeight={saldoAfter > 0 ? "bold" : "normal"} color={saldoAfter > 0 ? "purple.600" : "green.600"} lineHeight="1.2">
-                      {saldoAfter > 0 ? `saldo ${saldoAfter}` : "quitado"}
-                    </Text>
+                    overEdit > 0 ? (
+                      <Text fontSize="8px" fontWeight="bold" color="red.500" lineHeight="1.2">+{overEdit} a mais</Text>
+                    ) : (
+                      <Text fontSize="8px" fontWeight={saldoAfter > 0 ? "bold" : "normal"} color={saldoAfter > 0 ? "purple.600" : "green.600"} lineHeight="1.2">
+                        {saldoAfter > 0 ? `saldo ${saldoAfter}` : "quitado"}
+                      </Text>
+                    )
                   ) : (sz.manuallyEdited && sz.originalQuantity != null && sz.originalQuantity !== sz.qty && (
                     <Text fontSize="8px" color="orange.500" lineHeight="1">{sz.originalQuantity}</Text>
                   ))}
@@ -3468,6 +3496,9 @@ const TerceirosSettlement = () => {
                           // displayQty = o que o usuário edita (para célula sem histórico ou remanescente reaberto)
                           const displayQty = editedQty !== undefined ? parseFloat(editedQty) || 0 : saldo;
                           const isQtyEdited = editedQty !== undefined && parseFloat(editedQty) !== saldo;
+                          // Excedente: lançando mais peças que o saldo da OF (peças a mais que a OF).
+                          const isOver = isSelected && displayQty > saldo + 0.0001;
+                          const overExtra = isOver ? parseFloat((displayQty - saldo).toFixed(2)) : 0;
                           const tipLabel = hasPayment
                             ? `OF ${sz.baseQty} · pago ${sz.paidQty}${saldo > 0 ? ` · saldo ${saldo}` : " · quitado"}${isSizeSettled && saldo > 0 ? ' — use "Reabrir saldo"' : ""}`
                             : "";
@@ -3479,13 +3510,20 @@ const TerceirosSettlement = () => {
                               ref={(el) => { if (el) setTimeout(() => el.focus(), 0); }}
                               value={editedQty !== undefined ? editedQty : String(saldo)}
                               onChange={(e) => {
-                                let val = e.target.value.replace(/[^0-9]/g, "");
-                                // Não permite lançar mais do que o saldo disponível da OF.
-                                if (val !== "" && parseFloat(val) > saldo) val = String(saldo);
+                                // Permite digitar acima do saldo (excedente) — confirmação no blur.
+                                const val = e.target.value.replace(/[^0-9]/g, "");
                                 setEditedQuantities((prev) => ({ ...prev, [sz.index]: val }));
                               }}
-                              max={saldo}
-                              onBlur={() => setTimeout(() => setEditingSize((cur) => cur === sz.index ? null : cur), 150)}
+                              onBlur={() => {
+                                const v = parseFloat(editedQuantities[sz.index]);
+                                if (Number.isFinite(v) && v > saldo + 0.0001) {
+                                  const extra = parseFloat((v - saldo).toFixed(2));
+                                  if (!window.confirm(`Lançar ${v} peças no tam ${sz.tam} — ${extra} a mais que o saldo da OF (${saldo}). Confirmar o excedente? Ele será sinalizado no relatório.`)) {
+                                    setEditedQuantities((prev) => ({ ...prev, [sz.index]: String(saldo) }));
+                                  }
+                                }
+                                setTimeout(() => setEditingSize((cur) => cur === sz.index ? null : cur), 150);
+                              }}
                               onKeyDown={(e) => { if (e.key === "Enter") setEditingSize(null); if (e.key === "Escape") { setEditedQuantities((prev) => { const n = { ...prev }; delete n[sz.index]; return n; }); setEditingSize(null); } }}
                               p={0}
                               h="20px"
@@ -3498,12 +3536,12 @@ const TerceirosSettlement = () => {
                             <Box
                               textAlign="center"
                               minW={hasPayment ? "68px" : "52px"}
-                              borderWidth={isSizeSettled ? "2px" : isQtyEdited ? "2px" : "1px"}
-                              borderColor={isSizeSettled ? "orange.400" : !isSelected ? "gray.200" : isQtyEdited ? "orange.400" : "blue.400"}
+                              borderWidth={isSizeSettled ? "2px" : (isQtyEdited || isOver) ? "2px" : "1px"}
+                              borderColor={isSizeSettled ? "orange.400" : !isSelected ? "gray.200" : isOver ? "red.400" : isQtyEdited ? "orange.400" : "blue.400"}
                               borderRadius="md"
                               px={2}
                               py={1}
-                              bg={isSizeSettled ? "orange.50" : !isSelected ? "gray.50" : isQtyEdited ? "orange.50" : "blue.50"}
+                              bg={isSizeSettled ? "orange.50" : !isSelected ? "gray.50" : isOver ? "red.50" : isQtyEdited ? "orange.50" : "blue.50"}
                               opacity={isSizeSettled ? 0.6 : isSelected ? 1 : 0.4}
                               position="relative"
                               transition="all 0.15s"
@@ -3576,17 +3614,22 @@ const TerceirosSettlement = () => {
                                   ) : isEditing ? (
                                     editInput
                                   ) : (
-                                    <Text
-                                      fontSize="10px"
-                                      fontWeight="bold"
-                                      color={!isSelected ? "purple.600" : isQtyEdited ? "orange.600" : "purple.700"}
-                                      cursor={isSelected ? "pointer" : "default"}
-                                      onClick={() => { if (isSelected) setEditingSize(sz.index); }}
-                                      _hover={isSelected ? { textDecoration: "underline" } : undefined}
-                                      title={isSelected ? "Clique para editar a quantidade a pagar" : ""}
-                                    >
-                                      {isSelected ? `pagar ${displayQty}` : `saldo ${saldo}`}
-                                    </Text>
+                                    <>
+                                      <Text
+                                        fontSize="10px"
+                                        fontWeight="bold"
+                                        color={!isSelected ? "purple.600" : isOver ? "red.600" : isQtyEdited ? "orange.600" : "purple.700"}
+                                        cursor={isSelected ? "pointer" : "default"}
+                                        onClick={() => { if (isSelected) setEditingSize(sz.index); }}
+                                        _hover={isSelected ? { textDecoration: "underline" } : undefined}
+                                        title={isSelected ? "Clique para editar a quantidade a pagar" : ""}
+                                      >
+                                        {isSelected ? `pagar ${displayQty}` : `saldo ${saldo}`}
+                                      </Text>
+                                      {isOver && (
+                                        <Text fontSize="8px" fontWeight="bold" color="red.500" lineHeight="1.1">+{overExtra} a mais</Text>
+                                      )}
+                                    </>
                                   )}
                                 </Box>
                               ) : isEditing ? (
@@ -3596,7 +3639,7 @@ const TerceirosSettlement = () => {
                                   <Text
                                     fontSize="sm"
                                     fontWeight="medium"
-                                    color={!isSelected ? "gray.400" : isQtyEdited ? "orange.600" : "inherit"}
+                                    color={!isSelected ? "gray.400" : isOver ? "red.600" : isQtyEdited ? "orange.600" : "inherit"}
                                     cursor={isSelected ? "pointer" : "default"}
                                     onClick={() => { if (isSelected) setEditingSize(sz.index); }}
                                     _hover={isSelected ? { textDecoration: "underline" } : undefined}
@@ -3604,7 +3647,9 @@ const TerceirosSettlement = () => {
                                   >
                                     {displayQty}
                                   </Text>
-                                  {isQtyEdited && (
+                                  {isOver ? (
+                                    <Text fontSize="8px" fontWeight="bold" color="red.500" lineHeight="1">+{overExtra} a mais</Text>
+                                  ) : isQtyEdited && (
                                     <Text fontSize="8px" color="orange.500" lineHeight="1">{saldo}</Text>
                                   )}
                                 </>

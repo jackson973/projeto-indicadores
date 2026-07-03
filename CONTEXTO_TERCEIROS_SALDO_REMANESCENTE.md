@@ -83,7 +83,10 @@ Rotas novas (`apps/server/src/routes/terceiros.js`):
   antigos anteriores à feature). Confirma → reabre → vira remanescente selecionável.
 - Célula sugestiva: `OF 288 · pago 226 · pagar 62 · saldo/quitado`.
 - Toggle **"Deixar saldo / Ajuste final"** por tamanho ao pagar menos que o saldo.
-- Input travado ao saldo (não deixa digitar acima do disponível); total e envio também limitados.
+- **Excedente permitido (v1.4.2):** pode-se lançar acima do saldo (peças a mais que a OF). Ao
+  exceder, o input pede **confirmação** (window.confirm) no blur; a célula fica **vermelha** com
+  "+N a mais"; o total/envio incluem as peças a mais. Sinalizado na lista por badge "excedente"
+  (`overageCount`). Vale para criar, editar e fechamento parcial.
 
 **Editar Fechamento:** mesma célula `OF / pago (outros) / pagar / saldo` e o toggle
 "Deixar saldo / Ajuste final" por item (usa `shortfallAction` no `updateSettlementItem`).
@@ -186,6 +189,7 @@ ORDER BY FACCAO3.lancto;
 | `c47e858` | 1.3.1 | rótulo "pagar N" na edição |
 | `529d1ff` | 1.4.0 | forçar atualização: nginx no-cache + /api/version + VersionGate |
 | `c07ffab` | 1.4.1 | `deleteSettlement` recalcula flag (syncOfSettlementFlag) + badge de saldo sem "(N já pagas)" |
+| _(este)_ | 1.4.2 | **permitir excedente** (pagar mais peças que a OF): remove travas de saldo em `prepareItemBalance`/`updateSettlementItem`; UI confirma ao exceder (create+edição) e sinaliza em vermelho "+N a mais"; `overageCount` na lista de fechamentos (badge "excedente") |
 
 ## 10. Pontos de atenção
 

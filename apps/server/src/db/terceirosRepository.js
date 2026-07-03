@@ -740,6 +740,17 @@ async function getSettlements({ codcli, month, year, status } = {}) {
                 )
             ) AS "missingCount",
             (
+              SELECT COUNT(*)::int FROM terceiros_settlement_items si
+              JOIN terceiros_ofs o ON o.id = si.of_id
+              WHERE si.settlement_id = s.id
+                AND (
+                  SELECT COALESCE(SUM(si2.quantity + si2.writeoff_quantity), 0)
+                  FROM terceiros_settlement_items si2
+                  JOIN terceiros_settlements s2 ON s2.id = si2.settlement_id AND s2.status <> 'draft'
+                  WHERE si2.of_id = o.id
+                ) > (${BASE_QTY_EXPR}) + 0.0001
+            ) AS "overageCount",
+            (
               SELECT STRING_AGG(DISTINCT COALESCE(o.fac_descsetor, o.fac_codsetor, ''), ', '
                      ORDER BY COALESCE(o.fac_descsetor, o.fac_codsetor, ''))
               FROM terceiros_settlement_items si
@@ -887,13 +898,10 @@ async function prepareItemBalance(queryFn, item) {
   if (!bal) throw new Error(`OF ${item.ofId} não encontrada.`);
   const qty = parseFloat(item.quantity) || 0;
   if (qty <= 0) throw new Error('Quantidade do lançamento deve ser maior que zero.');
-  if (qty > bal.remaining + 0.0001) {
-    throw new Error(`Quantidade (${qty}) excede o saldo disponível (${bal.remaining}) da OF.`);
-  }
+  // Lançar ACIMA do saldo é permitido (excedente / peças a mais que a OF) — não é bloqueado,
+  // apenas sinalizado no relatório. O writeoff (ajuste final) só existe quando fecha ABAIXO do
+  // saldo; ao exceder, resolveWriteoff devolve 0 (nada a encerrar como perda).
   const writeoff = resolveWriteoff(item, bal.remaining);
-  if (qty + writeoff > bal.remaining + 0.0001) {
-    throw new Error(`Lançamento + ajuste (${qty + writeoff}) excede o saldo disponível (${bal.remaining}).`);
-  }
   return { writeoff };
 }
 
@@ -1300,10 +1308,9 @@ async function updateSettlementItem(settlementId, itemId, { quantity, unitPrice,
 
     // Saldo disponível para este item = saldo atual + o que este próprio item já consome.
     const bal = await computeOfBalance(client.query.bind(client), current.of_id);
+    // Saldo disponível para este item (excluindo o que ele próprio já consome). Lançar acima
+    // disso é permitido (excedente / peças a mais que a OF) — sinalizado no relatório, não travado.
     const availableForItem = bal.remaining + (parseFloat(current.quantity) || 0) + (parseFloat(current.writeoff_quantity) || 0);
-    if (newQty > availableForItem + 0.0001) {
-      throw new Error(`Quantidade (${newQty}) excede o saldo disponível (${parseFloat(availableForItem.toFixed(2))}) da OF.`);
-    }
 
     // Destino da diferença (availableForItem − newQty): 'final' = ajuste/perda (writeoff que
     // encerra a linha); caso contrário volta como saldo. Mantém o writeoff atual se não vier ação.
@@ -1316,9 +1323,6 @@ async function updateSettlementItem(settlementId, itemId, { quantity, unitPrice,
       writeoff = Math.max(0, Math.min(parseFloat(writeoffQuantity) || 0, Math.max(0, availableForItem - newQty)));
     } else {
       writeoff = parseFloat(current.writeoff_quantity) || 0;
-    }
-    if (newQty + writeoff > availableForItem + 0.0001) {
-      throw new Error(`Lançamento + ajuste (${newQty + writeoff}) excede o saldo disponível (${parseFloat(availableForItem.toFixed(2))}) da OF.`);
     }
 
     // Store original values on first manual edit
