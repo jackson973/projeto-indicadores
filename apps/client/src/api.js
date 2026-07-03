@@ -1529,6 +1529,97 @@ export const createStockMovement = async (data) => {
   return handleResponse(r);
 };
 
+// ─── Análise de Custo e Preço (Fase 1) ───────────────────────────────────────
+export const fetchSuppliers = async ({ search = '', includeInactive = false } = {}) => {
+  const q = new URLSearchParams();
+  if (search) q.append('search', search);
+  if (includeInactive) q.append('includeInactive', 'true');
+  const r = await authFetch(`/api/cost/suppliers${q.toString() ? `?${q}` : ''}`);
+  return handleResponse(r);
+};
+export const createSupplier = async (data) => {
+  const r = await authFetch('/api/cost/suppliers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  return handleResponse(r);
+};
+export const updateSupplier = async (id, data) => {
+  const r = await authFetch(`/api/cost/suppliers/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  return handleResponse(r);
+};
+export const deleteSupplier = async (id) => {
+  const r = await authFetch(`/api/cost/suppliers/${id}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
+export const fetchProductCosts = async (productId) => {
+  const r = await authFetch(`/api/cost/products/${productId}/costs`);
+  return handleResponse(r);
+};
+export const createProductCost = async (productId, data) => {
+  const r = await authFetch(`/api/cost/products/${productId}/costs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  return handleResponse(r);
+};
+export const updateProductCost = async (id, data) => {
+  const r = await authFetch(`/api/cost/costs/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  return handleResponse(r);
+};
+export const deleteProductCost = async (id) => {
+  const r = await authFetch(`/api/cost/costs/${id}`, { method: 'DELETE' });
+  return handleResponse(r);
+};
+
+export const applyStockOpeningCost = async (items) => {
+  const r = await authFetch('/api/stock/opening-cost', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) });
+  return handleResponse(r);
+};
+
+// ─── Fase 2: Canais & Taxas, Preço por loja, Valorização ──────────────────────
+export const fetchFeeBands = async () => handleResponse(await authFetch('/api/cost/fee-bands'));
+export const createFeeBand = async (data) =>
+  handleResponse(await authFetch('/api/cost/fee-bands', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
+export const updateFeeBand = async (id, data) =>
+  handleResponse(await authFetch(`/api/cost/fee-bands/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
+export const deleteFeeBand = async (id) =>
+  handleResponse(await authFetch(`/api/cost/fee-bands/${id}`, { method: 'DELETE' }));
+
+export const fetchPricingStores = async () => handleResponse(await authFetch('/api/cost/stores'));
+export const syncPricingLojas = async () =>
+  handleResponse(await authFetch('/api/cost/stores/sync', { method: 'POST' }));
+export const updateStore = async (id, data) =>
+  handleResponse(await authFetch(`/api/cost/stores/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
+
+export const fetchProductPrices = async (productId) => handleResponse(await authFetch(`/api/cost/products/${productId}/prices`));
+export const upsertProductPrice = async (productId, storeId, data) =>
+  handleResponse(await authFetch(`/api/cost/products/${productId}/prices/${storeId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
+export const deleteProductPrice = async (productId, storeId) =>
+  handleResponse(await authFetch(`/api/cost/products/${productId}/prices/${storeId}`, { method: 'DELETE' }));
+
+export const fetchValuation = async () => handleResponse(await authFetch('/api/cost/valuation'));
+export const fetchCostConfigStatus = async () => handleResponse(await authFetch('/api/cost/config-status'));
+
+// ─── Fase 3: Simulador ────────────────────────────────────────────────────────
+export const fetchSimulationBase = async () => handleResponse(await authFetch('/api/cost/simulation-base'));
+export const fetchSimulations = async () => handleResponse(await authFetch('/api/cost/simulations'));
+export const fetchSimulation = async (id) => handleResponse(await authFetch(`/api/cost/simulations/${id}`));
+export const createSimulation = async (data) =>
+  handleResponse(await authFetch('/api/cost/simulations', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
+export const duplicateSimulation = async (id) =>
+  handleResponse(await authFetch(`/api/cost/simulations/${id}/duplicate`, { method: 'POST' }));
+export const deleteSimulation = async (id) =>
+  handleResponse(await authFetch(`/api/cost/simulations/${id}`, { method: 'DELETE' }));
+
+// ─── Fase 4: Acesso por módulo ────────────────────────────────────────────────
+export const fetchMyModules = async () => handleResponse(await authFetch('/api/access/my-modules'));
+export const fetchAccessModules = async () => handleResponse(await authFetch('/api/access/modules'));
+export const fetchAccessProfiles = async () => handleResponse(await authFetch('/api/access/profiles'));
+export const createAccessProfile = async (data) =>
+  handleResponse(await authFetch('/api/access/profiles', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
+export const updateAccessProfile = async (id, data) =>
+  handleResponse(await authFetch(`/api/access/profiles/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }));
+export const deleteAccessProfile = async (id) =>
+  handleResponse(await authFetch(`/api/access/profiles/${id}`, { method: 'DELETE' }));
+export const assignUserProfile = async (userId, profile_id) =>
+  handleResponse(await authFetch(`/api/access/users/${userId}/profile`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ profile_id }) }));
+
 export const fetchStockMovements = async ({ variant_id, from, to, tipo, limit } = {}) => {
   const qs = new URLSearchParams();
   if (variant_id) qs.set('variant_id', variant_id);

@@ -3,7 +3,8 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const sharp = require('sharp');
-const { authenticate, requireAdmin } = require('../middleware/auth');
+const { authenticate, requireModule } = require('../middleware/auth');
+const requireAdmin = requireModule('estoque');
 const repo = require('../db/stockRepository');
 
 const router = express.Router();
@@ -54,9 +55,9 @@ router.get('/products/:id', async (req, res) => {
 // POST /api/stock/products
 router.post('/products', requireAdmin, async (req, res) => {
   try {
-    const { codigo, descricao, familia, variants } = req.body;
+    const { codigo, descricao, familia, default_kit_qty, initial_cost, sale_price, variants } = req.body;
     if (!codigo || !descricao) return res.status(400).json({ error: 'Informe código e descrição' });
-    const product = await repo.createProduct({ codigo, descricao, familia, variants });
+    const product = await repo.createProduct({ codigo, descricao, familia, default_kit_qty, initial_cost, sale_price, variants });
     res.json(product);
   } catch (err) {
     console.error('stock/products POST error:', err);
@@ -68,8 +69,8 @@ router.post('/products', requireAdmin, async (req, res) => {
 // PUT /api/stock/products/:id
 router.put('/products/:id', requireAdmin, async (req, res) => {
   try {
-    const { codigo, descricao, familia, variants } = req.body;
-    const product = await repo.updateProduct(req.params.id, { codigo, descricao, familia, variants });
+    const { codigo, descricao, familia, default_kit_qty, initial_cost, sale_price, variants } = req.body;
+    const product = await repo.updateProduct(req.params.id, { codigo, descricao, familia, default_kit_qty, initial_cost, sale_price, variants });
     res.json(product);
   } catch (err) {
     console.error('stock/products/:id PUT error:', err);
@@ -176,15 +177,27 @@ router.delete('/reasons/:id', requireAdmin, async (req, res) => {
 
 // ─── Movimentos (operacional — qualquer usuário logado) ──────────────────────
 
-// POST /api/stock/movements  body: { variant_id, tipo:'entrada'|'saida', qty, reason_id?, note? }
+// POST /api/stock/movements  body: { variant_id, tipo:'entrada'|'saida', qty, reason_id?, note?, unit_cost? }
 router.post('/movements', async (req, res) => {
   try {
-    const { variant_id, tipo, qty, reason_id, note } = req.body;
+    const { variant_id, tipo, qty, reason_id, note, unit_cost } = req.body;
     if (!variant_id) return res.status(400).json({ error: 'Informe a variante' });
-    const mov = await repo.applyMovement({ variant_id, tipo, qty, reason_id, note, user_id: req.user.id });
+    const mov = await repo.applyMovement({ variant_id, tipo, qty, reason_id, note, unit_cost, user_id: req.user.id });
     res.json(mov);
   } catch (err) {
     console.error('stock/movements POST error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/stock/opening-cost  body: { items: [{ variant_id, unit_cost }] }  — semeia o custo médio inicial
+router.post('/opening-cost', requireAdmin, async (req, res) => {
+  try {
+    const items = Array.isArray(req.body.items) ? req.body.items : [];
+    const rows = await repo.applyOpeningCost(items, req.user.id);
+    res.json({ ok: true, count: rows.length, movements: rows });
+  } catch (err) {
+    console.error('stock/opening-cost POST error:', err);
     res.status(500).json({ error: err.message });
   }
 });

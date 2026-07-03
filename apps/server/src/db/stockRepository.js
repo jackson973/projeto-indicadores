@@ -24,6 +24,7 @@ const PRODUCT_SELECT = `
           'codigo', v.codigo,
           'min_stock', v.min_stock,
           'balance', v.balance,
+          'avg_cost', v.avg_cost,
           'sort_order', v.sort_order,
           'active', v.active,
           'barcodes', COALESCE((
@@ -66,16 +67,22 @@ async function getProductById(id) {
 
 // Cria produto-base + variantes da grade.
 // variants: [{ tamanho, codigo?, min_stock? }]
-async function createProduct({ codigo, descricao, familia = null, image_url = null, variants = [] }) {
+async function createProduct({ codigo, descricao, familia = null, image_url = null, default_kit_qty = 1, initial_cost = null, sale_price = null, variants = [] }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const ic = (initial_cost === '' || initial_cost == null) ? null : Number(initial_cost);
+    const sp = (sale_price === '' || sale_price == null) ? null : Number(sale_price);
     const { rows } = await client.query(
-      `INSERT INTO stock_products (codigo, descricao, familia, image_url) VALUES ($1,$2,$3,$4) RETURNING *`,
-      [codigo, descricao, familia, image_url]
+      `INSERT INTO stock_products (codigo, descricao, familia, image_url, default_kit_qty, initial_cost, sale_price) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [codigo, descricao, familia, image_url, Number(default_kit_qty) || 1, ic, sp]
     );
     const product = rows[0];
     await _upsertVariants(client, product.id, codigo, variants);
+    // Preço de compra inicial semeia o custo médio das variantes ainda sem custo
+    if (ic != null) {
+      await client.query('UPDATE stock_variants SET avg_cost=$1 WHERE product_id=$2 AND (avg_cost IS NULL OR avg_cost=0)', [ic, product.id]);
+    }
     await client.query('COMMIT');
     return getProductById(product.id);
   } catch (err) {
@@ -88,20 +95,29 @@ async function createProduct({ codigo, descricao, familia = null, image_url = nu
 
 // Atualiza produto e reconcilia a grade: insere novos tamanhos, atualiza existentes,
 // desativa os removidos (não apaga — preserva histórico de movimentos/barcodes).
-async function updateProduct(id, { codigo, descricao, familia, image_url, variants }) {
+async function updateProduct(id, { codigo, descricao, familia, image_url, default_kit_qty, initial_cost, sale_price, variants }) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    const ic = (initial_cost === '' ) ? null : (initial_cost == null ? null : Number(initial_cost));
+    const sp = (sale_price === '') ? null : (sale_price == null ? null : Number(sale_price));
     await client.query(
       `UPDATE stock_products
        SET codigo = COALESCE($1, codigo),
            descricao = COALESCE($2, descricao),
            familia = CASE WHEN $3::text IS NULL THEN familia ELSE NULLIF(BTRIM($3), '') END,
            image_url = COALESCE($4, image_url),
+           default_kit_qty = COALESCE($5, default_kit_qty),
+           initial_cost = COALESCE($6, initial_cost),
+           sale_price = COALESCE($7, sale_price),
            updated_at = NOW()
-       WHERE id = $5`,
-      [codigo ?? null, descricao ?? null, familia ?? null, image_url ?? null, id]
+       WHERE id = $8`,
+      [codigo ?? null, descricao ?? null, familia ?? null, image_url ?? null, default_kit_qty ?? null, ic, sp, id]
     );
+    // Semeia o custo médio das variantes ainda sem custo quando há preço de compra inicial
+    if (ic != null) {
+      await client.query('UPDATE stock_variants SET avg_cost=$1 WHERE product_id=$2 AND (avg_cost IS NULL OR avg_cost=0)', [ic, id]);
+    }
     if (variants !== undefined) {
       const baseCodigo = codigo ?? (await client.query('SELECT codigo FROM stock_products WHERE id=$1', [id])).rows[0]?.codigo;
       const keepTamanhos = variants.map(v => String(v.tamanho).trim());
@@ -250,24 +266,37 @@ async function deleteReason(id) {
 
 // Aplica um movimento dentro de uma transação já aberta (client).
 // delta = variação COM SINAL no saldo. Retorna o movimento criado.
-async function _applyMovementTx(client, { variant_id, tipo, delta, reason_id = null, note = null, inventory_session_id = null, user_id = null }) {
+async function _applyMovementTx(client, { variant_id, tipo, delta, reason_id = null, note = null, inventory_session_id = null, user_id = null, unit_cost = null }) {
   const { rows: vrows } = await client.query(
-    'SELECT balance FROM stock_variants WHERE id=$1 FOR UPDATE',
+    'SELECT balance, avg_cost FROM stock_variants WHERE id=$1 FOR UPDATE',
     [variant_id]
   );
   if (!vrows[0]) throw new Error('Variante não encontrada');
-  const newBalance = vrows[0].balance + delta;
+  const prevBalance = vrows[0].balance;
+  const prevAvg = Number(vrows[0].avg_cost) || 0;
+  const newBalance = prevBalance + delta;
+
+  // Custo médio móvel: só a ENTRADA com custo informado recalcula.
+  // Saída e ajuste mantêm o custo médio vigente.
+  const uc = (unit_cost === null || unit_cost === undefined || unit_cost === '') ? null : Number(unit_cost);
+  let newAvg = prevAvg;
+  if (tipo === 'entrada' && uc != null && delta > 0) {
+    const base = prevBalance > 0 ? prevBalance : 0;
+    const denom = base + delta;
+    newAvg = denom > 0 ? (base * prevAvg + delta * uc) / denom : uc;
+  }
+
   const { rows } = await client.query(
-    `INSERT INTO stock_movements (variant_id, tipo, qty, reason_id, resulting_balance, note, inventory_session_id, user_id)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [variant_id, tipo, delta, reason_id, newBalance, note, inventory_session_id, user_id]
+    `INSERT INTO stock_movements (variant_id, tipo, qty, reason_id, resulting_balance, note, inventory_session_id, user_id, unit_cost)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+    [variant_id, tipo, delta, reason_id, newBalance, note, inventory_session_id, user_id, uc]
   );
-  await client.query('UPDATE stock_variants SET balance=$1 WHERE id=$2', [newBalance, variant_id]);
+  await client.query('UPDATE stock_variants SET balance=$1, avg_cost=$2 WHERE id=$3', [newBalance, newAvg, variant_id]);
   return rows[0];
 }
 
 // Movimento avulso (modo rápido entrada/saída). qty é positivo; o sinal vem do tipo.
-async function applyMovement({ variant_id, tipo, qty, reason_id = null, note = null, user_id = null }) {
+async function applyMovement({ variant_id, tipo, qty, reason_id = null, note = null, user_id = null, unit_cost = null }) {
   const q = Math.abs(Number(qty) || 0);
   if (q === 0) throw new Error('Quantidade inválida');
   if (!['entrada', 'saida'].includes(tipo)) throw new Error('Tipo inválido (use entrada/saida)');
@@ -275,9 +304,40 @@ async function applyMovement({ variant_id, tipo, qty, reason_id = null, note = n
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const mov = await _applyMovementTx(client, { variant_id, tipo, delta, reason_id, note, user_id });
+    const mov = await _applyMovementTx(client, { variant_id, tipo, delta, reason_id, note, user_id, unit_cost });
     await client.query('COMMIT');
     return mov;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// Custo de abertura em lote: define o custo médio inicial das variantes com saldo já existente,
+// sem alterar o saldo. Registra um 'ajuste' de qtd 0 para auditoria. items: [{variant_id, unit_cost}].
+async function applyOpeningCost(items = [], user_id = null) {
+  const client = await pool.connect();
+  const results = [];
+  try {
+    await client.query('BEGIN');
+    for (const it of items) {
+      const uc = (it.unit_cost === null || it.unit_cost === undefined || it.unit_cost === '') ? null : Number(it.unit_cost);
+      if (uc == null || !it.variant_id) continue;
+      const { rows: vrows } = await client.query('SELECT balance FROM stock_variants WHERE id=$1 FOR UPDATE', [it.variant_id]);
+      if (!vrows[0]) continue;
+      const bal = vrows[0].balance;
+      await client.query('UPDATE stock_variants SET avg_cost=$1 WHERE id=$2', [uc, it.variant_id]);
+      const { rows } = await client.query(
+        `INSERT INTO stock_movements (variant_id, tipo, qty, resulting_balance, note, user_id, unit_cost)
+         VALUES ($1,'ajuste',0,$2,$3,$4,$5) RETURNING *`,
+        [it.variant_id, bal, 'Custo de abertura', user_id, uc]
+      );
+      results.push(rows[0]);
+    }
+    await client.query('COMMIT');
+    return results;
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -702,6 +762,7 @@ module.exports = {
   deleteReason,
   // movimentos
   applyMovement,
+  applyOpeningCost,
   getMovements,
   getMovementsReport,
   // inventário

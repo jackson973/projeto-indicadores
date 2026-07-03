@@ -20,8 +20,10 @@ const productsRouter = require("./routes/products");
 const ordersRouter = require("./routes/orders");
 const validadorRouter = require("./routes/validador");
 const stockRouter = require("./routes/stock");
+const costRouter = require("./routes/cost");
+const accessRouter = require("./routes/access");
 const path = require("path");
-const { authenticate, requireAdmin } = require("./middleware/auth");
+const { authenticate, requireModule } = require("./middleware/auth");
 
 // Initialize database connection (will test connection on import)
 require('./db/connection');
@@ -108,13 +110,15 @@ async function start() {
       req.headers.authorization = `Bearer ${req.query.token}`;
     }
     next();
-  }, authenticate, requireAdmin, databaseRouter);
+  }, authenticate, requireModule('configuracoes'), databaseRouter);
   app.use("/api/lojas", storesRouter);
   app.use("/api/anuncios", anunciosRouter);
   app.use("/api/products", productsRouter);
   app.use("/api/orders", ordersRouter);
   app.use("/api/validador", validadorRouter);
   app.use("/api/stock", stockRouter);
+  app.use("/api/cost", costRouter);
+  app.use("/api/access", accessRouter);
   app.use("/api", authenticate, apiRouter);
 
   // Serve uploaded files (logos, etc)

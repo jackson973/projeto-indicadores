@@ -17,13 +17,16 @@ import {
 } from "@chakra-ui/react";
 import BarcodeScanner from "./BarcodeScanner";
 import useAppToast from "../hooks/useAppToast";
-import { fetchStockReasons, scanStockBarcode, createStockMovement } from "../api";
+import { fetchStockReasons, scanStockBarcode, createStockMovement, fetchSuppliers } from "../api";
 
 export default function StockControl() {
   const [tipo, setTipo] = useState("saida"); // operação mais comum no dia a dia
   const [reasons, setReasons] = useState([]);
   const [reasonId, setReasonId] = useState("");
   const [qty, setQty] = useState(1);
+  const [unitCost, setUnitCost] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [suppliers, setSuppliers] = useState([]);
   const [recent, setRecent] = useState([]);
   const toast = useAppToast();
 
@@ -34,21 +37,27 @@ export default function StockControl() {
   useEffect(() => {
     fetchStockReasons().then(setReasons).catch(e =>
       toast({ status: "error", title: "Erro ao carregar motivos", description: e.message }));
+    fetchSuppliers().then(setSuppliers).catch(() => {});
   }, [toast]);
 
-  // Reseta o motivo ao trocar a direção (entrada/saída)
-  useEffect(() => { setReasonId(""); }, [tipo]);
+  // Reseta motivo/custo ao trocar a direção (entrada/saída)
+  useEffect(() => { setReasonId(""); setUnitCost(""); setSupplierId(""); }, [tipo]);
 
   const reasonsForTipo = reasons.filter(r => r.direcao === tipo);
 
   const handleScan = useCallback(async (code) => {
     try {
       const v = await scanStockBarcode(code); // { variant_id, tamanho, product_codigo, descricao, balance, ... }
+      const supplierName = tipo === "entrada" && supplierId
+        ? (suppliers.find(s => String(s.id) === String(supplierId))?.name || null)
+        : null;
       const mov = await createStockMovement({
         variant_id: v.variant_id,
         tipo,
         qty: Number(qty) || 1,
         reason_id: reasonId || null,
+        unit_cost: tipo === "entrada" && unitCost !== "" ? Number(unitCost) : null,
+        note: supplierName ? `Fornecedor: ${supplierName}` : null,
       });
       const entry = {
         key: `${mov.id}`,
@@ -67,7 +76,7 @@ export default function StockControl() {
     } catch (e) {
       return { status: "error", message: e.message || "Erro" };
     }
-  }, [tipo, qty, reasonId]);
+  }, [tipo, qty, reasonId, unitCost, supplierId, suppliers]);
 
   return (
     <Box>
@@ -100,12 +109,29 @@ export default function StockControl() {
             </Select>
           </FormControl>
 
-          <FormControl mb={1}>
+          <FormControl mb={3}>
             <FormLabel fontSize="sm">Quantidade por bipagem</FormLabel>
             <NumberInput min={1} value={qty} onChange={(_, n) => setQty(Number.isNaN(n) ? 1 : n)}>
               <NumberInputField />
             </NumberInput>
           </FormControl>
+
+          {tipo === "entrada" && (
+            <>
+              <FormControl mb={3}>
+                <FormLabel fontSize="sm">Custo unitário (R$/pç)</FormLabel>
+                <NumberInput min={0} precision={2} value={unitCost} onChange={(s) => setUnitCost(s)}>
+                  <NumberInputField placeholder="opcional — recalcula o custo médio" />
+                </NumberInput>
+              </FormControl>
+              <FormControl mb={1}>
+                <FormLabel fontSize="sm">Fornecedor</FormLabel>
+                <Select placeholder="— opcional —" value={supplierId} onChange={e => setSupplierId(e.target.value)}>
+                  {suppliers.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </Select>
+              </FormControl>
+            </>
+          )}
         </Box>
 
         {/* Scanner */}

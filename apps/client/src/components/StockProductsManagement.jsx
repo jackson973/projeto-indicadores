@@ -56,6 +56,9 @@ const emptyDraft = () => ({
   codigo: "",
   descricao: "",
   familia: "",
+  default_kit_qty: 1,
+  initial_cost: "",
+  sale_price: "",
   image_url: null,
   _photoFile: null,
   _photoPreview: null,
@@ -113,6 +116,9 @@ export default function StockProductsManagement() {
       codigo: p.codigo,
       descricao: p.descricao,
       familia: p.familia || "",
+      default_kit_qty: p.default_kit_qty || 1,
+      initial_cost: p.initial_cost ?? "",
+      sale_price: p.sale_price ?? "",
       image_url: p.image_url,
       _photoFile: null,
       _photoPreview: null,
@@ -186,6 +192,9 @@ export default function StockProductsManagement() {
         codigo: draft.codigo.trim(),
         descricao: draft.descricao.trim(),
         familia: draft.familia.trim(),
+        default_kit_qty: Number(draft.default_kit_qty) || 1,
+        initial_cost: draft.initial_cost === "" ? null : Number(draft.initial_cost),
+        sale_price: draft.sale_price === "" ? null : Number(draft.sale_price),
         variants: draft.variants.map(v => ({ tamanho: v.tamanho, min_stock: Number(v.min_stock) || 0 })),
       };
       let saved;
@@ -376,6 +385,30 @@ export default function StockProductsManagement() {
                 <Input value={draft.familia} placeholder="ex: Soft — deixe vazio para usar o 1º termo da descrição"
                   onChange={e => setDraft(d => ({ ...d, familia: e.target.value }))} />
               </FormControl>
+
+              {/* Preços e kit */}
+              <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3} mt={3} alignItems="start">
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={1} minH={{ md: "36px" }} lineHeight="1.2">Kit padrão (pç/venda)</FormLabel>
+                  <Input type="number" min={1} value={draft.default_kit_qty}
+                    onChange={e => setDraft(d => ({ ...d, default_kit_qty: e.target.value }))} />
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={1} minH={{ md: "36px" }} lineHeight="1.2">Preço de compra inicial (R$/pç)</FormLabel>
+                  <Input type="number" step="0.01" placeholder="ex: 18,90" value={draft.initial_cost}
+                    onChange={e => setDraft(d => ({ ...d, initial_cost: e.target.value }))} />
+                  <Text fontSize="xs" color="gray.500" mt={1} lineHeight="1.3">Semeia o custo médio; depois ajusta pelas entradas.</Text>
+                </FormControl>
+                <FormControl>
+                  <FormLabel fontSize="sm" mb={1} minH={{ md: "36px" }} lineHeight="1.2">Preço de venda atual (R$/pç)</FormLabel>
+                  <Input type="number" step="0.01" placeholder="ex: 36,00" value={draft.sale_price}
+                    onChange={e => setDraft(d => ({ ...d, sale_price: e.target.value }))} />
+                  <Text fontSize="xs" color="gray.500" mt={1} lineHeight="1.3">
+                    Por peça. Preço do kit ({Number(draft.default_kit_qty) || 1} pç) ={" "}
+                    <b>{((Number(draft.sale_price) || 0) * (Number(draft.default_kit_qty) || 1)).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}</b>.
+                  </Text>
+                </FormControl>
+              </SimpleGrid>
 
               {/* Grade de tamanhos */}
               <Box>

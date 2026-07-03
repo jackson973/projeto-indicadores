@@ -82,6 +82,13 @@ import StockSeparationDashboard from "./components/StockSeparationDashboard";
 import StockInventory from "./components/StockInventory";
 import StockReports from "./components/StockReports";
 import StockSettings from "./components/StockSettings";
+import CostPriceList from "./components/CostPriceList";
+import SuppliersManagement from "./components/SuppliersManagement";
+import StockOpeningCost from "./components/StockOpeningCost";
+import ChannelsFees from "./components/ChannelsFees";
+import Valuation from "./components/Valuation";
+import Simulator from "./components/Simulator";
+import AccessProfiles from "./components/AccessProfiles";
 import ShopeeValidator from "./components/ShopeeValidator";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import RevenueDetailDrawer from "./components/RevenueDetailDrawer";
@@ -101,7 +108,8 @@ import {
   fetchSisplanActive,
   refreshSisplanData,
   refreshUpsellerTodayAnalytics,
-  fetchSystemSettings
+  fetchSystemSettings,
+  fetchMyModules
 } from "./api";
 
 const SIDEBAR_EXPANDED = "220px";
@@ -250,11 +258,42 @@ const App = () => {
     return saved && saved !== "upload" ? saved : "dashboard";
   });
   const [expandedMenu, setExpandedMenu] = useState(null); // For submenu expansion
+  const [allowedModules, setAllowedModules] = useState(null); // {all:true} | {all:false, modules:[...]} | null
   const [autoplay, setAutoplay] = useState(true);
   const [sisplanActive, setSisplanActive] = useState(false);
   const [ofActive, setOfActive] = useState(false);
   const [systemLogo, setSystemLogo] = useState(null);
   const isMobile = useBreakpointValue({ base: true, md: false });
+
+  // Módulos permitidos ao usuário (Fase 4 — filtra o menu). Sem perfil/admin => {all:true}.
+  useEffect(() => {
+    if (!user) { setAllowedModules(null); return; }
+    fetchMyModules().then(setAllowedModules).catch(() => setAllowedModules({ all: true }));
+  }, [user]);
+
+  const MODULE_BY_LABEL = {
+    "Dashboard Vendas": "dashboard",
+    "Financeiro": "financeiro",
+    "Dashboard Financeiro": "financial-dashboard",
+    "Produtos": "produtos",
+    "Pedidos": "pedidos",
+    "Estoque": "estoque",
+    "Análise de Custo e Preço": "custo-preco",
+    "Terceiros": "terceiros",
+    "Lojas": "lojas",
+    "Validador de Pedidos": "validador",
+    "Configurações": "configuracoes",
+  };
+  // Acesso é 100% pelo PERFIL. isAdmin = perfil de acesso total (is_admin).
+  const isAdmin = allowedModules?.all === true;
+  // Pode ver/renderizar a tela de um módulo?
+  const canView = (key) => isAdmin || (allowedModules?.modules || []).includes(key);
+  // Visibilidade do item de topo do menu.
+  const topVisible = (item) => {
+    if (isAdmin) return item.show;                 // acesso total: usa a visibilidade padrão do item
+    const key = MODULE_BY_LABEL[item.label];
+    return key ? (allowedModules?.modules || []).includes(key) : false;
+  };
   const mobileMenu = useDisclosure();
   const canceledDrawer = useDisclosure();
   const dailySalesDrawer = useDisclosure();
@@ -481,8 +520,8 @@ const App = () => {
       submenu: [
         { label: "Novo Pedido", view: "orders-new" },
         { label: "Meus Pedidos", view: "orders-list" },
-        { label: "Config Produtos",  view: "orders-products",    show: user?.role === "admin" },
-        { label: "Cond. Pagamento",  view: "orders-conditions",  show: user?.role === "admin" }
+        { label: "Config Produtos",  view: "orders-products",    show: isAdmin },
+        { label: "Cond. Pagamento",  view: "orders-conditions",  show: isAdmin }
       ].filter(s => s.show !== false)
     },
     {
@@ -494,9 +533,22 @@ const App = () => {
         { label: "Entradas/Saídas",       view: "stock-control" },
         { label: "Inventário / Acerto",  view: "stock-inventory" },
         { label: "Relatórios",           view: "stock-reports" },
-        { label: "Cadastro de Produtos", view: "stock-products",  show: user?.role === "admin" },
-        { label: "Configuração",         view: "stock-settings",  show: user?.role === "admin" },
+        { label: "Cadastro de Produtos", view: "stock-products",  show: isAdmin },
+        { label: "Configuração",         view: "stock-settings",  show: isAdmin },
       ].filter(s => s.show !== false),
+    },
+    {
+      label: "Análise de Custo e Preço",
+      icon: <ChartBarIcon />,
+      show: isAdmin,
+      submenu: [
+        { label: "Custos & Preços",    view: "cost-list" },
+        { label: "Valorização",        view: "cost-valuation" },
+        { label: "Simulador",          view: "cost-simulator" },
+        { label: "Canais & Taxas",     view: "cost-channels" },
+        { label: "Fornecedores",       view: "cost-suppliers" },
+        { label: "Custo de Abertura",  view: "cost-opening" },
+      ],
     },
     {
       label: "Terceiros",
@@ -524,7 +576,7 @@ const App = () => {
     {
       label: "Lojas",
       icon: <StoreIcon />,
-      show: user?.role === "admin",
+      show: isAdmin,
       submenu: [
         { label: "Anúncios", view: "anuncios" },
         { label: "Gerenc. de Lojas", view: "stores-management" },
@@ -533,7 +585,7 @@ const App = () => {
     {
       label: "Validador de Pedidos",
       icon: <ValidatorIcon />,
-      show: user?.role === "admin",
+      show: isAdmin,
       submenu: [
         { label: "Shopee", view: "validador-shopee" },
       ],
@@ -541,11 +593,15 @@ const App = () => {
     {
       label: "Configurações",
       icon: <SettingsIcon />,
-      show: user?.role === "admin",
+      show: isAdmin,
       submenu: [
         {
           label: "Gerenciar usuários",
           view: "users"
+        },
+        {
+          label: "Perfis de Acesso",
+          view: "access-profiles"
         },
         {
           label: "Conexão Sisplan",
@@ -610,7 +666,7 @@ const App = () => {
 
       {/* Navigation items */}
       <VStack spacing={1} align="stretch" px={3} py={4} flex={1}>
-        {navItems.filter((item) => item.show).map((item) => (
+        {navItems.filter(topVisible).map((item) => (
           <Box key={item.view || item.label}>
             {/* Main menu item */}
             <Box
@@ -810,7 +866,7 @@ const App = () => {
               </Flex>
               <Divider />
               <VStack spacing={1} align="stretch" px={2} py={4} flex={1}>
-                {navItems.filter((item) => item.show).map((item) => (
+                {navItems.filter(topVisible).map((item) => (
                   <Tooltip key={item.view} label={item.label} placement="right">
                     <Box
                       as="button"
@@ -888,39 +944,39 @@ const App = () => {
           </Center>
         )}
 
-        {activeView === "anuncios" && user?.role === "admin" && (
+        {activeView === "anuncios" && isAdmin && (
           <AnunciosDashboard />
         )}
 
-        {activeView === "stores-management" && user?.role === "admin" && (
+        {activeView === "stores-management" && isAdmin && (
           <StoresManagement />
         )}
 
-        {activeView === "users" && user?.role === "admin" && (
+        {activeView === "users" && isAdmin && (
           <UsersManagement />
         )}
 
-        {activeView === "database-maintenance" && user?.role === "admin" && (
+        {activeView === "database-maintenance" && isAdmin && (
           <DatabaseMaintenance />
         )}
 
-        {activeView === "database-manager" && user?.role === "admin" && (
+        {activeView === "database-manager" && isAdmin && (
           <DatabaseManager />
         )}
 
-        {activeView === "sisplan-settings" && user?.role === "admin" && (
+        {activeView === "sisplan-settings" && isAdmin && (
           <SisplanSettings />
         )}
 
-        {activeView === "upseller-settings" && user?.role === "admin" && (
+        {activeView === "upseller-settings" && isAdmin && (
           <UpsellerSettings />
         )}
 
-        {activeView === "whatsapp-settings" && user?.role === "admin" && (
+        {activeView === "whatsapp-settings" && isAdmin && (
           <WhatsappSettings />
         )}
 
-        {activeView === "conversation-logs" && user?.role === "admin" && (
+        {activeView === "conversation-logs" && isAdmin && (
           <ConversationLogs />
         )}
 
@@ -948,7 +1004,7 @@ const App = () => {
           <OFRastreio />
         )}
 
-        {activeView === "system-settings" && user?.role === "admin" && (
+        {activeView === "system-settings" && isAdmin && (
           <SystemSettings onLogoChange={() => loadSystemLogo()} />
         )}
 
@@ -972,15 +1028,15 @@ const App = () => {
           <OrdersList />
         )}
 
-        {activeView === "orders-products" && user?.role === "admin" && (
+        {activeView === "orders-products" && isAdmin && (
           <OrderProductsConfig />
         )}
 
-        {activeView === "orders-conditions" && user?.role === "admin" && (
+        {activeView === "orders-conditions" && isAdmin && (
           <PaymentConditionsConfig />
         )}
 
-        {activeView === "validador-shopee" && user?.role === "admin" && (
+        {activeView === "validador-shopee" && isAdmin && (
           <ShopeeValidator />
         )}
 
@@ -1000,12 +1056,40 @@ const App = () => {
           <StockReports />
         )}
 
-        {activeView === "stock-products" && user?.role === "admin" && (
+        {activeView === "stock-products" && isAdmin && (
           <StockProductsManagement />
         )}
 
-        {activeView === "stock-settings" && user?.role === "admin" && (
+        {activeView === "stock-settings" && isAdmin && (
           <StockSettings />
+        )}
+
+        {activeView === "cost-list" && canView("custo-preco") && (
+          <CostPriceList />
+        )}
+
+        {activeView === "cost-valuation" && canView("custo-preco") && (
+          <Valuation />
+        )}
+
+        {activeView === "cost-simulator" && canView("custo-preco") && (
+          <Simulator />
+        )}
+
+        {activeView === "cost-channels" && canView("custo-preco") && (
+          <ChannelsFees />
+        )}
+
+        {activeView === "cost-suppliers" && canView("custo-preco") && (
+          <SuppliersManagement />
+        )}
+
+        {activeView === "access-profiles" && isAdmin && (
+          <AccessProfiles />
+        )}
+
+        {activeView === "cost-opening" && canView("custo-preco") && (
+          <StockOpeningCost />
         )}
 
         {hasData && activeView === "dashboard" && (
