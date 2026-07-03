@@ -3,12 +3,18 @@ const db = require('./connection');
 const BATCH_SIZE = 500;
 
 // Base de quantidade de uma linha de OF (alias "o") para cálculo de saldo a pagar.
-// Regra: usa a quantidade ORIGINAL da OF (fac_qt_orig) — é o "valor da OF" que se paga ao
-// terceiro. Exceção: quando a mesma OF/etapa/produto/cor/parte/tamanho é dividida entre
-// 2+ fornecedores, fac_qt_orig é o total da OF; aí usa o produzido deste fornecedor
-// (fac_quant) para não cobrar a OF inteira de cada um. Fallback p/ fac_quant se não houver
-// fac_qt_orig.
-const BASE_QTY_EXPR = `
+// Regra: usa a quantidade CONFERIDA pelo ERP (fac_quant) — é o que de fato foi conferido/produzido
+// naquela etapa e que se sugere pagar ao terceiro. É por fornecedor/linha, então não precisa da
+// exceção de OF dividida. (Antes, v1.2.0, a base era fac_qt_orig; voltamos ao conferido porque o
+// original forçava o operador a reajustar quase todo lançamento — ver ORDERED_QTY_EXPR abaixo.)
+const BASE_QTY_EXPR = `COALESCE(o.fac_quant, 0)`;
+
+// Quantidade ORIGINAL da OF (alias "o") — o "valor da OF" que foi pedido. Usada APENAS como
+// referência para o alerta informativo de "excedente" (pagou mais que a OF). Exceção: quando a
+// mesma OF/etapa/produto/cor/parte/tamanho é dividida entre 2+ fornecedores, fac_qt_orig é o total
+// da OF; aí usa o produzido deste fornecedor (fac_quant) para não gerar excedente falso. Fallback
+// p/ fac_quant se não houver fac_qt_orig.
+const ORDERED_QTY_EXPR = `
   CASE
     WHEN COALESCE(o.fac_qt_orig, 0) <= 0 THEN COALESCE(o.fac_quant, 0)
     WHEN (
@@ -260,15 +266,15 @@ async function getOfs({ codcli, month, year, dateFrom, dateTo, facNumero, ids, u
       JOIN terceiros_settlements s2 ON s2.id = si.settlement_id AND s2.status <> 'draft'
       WHERE si.of_id = o.id
     ) bal ON true`;
-  // Base do saldo = quantidade da OF (fac_qt_orig). Quando a OF/tamanho é dividida entre
-  // 2+ fornecedores, fac_qt_orig é o total da OF, então cobrar o total de cada um seria
-  // errado — nesse caso usa o produzido deste fornecedor (fac_quant). Fallback p/ fac_quant
-  // quando não há fac_qt_orig.
+  // Base do saldo/sugestão = quantidade CONFERIDA (fac_quant). orderedQty = original da OF
+  // (fac_qt_orig), usado só como referência do alerta de excedente. Ver BASE_QTY_EXPR /
+  // ORDERED_QTY_EXPR no topo do arquivo.
   const baseQtyExpr = BASE_QTY_EXPR;
   const balanceColumns = `,
             bal.paid_qty AS "paidQty",
             bal.writeoff_qty AS "writeoffQty",
             ${baseQtyExpr} AS "baseQty",
+            ${ORDERED_QTY_EXPR} AS "orderedQty",
             (${baseQtyExpr} - bal.paid_qty - bal.writeoff_qty) AS "remainingQty",
             COALESCE((
               SELECT json_agg(json_build_object('month', t.m, 'year', t.y, 'qty', t.q) ORDER BY t.y, t.m)
@@ -748,7 +754,7 @@ async function getSettlements({ codcli, month, year, status } = {}) {
                   FROM terceiros_settlement_items si2
                   JOIN terceiros_settlements s2 ON s2.id = si2.settlement_id AND s2.status <> 'draft'
                   WHERE si2.of_id = o.id
-                ) > (${BASE_QTY_EXPR}) + 0.0001
+                ) > (${ORDERED_QTY_EXPR}) + 0.0001
             ) AS "overageCount",
             (
               SELECT STRING_AGG(DISTINCT COALESCE(o.fac_descsetor, o.fac_codsetor, ''), ', '
@@ -795,6 +801,7 @@ async function getSettlement(id) {
             o.fac_parte AS "facParte", o.fac_descparte AS "facDescparte",
             o.fac_tam AS "facTam", o.fac_qt_orig AS "facQtOrig", o.fac_quant AS "facQuant",
             ${BASE_QTY_EXPR} AS "baseQty",
+            ${ORDERED_QTY_EXPR} AS "orderedQty",
             COALESCE((SELECT SUM(sio.quantity) FROM terceiros_settlement_items sio
                       JOIN terceiros_settlements so ON so.id = sio.settlement_id AND so.status <> 'draft'
                       WHERE sio.of_id = si.of_id AND sio.settlement_id <> $1), 0) AS "paidOther",

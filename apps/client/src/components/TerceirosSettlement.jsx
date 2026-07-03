@@ -1907,21 +1907,23 @@ const TerceirosSettlement = () => {
           {/* Center: Sizes grid inline */}
           <Flex wrap="wrap" gap={1} flex={{ base: "1 1 100%", md: "1 1 auto" }} justify={{ base: "flex-start", md: "center" }}>
             {group.sizes.map((sz) => {
-              // Contexto da OF para exibir OF / pago / saldo na edição.
+              // Contexto da OF: baseQty = conferido (fac_quant); orderedQty = original da OF.
               const hasCtx = !sz.missing && (parseFloat(sz.baseQty) || 0) > 0;
-              // Disponível para este item = valor da OF − pago/ajuste em OUTROS fechamentos.
+              // Disponível para este item = conferido − pago/ajuste em OUTROS fechamentos.
+              // É a referência da confirmação ao digitar acima do conferido.
               const availEdit = hasCtx
                 ? Math.max(0, parseFloat(((parseFloat(sz.baseQty) || 0) - (parseFloat(sz.paidOther) || 0) - (parseFloat(sz.writeoffOther) || 0)).toFixed(2)))
                 : 0;
               const saldoAfter = hasCtx
                 ? Math.max(0, (parseFloat(sz.baseQty) || 0) - (parseFloat(sz.paidOther) || 0) - (parseFloat(sz.qty) || 0) - (parseFloat(sz.writeoffQuantity) || 0) - (parseFloat(sz.writeoffOther) || 0))
                 : 0;
-              // Excedente: este item paga mais que o disponível da OF (peças a mais que a OF).
+              // Excedente = pago/ajuste (outros) + este item acima do ORIGINAL da OF (orderedQty).
+              const orderedQty = parseFloat(sz.orderedQty) || 0;
               const overEdit = hasCtx
-                ? Math.max(0, parseFloat(((parseFloat(sz.qty) || 0) + (parseFloat(sz.writeoffQuantity) || 0) - availEdit).toFixed(2)))
+                ? Math.max(0, parseFloat(((parseFloat(sz.paidOther) || 0) + (parseFloat(sz.writeoffOther) || 0) + (parseFloat(sz.qty) || 0) + (parseFloat(sz.writeoffQuantity) || 0) - orderedQty).toFixed(2)))
                 : 0;
               const ctxTip = hasCtx
-                ? `OF ${sz.baseQty} · pago outros ${sz.paidOther} · este ${sz.qty}${(parseFloat(sz.writeoffQuantity) || 0) > 0 ? ` · ajuste ${sz.writeoffQuantity}` : ""}${overEdit > 0 ? ` · excedente ${overEdit}` : ` · saldo ${saldoAfter}`}`
+                ? `conf ${sz.baseQty} · OF ${orderedQty} · pago outros ${sz.paidOther} · este ${sz.qty}${(parseFloat(sz.writeoffQuantity) || 0) > 0 ? ` · ajuste ${sz.writeoffQuantity}` : ""}${overEdit > 0 ? ` · excedente ${overEdit}` : ` · saldo ${saldoAfter}`}`
                 : "";
               return (
               <Tooltip
@@ -2007,7 +2009,7 @@ const TerceirosSettlement = () => {
                           let ok = true;
                           if (hasCtx && newQty > availEdit + 0.0001) {
                             const extra = parseFloat((newQty - availEdit).toFixed(2));
-                            ok = window.confirm(`Lançar ${newQty} peças no tam ${sz.tam} — ${extra} a mais que a OF (disponível ${availEdit}). Confirmar o excedente? Ele será sinalizado no relatório.`);
+                            ok = window.confirm(`Lançar ${newQty} peças no tam ${sz.tam} — ${extra} acima do conferido pelo ERP (${availEdit}). Confirmar? Se passar do total da OF será marcado como excedente no relatório.`);
                           }
                           if (ok) handleUpdateItem(sz.id, { quantity: newQty });
                         }
@@ -2044,7 +2046,7 @@ const TerceirosSettlement = () => {
                   )}
                   {hasCtx ? (
                     overEdit > 0 ? (
-                      <Text fontSize="8px" fontWeight="bold" color="red.500" lineHeight="1.2">+{overEdit} a mais</Text>
+                      <Text fontSize="8px" fontWeight="bold" color="red.500" lineHeight="1.2">+{overEdit} a mais que a OF</Text>
                     ) : (
                       <Text fontSize="8px" fontWeight={saldoAfter > 0 ? "bold" : "normal"} color={saldoAfter > 0 ? "purple.600" : "green.600"} lineHeight="1.2">
                         {saldoAfter > 0 ? `saldo ${saldoAfter}` : "quitado"}
@@ -2361,8 +2363,11 @@ const TerceirosSettlement = () => {
         tam: of.fac_tam,
         // qty = saldo disponível a fechar (remanescente quando houve parcial anterior)
         qty: availableQty(of),
-        // baseQty = valor da OF (fac_qt_orig) usado como base do saldo
-        baseQty: of.baseQty != null ? (parseFloat(of.baseQty) || 0) : (parseFloat(of.fac_qt_orig) || parseFloat(of.fac_quant) || 0),
+        // baseQty = quantidade conferida (fac_quant), base do saldo/sugestão
+        baseQty: of.baseQty != null ? (parseFloat(of.baseQty) || 0) : (parseFloat(of.fac_quant) || 0),
+        // orderedQty = original da OF (fac_qt_orig), referência do alerta de excedente
+        orderedQty: of.orderedQty != null ? (parseFloat(of.orderedQty) || 0) : (parseFloat(of.fac_qt_orig) || parseFloat(of.fac_quant) || 0),
+        writeoffQty: parseFloat(of.writeoffQty) || 0,
         facQuant: parseFloat(of.fac_quant) || 0,
         paidQty: paidQtyOf(of),
         isRemnant: isRemnantOf(of),
@@ -2418,7 +2423,9 @@ const TerceirosSettlement = () => {
         originalQuantity: isEdited ? parseFloat(item.originalQuantity) || null : null,
         originalUnitPrice: isEdited ? parseFloat(item.originalUnitPrice) || null : null,
         // Contexto da OF para exibir OF / pago / saldo e permitir ajuste final na edição.
-        baseQty: item.baseQty != null ? parseFloat(item.baseQty) || 0 : (parseFloat(item.facQtOrig) || parseFloat(item.facQuant) || 0),
+        // baseQty = conferido (fac_quant); orderedQty = original da OF (referência do excedente).
+        baseQty: item.baseQty != null ? parseFloat(item.baseQty) || 0 : (parseFloat(item.facQuant) || 0),
+        orderedQty: item.orderedQty != null ? parseFloat(item.orderedQty) || 0 : (parseFloat(item.facQtOrig) || parseFloat(item.facQuant) || 0),
         paidOther: parseFloat(item.paidOther) || 0,
         writeoffQuantity: parseFloat(item.writeoffQuantity) || 0,
         writeoffOther: parseFloat(item.writeoffOther) || 0
@@ -3496,11 +3503,14 @@ const TerceirosSettlement = () => {
                           // displayQty = o que o usuário edita (para célula sem histórico ou remanescente reaberto)
                           const displayQty = editedQty !== undefined ? parseFloat(editedQty) || 0 : saldo;
                           const isQtyEdited = editedQty !== undefined && parseFloat(editedQty) !== saldo;
-                          // Excedente: lançando mais peças que o saldo da OF (peças a mais que a OF).
-                          const isOver = isSelected && displayQty > saldo + 0.0001;
-                          const overExtra = isOver ? parseFloat((displayQty - saldo).toFixed(2)) : 0;
+                          // Excedente = pago (outros meses) + writeoff + este lançamento acima do
+                          // ORIGINAL da OF (orderedQty). Alerta informativo, distinto do saldo (conferido).
+                          const orderedQty = parseFloat(sz.orderedQty) || 0;
+                          const consumedWithThis = (parseFloat(sz.paidQty) || 0) + (parseFloat(sz.writeoffQty) || 0) + displayQty;
+                          const overExtra = isSelected ? parseFloat((consumedWithThis - orderedQty).toFixed(2)) : 0;
+                          const isOver = isSelected && overExtra > 0.0001;
                           const tipLabel = hasPayment
-                            ? `OF ${sz.baseQty} · pago ${sz.paidQty}${saldo > 0 ? ` · saldo ${saldo}` : " · quitado"}${isSizeSettled && saldo > 0 ? ' — use "Reabrir saldo"' : ""}`
+                            ? `conf ${sz.baseQty} · OF ${orderedQty} · pago ${sz.paidQty}${saldo > 0 ? ` · saldo ${saldo}` : " · quitado"}${isSizeSettled && saldo > 0 ? ' — use "Reabrir saldo"' : ""}`
                             : "";
                           const editInput = (
                             <Input
@@ -3518,7 +3528,7 @@ const TerceirosSettlement = () => {
                                 const v = parseFloat(editedQuantities[sz.index]);
                                 if (Number.isFinite(v) && v > saldo + 0.0001) {
                                   const extra = parseFloat((v - saldo).toFixed(2));
-                                  if (!window.confirm(`Lançar ${v} peças no tam ${sz.tam} — ${extra} a mais que o saldo da OF (${saldo}). Confirmar o excedente? Ele será sinalizado no relatório.`)) {
+                                  if (!window.confirm(`Lançar ${v} peças no tam ${sz.tam} — ${extra} acima do conferido pelo ERP (${saldo}). Confirmar? Se passar do total da OF será marcado como excedente no relatório.`)) {
                                     setEditedQuantities((prev) => ({ ...prev, [sz.index]: String(saldo) }));
                                   }
                                 }
@@ -3627,7 +3637,7 @@ const TerceirosSettlement = () => {
                                         {isSelected ? `pagar ${displayQty}` : `saldo ${saldo}`}
                                       </Text>
                                       {isOver && (
-                                        <Text fontSize="8px" fontWeight="bold" color="red.500" lineHeight="1.1">+{overExtra} a mais</Text>
+                                        <Text fontSize="8px" fontWeight="bold" color="red.500" lineHeight="1.1">+{overExtra} a mais que a OF</Text>
                                       )}
                                     </>
                                   )}
@@ -3648,7 +3658,7 @@ const TerceirosSettlement = () => {
                                     {displayQty}
                                   </Text>
                                   {isOver ? (
-                                    <Text fontSize="8px" fontWeight="bold" color="red.500" lineHeight="1">+{overExtra} a mais</Text>
+                                    <Text fontSize="8px" fontWeight="bold" color="red.500" lineHeight="1">+{overExtra} a mais que a OF</Text>
                                   ) : isQtyEdited && (
                                     <Text fontSize="8px" color="orange.500" lineHeight="1">{saldo}</Text>
                                   )}

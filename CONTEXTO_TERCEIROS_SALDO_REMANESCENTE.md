@@ -25,14 +25,20 @@ Migration **`apps/server/src/db/migrations/078_settlement_writeoff.sql`**: adici
 
 Definições (em `apps/server/src/db/terceirosRepository.js`):
 
-- **Base da OF** = `BASE_QTY_EXPR` (constante no topo do arquivo):
-  - Normalmente **`fac_qt_orig`** (o "valor da OF" — o que se paga ao terceiro).
-  - **Exceção:** quando a mesma OF/etapa/produto/cor/parte/tamanho está dividida entre **2+
-    fornecedores** (`fac_codcli` distintos), `fac_qt_orig` é o total da OF → usa **`fac_quant`**
-    (produzido daquele fornecedor) para não cobrar a OF inteira de cada um.
-  - Fallback para `fac_quant` quando não há `fac_qt_orig`.
-- **Saldo** de uma OF: `saldo = baseQty − Σ(quantity + writeoff_quantity)` dos
-  `settlement_items` em fechamentos com `status <> 'draft'`.
+- **Base do saldo/sugestão** = `BASE_QTY_EXPR` = **`fac_quant`** (o **conferido** pelo ERP naquela
+  etapa — o que se sugere pagar ao terceiro). É por fornecedor/linha, então não precisa de exceção
+  de OF dividida. **(v1.4.3, reverte o `bad0310`/v1.2.0 que havia trocado para `fac_qt_orig`; o
+  original forçava o operador a reajustar quase todo lançamento.)**
+- **Referência da OF p/ excedente** = `ORDERED_QTY_EXPR` = **`fac_qt_orig`** (original pedido na
+  OF). Usado **só** para o alerta informativo de excedente. **Exceção:** OF/tamanho dividida entre
+  **2+ fornecedores** → usa `fac_quant` (evita excedente falso, pois `fac_qt_orig` é o total). Exposto
+  como `orderedQty` em `getOfs`/`getSettlement`.
+- **Saldo** de uma OF: `saldo = baseQty(conferido) − Σ(quantity + writeoff_quantity)` dos
+  `settlement_items` em fechamentos com `status <> 'draft'`. Pagar o conferido fecha 100% (sem
+  "sobra"); conferido a menos que a OF **não** vira sobra/ajuste.
+- **Excedente (alerta)** = `Σ(quantity + writeoff) > orderedQty(fac_qt_orig)`. Informativo (badge
+  "excedente" na lista; "+N a mais que a OF" na célula). A **confirmação** ao digitar dispara ao
+  passar do **conferido** (o saldo), independente do excedente vs OF.
 - **`terceiros_ofs.settlement_id`** deixa de ser o gate de disponibilidade e passa a significar
   **"linha totalmente consumida"**: setado no último fechamento quando `saldo <= 0`; **NULL**
   enquanto houver saldo. Mantido em sincronia por `syncOfSettlementFlag(ofId)`.
@@ -190,6 +196,7 @@ ORDER BY FACCAO3.lancto;
 | `529d1ff` | 1.4.0 | forçar atualização: nginx no-cache + /api/version + VersionGate |
 | `c07ffab` | 1.4.1 | `deleteSettlement` recalcula flag (syncOfSettlementFlag) + badge de saldo sem "(N já pagas)" |
 | _(este)_ | 1.4.2 | **permitir excedente** (pagar mais peças que a OF): remove travas de saldo em `prepareItemBalance`/`updateSettlementItem`; UI confirma ao exceder (create+edição) e sinaliza em vermelho "+N a mais"; `overageCount` na lista de fechamentos (badge "excedente") |
+| _(este)_ | 1.4.3 | **base do saldo = conferido (`fac_quant`)** de novo (reverte parcial do `bad0310`): sugere o conferido, fecha 100% ao pagar o conferido. `ORDERED_QTY_EXPR` (`fac_qt_orig`) vira só referência do excedente (`orderedQty` em `getOfs`/`getSettlement`; `overageCount` compara vs ela). Confirmação dispara ao passar do conferido; badge "+N a mais que a OF" |
 
 ## 10. Pontos de atenção
 
