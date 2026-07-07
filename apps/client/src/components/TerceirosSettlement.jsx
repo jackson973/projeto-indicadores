@@ -1039,21 +1039,29 @@ const TerceirosSettlement = () => {
 
     // Validate prices
     let missingPrices = false;
+    const zeroSkipped = []; // tamanhos com quantidade 0 → ignorados (não entram no fechamento)
     const items = [];
     selectedOfs.forEach((index) => {
       const of = unsettledOfs[index];
       if (!of) return;
-      const price = getOfPrice(of, index);
-      if (price == null || price <= 0) {
-        missingPrices = true;
-        return;
-      }
       // Baseline = saldo disponível (remanescente quando houve fechamento parcial anterior).
       const originalQty = availableQty(of);
       // Permite lançar acima do saldo (excedente / peças a mais que a OF) — sinalizado no relatório.
       const effectiveQty = editedQuantities[index] !== undefined
         ? (parseFloat(editedQuantities[index]) || 0)
         : originalQty;
+      // Quantidade zerada = tamanho fora do fechamento. Ignora em vez de mandar e o backend rejeitar.
+      if (!(effectiveQty > 0)) {
+        const cor = (of.fac_desccor || of.fac_cor || '').toString().trim();
+        const tam = (of.fac_tam || '').toString().trim();
+        zeroSkipped.push(`OF ${of.fac_numero}${cor ? ` · ${cor}` : ''}${tam ? ` · ${tam}` : ''}`);
+        return;
+      }
+      const price = getOfPrice(of, index);
+      if (price == null || price <= 0) {
+        missingPrices = true;
+        return;
+      }
       const manualKey = `${index}`;
       const isPriceManual = manualPrices[manualKey] !== undefined && manualPrices[manualKey] !== "";
       const isQtyEdited = editedQuantities[index] !== undefined && parseFloat(editedQuantities[index]) !== originalQty;
@@ -1083,6 +1091,23 @@ const TerceirosSettlement = () => {
     if (missingPrices) {
       toast({  title: "Existem itens selecionados sem preço definido.", status: "warning", duration: 4000 });
       return;
+    }
+
+    if (items.length === 0) {
+      toast({
+        title: "Nenhum tamanho com quantidade para fechar.",
+        description: zeroSkipped.length ? `Todos os selecionados estão zerados: ${zeroSkipped.slice(0, 6).join("; ")}${zeroSkipped.length > 6 ? "…" : ""}` : "Informe a quantidade em ao menos um tamanho.",
+        status: "warning", duration: 6000,
+      });
+      return;
+    }
+
+    if (zeroSkipped.length > 0) {
+      toast({
+        title: `${zeroSkipped.length} tamanho(s) com quantidade 0 foram ignorados.`,
+        description: `${zeroSkipped.slice(0, 6).join("; ")}${zeroSkipped.length > 6 ? "…" : ""}`,
+        status: "info", duration: 5000,
+      });
     }
 
     const supplierObj = suppliers.find((s) => String(s.codcli) === String(codcli));

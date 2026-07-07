@@ -870,6 +870,7 @@ async function getSettlement(id) {
 async function computeOfBalance(queryFn, ofId) {
   const r = await queryFn(
     `SELECT ${BASE_QTY_EXPR} AS base_qty,
+            o.fac_numero, o.fac_cor, o.fac_desccor, o.fac_tam,
             COALESCE((
               SELECT SUM(si.quantity + si.writeoff_quantity)
               FROM terceiros_settlement_items si
@@ -882,7 +883,14 @@ async function computeOfBalance(queryFn, ofId) {
   if (r.rows.length === 0) return null;
   const facQuant = parseFloat(r.rows[0].base_qty) || 0;
   const consumed = parseFloat(r.rows[0].consumed) || 0;
-  return { facQuant, consumed, remaining: parseFloat((facQuant - consumed).toFixed(2)) };
+  const row = r.rows[0];
+  // Descritor legível pra mensagens de erro (OF, cor, tamanho)
+  const corTxt = (row.fac_desccor || row.fac_cor || '').toString().trim();
+  const tamTxt = (row.fac_tam || '').toString().trim();
+  const label = `OF ${row.fac_numero || ofId}`
+    + (corTxt ? ` · cor ${corTxt}` : '')
+    + (tamTxt ? ` · tam ${tamTxt}` : '');
+  return { facQuant, consumed, remaining: parseFloat((facQuant - consumed).toFixed(2)), label };
 }
 
 // Resolve quanto deste lançamento é "ajuste final/perda" (writeoff). Fonte de verdade é o
@@ -904,7 +912,7 @@ async function prepareItemBalance(queryFn, item) {
   const bal = await computeOfBalance(queryFn, item.ofId);
   if (!bal) throw new Error(`OF ${item.ofId} não encontrada.`);
   const qty = parseFloat(item.quantity) || 0;
-  if (qty <= 0) throw new Error('Quantidade do lançamento deve ser maior que zero.');
+  if (qty <= 0) throw new Error(`Quantidade deve ser maior que zero em ${bal.label}. Remova esse tamanho do fechamento ou informe uma quantidade.`);
   // Lançar ACIMA do saldo é permitido (excedente / peças a mais que a OF) — não é bloqueado,
   // apenas sinalizado no relatório. O writeoff (ajuste final) só existe quando fecha ABAIXO do
   // saldo; ao exceder, resolveWriteoff devolve 0 (nada a encerrar como perda).
