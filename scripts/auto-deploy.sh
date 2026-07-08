@@ -11,6 +11,7 @@ REPO_DIR="${REPO_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 BRANCH="${BRANCH:-main}"
 INTERVAL="${INTERVAL:-20}"        # segundos entre verificações
 RETRY_DELAY="${RETRY_DELAY:-300}" # espera após um deploy falhar
+HEARTBEAT="${HEARTBEAT:-180}"     # loga "estou vivo" a cada N verificações (180 × 20s ≈ 1h); 0 desativa
 
 log() {
     echo "[auto-deploy] $(date '+%Y-%m-%d %H:%M:%S') $1"
@@ -30,6 +31,8 @@ LAST_DEPLOYED=$(git rev-parse HEAD)
 
 log "Monitorando $REPO_DIR (origin/$BRANCH) a cada ${INTERVAL}s — versão atual ${LAST_DEPLOYED:0:7}"
 
+CHECKS=0
+
 while true; do
     if ! git fetch origin "$BRANCH" --quiet; then
         log "⚠ git fetch falhou (rede/GitHub fora?). Nova tentativa em ${INTERVAL}s"
@@ -48,6 +51,11 @@ while true; do
             log "✗ Deploy falhou. Nova tentativa em ${RETRY_DELAY}s (ou antes, se chegar commit novo)"
             sleep "$RETRY_DELAY"
             continue
+        fi
+    else
+        CHECKS=$((CHECKS + 1))
+        if [ "$HEARTBEAT" -gt 0 ] && [ $((CHECKS % HEARTBEAT)) -eq 0 ]; then
+            log "Sem commits novos ($CHECKS verificações desde o início — versão atual ${LAST_DEPLOYED:0:7})"
         fi
     fi
 
