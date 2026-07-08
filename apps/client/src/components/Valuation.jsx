@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Alert, AlertIcon, Badge, Box, Button, Flex, SimpleGrid, Spinner, Stat, StatLabel, StatNumber,
-  Table, Tbody, Td, Th, Thead, Tr, Tfoot, Text, Tooltip, useColorModeValue,
+  Table, Tbody, Td, Th, Thead, Tr, Tfoot, Text, Tooltip, useBreakpointValue, useColorModeValue, VStack,
   Popover, PopoverTrigger, PopoverContent, PopoverBody, PopoverArrow, PopoverHeader, IconButton,
 } from "@chakra-ui/react";
 import { InfoIcon } from "@chakra-ui/icons";
 import useAppToast from "../hooks/useAppToast";
+import CardStat from "./CardStat";
 import { fetchValuation } from "../api";
 
 const BRL = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -81,6 +82,7 @@ export default function Valuation() {
   const selBg = useColorModeValue("blue.50", "blue.900");
   const infoBg = useColorModeValue("blue.50", "blue.900");
   const infoBorder = useColorModeValue("blue.200", "blue.700");
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -153,6 +155,47 @@ export default function Valuation() {
         Custo médio × saldo e preço de venda × saldo (do cadastro do produto). Lucro bruto não inclui comissão/frete/NF — isso é o detalhe por loja abaixo.
         {" "}<b>Clique numa linha</b> para filtrar as seções de baixo só por aquele produto.
       </Text>
+      {isMobile ? (
+        <Box mb={6}>
+          {!data.items.length ? (
+            <Text fontSize="sm" color={subtle}>Nenhum produto com saldo.</Text>
+          ) : (
+            <VStack spacing={2} align="stretch">
+              {data.items.map(it => {
+                const marg = it.valor_venda ? it.lucro_bruto / it.valor_venda * 100 : 0;
+                const isSel = it.product_id === prodFilter;
+                return (
+                  <Box key={it.product_id} bg={isSel ? selBg : cardBg} borderWidth="1px"
+                    borderColor={isSel ? "blue.400" : border} borderRadius="lg" p={3} cursor="pointer"
+                    onClick={() => setProdFilter(isSel ? null : it.product_id)}>
+                    <Text fontSize="sm" fontWeight="semibold" noOfLines={2} mb={2}>{it.codigo} · {it.descricao}</Text>
+                    <SimpleGrid columns={3} spacingX={2} spacingY={3}>
+                      <CardStat label="Saldo">{it.saldo}</CardStat>
+                      <CardStat label="Custo médio">{BRL2(it.avg_cost)}</CardStat>
+                      <CardStat label="Valor a custo">{BRL(it.valor_custo)}</CardStat>
+                      <CardStat label="Preço venda/pç">{it.sale_price == null ? "—" : BRL2(it.sale_price)}</CardStat>
+                      <CardStat label="Preço kit">{it.preco_kit == null ? "—" : BRL2(it.preco_kit)}</CardStat>
+                      <CardStat label="Valor a venda">{it.sale_price == null ? "—" : BRL(it.valor_venda)}</CardStat>
+                      <CardStat label="Lucro bruto">
+                        {it.sale_price == null ? "—" : <Badge colorScheme={it.lucro_bruto >= 0 ? "green" : "red"}>{BRL(it.lucro_bruto)}</Badge>}
+                      </CardStat>
+                      <CardStat label="Margem">{it.sale_price == null ? "—" : `${marg.toFixed(0)}%`}</CardStat>
+                    </SimpleGrid>
+                  </Box>
+                );
+              })}
+              <Box borderWidth="1px" borderColor={border} borderRadius="lg" p={3} bg={cardBg}>
+                <Text fontSize="sm" fontWeight="bold" mb={2}>Total</Text>
+                <SimpleGrid columns={3} spacingX={2} spacingY={3}>
+                  <CardStat label="Valor a custo">{BRL(data.estoque_custo)}</CardStat>
+                  <CardStat label="Valor a venda">{BRL(data.estoque_venda)}</CardStat>
+                  <CardStat label="Lucro bruto">{BRL(data.lucro_bruto)}</CardStat>
+                </SimpleGrid>
+              </Box>
+            </VStack>
+          )}
+        </Box>
+      ) : (
       <Box overflowX="auto" mb={6}>
         <Table size="sm">
           <Thead><Tr>
@@ -191,6 +234,7 @@ export default function Valuation() {
           <Tfoot><Tr><Th>Total</Th><Th /><Th /><Th isNumeric>{BRL(data.estoque_custo)}</Th><Th /><Th /><Th isNumeric>{BRL(data.estoque_venda)}</Th><Th isNumeric>{BRL(data.lucro_bruto)}</Th><Th /></Tr></Tfoot>
         </Table>
       </Box>
+      )}
 
       {/* Resultado líquido por loja/marketplace (avançado) */}
       <Text fontWeight="semibold" mb={1}>Resultado líquido por loja</Text>
@@ -233,6 +277,38 @@ export default function Valuation() {
           <li><b>Salve o preço do produto na loja</b> — em <b>Custos & Preços → abrir o produto → “Preço de venda por loja” → Salvar</b> na linha da loja. O preço vem sugerido do cadastro, mas só entra nesta visão depois de Salvar.</li>
         </Box>
       </Box>
+      {isMobile ? (
+        <Box mb={5}>
+          {!storeRows.some(s => s.fat) ? (
+            <Text fontSize="sm" color={subtle}>Nenhum preço por loja cadastrado ainda. Cadastre em Custos & Preços → produto → Preço de venda por loja.</Text>
+          ) : (
+            <VStack spacing={2} align="stretch">
+              {storeRows.map(s => {
+                const m = s.fat ? s.lucro / s.fat * 100 : 0;
+                const isSel = s.store_id === storeId;
+                return (
+                  <Box key={s.store_id} bg={isSel ? selBg : cardBg} borderWidth="1px"
+                    borderColor={isSel ? "blue.400" : border} borderRadius="lg" p={3} cursor="pointer"
+                    onClick={() => setStoreId(s.store_id)}>
+                    <Flex justify="space-between" align="start" gap={2} mb={2}>
+                      <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>{s.name}</Text>
+                      <Badge colorScheme="blue" flexShrink={0}>{MPLABEL[s.platform] || s.platform}</Badge>
+                    </Flex>
+                    <SimpleGrid columns={2} spacingX={2} spacingY={3}>
+                      <CardStat label="Kits (estoque)">{s.vendas}</CardStat>
+                      <CardStat label="Fat. potencial">{BRL(s.fat)}</CardStat>
+                      <CardStat label="Lucro líq. pot.">
+                        <Badge colorScheme={s.lucro >= 0 ? "green" : "red"}>{BRL(s.lucro)}</Badge>
+                      </CardStat>
+                      <CardStat label="Margem">{m.toFixed(0)}%</CardStat>
+                    </SimpleGrid>
+                  </Box>
+                );
+              })}
+            </VStack>
+          )}
+        </Box>
+      ) : (
       <Box overflowX="auto" mb={5}>
         <Table size="sm">
           <Thead><Tr>
@@ -261,6 +337,7 @@ export default function Valuation() {
           </Tbody>
         </Table>
       </Box>
+      )}
 
       {/* Detalhe por produto da loja selecionada */}
       {data.stores.length > 0 && (
@@ -271,6 +348,43 @@ export default function Valuation() {
               <Button key={s.store_id} size="xs" variant={s.store_id === storeId ? "solid" : "outline"} colorScheme="blue" onClick={() => setStoreId(s.store_id)}>{s.name}</Button>
             ))}
           </Flex>
+          {isMobile ? (
+            !detailRows.length ? (
+              <Text fontSize="sm" color={subtle}>Nenhum produto com preço nesta loja.</Text>
+            ) : (
+              <VStack spacing={2} align="stretch">
+                {detailRows.map(it => (
+                  <Box key={it.product_id} bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
+                    <Text fontSize="sm" fontWeight="semibold" noOfLines={2} mb={2}>{it.codigo} · {it.descricao}</Text>
+                    <SimpleGrid columns={3} spacingX={2} spacingY={3}>
+                      <CardStat label="Saldo">{it.saldo}</CardStat>
+                      <CardStat label="Custo médio">{BRL(it.avg_cost)}</CardStat>
+                      <CardStat label="Valor a custo">{BRL(it.valor_custo)}</CardStat>
+                      <CardStat label="Preço kit">{BRL(it.r.kitPrice)}</CardStat>
+                      <CardStat label="Kits (estoque)">{it.r.vendas}</CardStat>
+                      <CardStat label="Fat. potencial">{BRL(it.r.fat)}</CardStat>
+                      <CardStat label="Lucro líq. pot.">
+                        <Flex align="center">
+                          <Badge colorScheme={it.r.lucro >= 0 ? "green" : "red"}>{BRL(it.r.lucro)}</Badge>
+                          <LucroPopover r={it.r} avgCost={it.avg_cost} border={border} subtle={subtle} />
+                        </Flex>
+                      </CardStat>
+                      <CardStat label="Margem">{it.r.margem.toFixed(0)}%</CardStat>
+                    </SimpleGrid>
+                  </Box>
+                ))}
+                <Box borderWidth="1px" borderColor={border} borderRadius="lg" p={3} bg={cardBg}>
+                  <Text fontSize="sm" fontWeight="bold" mb={2}>Total</Text>
+                  <SimpleGrid columns={2} spacingX={2} spacingY={3}>
+                    <CardStat label="Valor a custo">{BRL(detailRows.reduce((s, i) => s + i.valor_custo, 0))}</CardStat>
+                    <CardStat label="Kits (estoque)">{detailRows.reduce((s, i) => s + i.r.vendas, 0)}</CardStat>
+                    <CardStat label="Fat. potencial">{BRL(detailRows.reduce((s, i) => s + i.r.fat, 0))}</CardStat>
+                    <CardStat label="Lucro líq. pot.">{BRL(detailRows.reduce((s, i) => s + i.r.lucro, 0))}</CardStat>
+                  </SimpleGrid>
+                </Box>
+              </VStack>
+            )
+          ) : (
           <Box overflowX="auto">
             <Table size="sm">
               <Thead><Tr>
@@ -310,6 +424,7 @@ export default function Valuation() {
               </Tr></Tfoot>
             </Table>
           </Box>
+          )}
         </>
       )}
     </Box>

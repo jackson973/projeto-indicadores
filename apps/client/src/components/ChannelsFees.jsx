@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  Badge, Box, Button, Flex, Input, Select, Spinner, Table, Tbody, Td, Th, Thead, Tr,
-  Text, useColorModeValue,
+  Badge, Box, Button, Flex, Input, Select, SimpleGrid, Spinner, Table, Tbody, Td, Th, Thead, Tr,
+  Text, useBreakpointValue, useColorModeValue, VStack,
 } from "@chakra-ui/react";
 import useAppToast from "../hooks/useAppToast";
+import CardStat from "./CardStat";
 import {
   fetchFeeBands, createFeeBand, updateFeeBand, deleteFeeBand,
   fetchPricingStores, updateStore, syncPricingLojas,
@@ -26,6 +27,7 @@ export default function ChannelsFees() {
   const subtle = useColorModeValue("gray.500", "gray.400");
   const cardBg = useColorModeValue("white", "gray.800");
   const border = useColorModeValue("gray.200", "gray.700");
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -89,6 +91,36 @@ export default function ChannelsFees() {
               <Text fontWeight="semibold"><Badge colorScheme="blue" mr={2}>{mp.label}</Badge>por faixa de preço do kit</Text>
               <Button size="xs" colorScheme="blue" ml="auto" onClick={() => addBand(mp.key)}>+ Faixa</Button>
             </Flex>
+            {isMobile ? (
+              !rows.length ? (
+                <Text fontSize="sm" color={subtle}>Sem faixas.</Text>
+              ) : (
+                <VStack spacing={2} align="stretch">
+                  {rows.map(b => (
+                    <Box key={b.id} borderWidth="1px" borderColor={border} borderRadius="md" p={3}>
+                      <SimpleGrid columns={2} spacingX={3} spacingY={2} mb={2}>
+                        <CardStat label="Preço mín.">
+                          <Input size="sm" type="number" step="0.01" value={b.price_min ?? ""} onChange={e => patchBand(b.id, "price_min", e.target.value)} />
+                        </CardStat>
+                        <CardStat label="Preço máx. (vazio = sem teto)">
+                          <Input size="sm" type="number" step="0.01" placeholder="sem teto" value={b.price_max ?? ""} onChange={e => patchBand(b.id, "price_max", e.target.value)} />
+                        </CardStat>
+                        <CardStat label="Comissão %">
+                          <Input size="sm" type="number" step="0.1" value={b.commission_pct ?? ""} onChange={e => patchBand(b.id, "commission_pct", e.target.value)} />
+                        </CardStat>
+                        <CardStat label="Taxa fixa/venda">
+                          <Input size="sm" type="number" step="0.01" value={b.fixed_per_sale ?? ""} onChange={e => patchBand(b.id, "fixed_per_sale", e.target.value)} />
+                        </CardStat>
+                      </SimpleGrid>
+                      <Flex gap={2}>
+                        <Button size="xs" colorScheme="blue" variant="outline" flex="1" onClick={() => saveBand(b)}>Salvar</Button>
+                        <Button size="xs" colorScheme="red" variant="outline" flex="1" onClick={() => removeBand(b.id)}>Excluir</Button>
+                      </Flex>
+                    </Box>
+                  ))}
+                </VStack>
+              )
+            ) : (
             <Box overflowX="auto">
               <Table size="sm">
                 <Thead><Tr><Th isNumeric>Preço mín.</Th><Th isNumeric>Preço máx. (vazio = sem teto)</Th><Th isNumeric>Comissão %</Th><Th isNumeric>Taxa fixa/venda</Th><Th isNumeric>Ações</Th></Tr></Thead>
@@ -110,18 +142,43 @@ export default function ChannelsFees() {
                 </Tbody>
               </Table>
             </Box>
+            )}
           </Box>
         );
       })}
 
       <Box bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={4}>
-        <Flex align="center" mb={2}>
+        <Flex align={{ base: "stretch", md: "center" }} direction={{ base: "column", md: "row" }} gap={2} mb={2}>
           <Box>
             <Text fontWeight="semibold">Lojas (marketplace + NF)</Text>
             <Text fontSize="xs" color={subtle}>As lojas vêm das vendas. Defina o marketplace (para casar com as faixas) e a NF (imposto) de cada uma.</Text>
           </Box>
-          <Button size="sm" colorScheme="blue" ml="auto" onClick={syncLojas}>↻ Sincronizar lojas das vendas</Button>
+          <Button size="sm" colorScheme="blue" ml={{ md: "auto" }} flexShrink={0} onClick={syncLojas}>↻ Sincronizar lojas das vendas</Button>
         </Flex>
+        {isMobile ? (
+          !stores.length ? (
+            <Text fontSize="sm" color={subtle}>Nenhuma loja. Clique em "Sincronizar lojas das vendas".</Text>
+          ) : (
+            <VStack spacing={2} align="stretch">
+              {stores.map(s => (
+                <Box key={s.id} borderWidth="1px" borderColor={border} borderRadius="md" p={3}>
+                  <Text fontSize="sm" fontWeight="semibold" mb={2} noOfLines={2}>{s.name}</Text>
+                  <SimpleGrid columns={2} spacingX={3} spacingY={2} mb={2}>
+                    <CardStat label="Marketplace">
+                      <Select size="sm" placeholder="— definir —" value={s.platform || ""} onChange={e => patchStore(s.id, "platform", e.target.value)}>
+                        {MPS.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+                      </Select>
+                    </CardStat>
+                    <CardStat label="NF %">
+                      <Input size="sm" type="number" step="0.1" value={s.nf_pct ?? ""} onChange={e => patchStore(s.id, "nf_pct", e.target.value)} />
+                    </CardStat>
+                  </SimpleGrid>
+                  <Button size="xs" colorScheme="blue" variant="outline" w="100%" onClick={() => saveStore(s)}>Salvar</Button>
+                </Box>
+              ))}
+            </VStack>
+          )
+        ) : (
         <Box overflowX="auto">
           <Table size="sm">
             <Thead><Tr><Th>Loja</Th><Th>Marketplace</Th><Th isNumeric>NF %</Th><Th isNumeric>Ações</Th></Tr></Thead>
@@ -143,6 +200,7 @@ export default function ChannelsFees() {
             </Tbody>
           </Table>
         </Box>
+        )}
       </Box>
     </Box>
   );

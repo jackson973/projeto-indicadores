@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import {
-  Box, Button, Flex, Input, Spinner, Table, Tbody, Td, Th, Thead, Tr, Tfoot,
-  Text, useColorModeValue,
+  Box, Button, Flex, Input, SimpleGrid, Spinner, Table, Tbody, Td, Th, Thead, Tr, Tfoot,
+  Text, useBreakpointValue, useColorModeValue, VStack,
 } from "@chakra-ui/react";
 import useAppToast from "../hooks/useAppToast";
+import CardStat from "./CardStat";
 import { fetchStockProducts, applyStockOpeningCost } from "../api";
 
 const BRL = (n) => (!n ? "R$ 0,00" : Number(n).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
@@ -16,6 +17,9 @@ export default function StockOpeningCost() {
   const toast = useAppToast();
 
   const subtle = useColorModeValue("gray.500", "gray.400");
+  const cardBg = useColorModeValue("white", "gray.800");
+  const border = useColorModeValue("gray.200", "gray.700");
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -77,6 +81,38 @@ export default function StockOpeningCost() {
           <Flex mb={3}>
             <Button colorScheme="blue" ml="auto" onClick={save} isLoading={saving}>Salvar abertura</Button>
           </Flex>
+          {isMobile ? (
+            <VStack spacing={2} align="stretch">
+              {products.map(p => {
+                const c = Number(costs[p.id]) || 0;
+                return (
+                  <Box key={p.id} bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
+                    <Text fontSize="sm" fontWeight="semibold" noOfLines={2} mb={2}>{p.codigo} · {p.descricao}</Text>
+                    <SimpleGrid columns={3} spacingX={2} spacingY={3}>
+                      <CardStat label="Saldo">{p.saldo}</CardStat>
+                      <CardStat label="Custo unit. inicial">
+                        <Input
+                          type="number" step="0.01" size="sm"
+                          placeholder="0,00"
+                          isDisabled={p.saldo <= 0}
+                          value={costs[p.id] ?? ""}
+                          onChange={e => setCosts(s => ({ ...s, [p.id]: e.target.value }))}
+                        />
+                      </CardStat>
+                      <CardStat label="Valor de abertura">{p.saldo > 0 && c ? BRL(c * p.saldo) : "—"}</CardStat>
+                    </SimpleGrid>
+                  </Box>
+                );
+              })}
+              <Box borderWidth="1px" borderColor={border} borderRadius="lg" p={3} bg={cardBg}>
+                <Text fontSize="sm" fontWeight="bold" mb={2}>Total</Text>
+                <SimpleGrid columns={2} spacingX={2} spacingY={3}>
+                  <CardStat label="Saldo">{products.reduce((s, p) => s + p.saldo, 0)}</CardStat>
+                  <CardStat label="Valor de abertura">{BRL(total)}</CardStat>
+                </SimpleGrid>
+              </Box>
+            </VStack>
+          ) : (
           <Box overflowX="auto">
             <Table size="sm">
               <Thead><Tr><Th>Produto</Th><Th isNumeric>Saldo</Th><Th isNumeric>Custo unit. inicial</Th><Th isNumeric>Valor de abertura</Th></Tr></Thead>
@@ -104,6 +140,7 @@ export default function StockOpeningCost() {
               <Tfoot><Tr><Th>Total</Th><Th isNumeric>{products.reduce((s, p) => s + p.saldo, 0)}</Th><Th /><Th isNumeric>{BRL(total)}</Th></Tr></Tfoot>
             </Table>
           </Box>
+          )}
         </>
       )}
     </Box>

@@ -1,9 +1,10 @@
 import { useEffect, useState, useCallback } from "react";
 import {
-  Badge, Box, Button, Flex, FormControl, FormLabel, Input, Spinner, Table, Tbody,
-  Td, Th, Thead, Tr, Text, Tooltip, useColorModeValue,
+  Badge, Box, Button, Flex, FormControl, FormLabel, Input, SimpleGrid, Spinner, Table, Tbody,
+  Td, Th, Thead, Tr, Text, Tooltip, useBreakpointValue, useColorModeValue, VStack,
 } from "@chakra-ui/react";
 import useAppToast from "../hooks/useAppToast";
+import CardStat from "./CardStat";
 import { fetchStockProducts, fetchCostConfigStatus } from "../api";
 import CostPriceDetail from "./CostPriceDetail";
 
@@ -43,6 +44,9 @@ export default function CostPriceList() {
 
   const subtle = useColorModeValue("gray.500", "gray.400");
   const hoverBg = useColorModeValue("gray.50", "gray.700");
+  const cardBg = useColorModeValue("white", "gray.800");
+  const border = useColorModeValue("gray.200", "gray.700");
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,6 +87,30 @@ export default function CostPriceList() {
         <Flex justify="center" py={10}><Spinner /></Flex>
       ) : !items.length ? (
         <Text fontSize="sm" color={subtle}>Nenhum produto encontrado.</Text>
+      ) : isMobile ? (
+        <VStack spacing={2} align="stretch">
+          {items.map(p => {
+            const variants = p.variants || [];
+            const saldo = variants.reduce((s, v) => s + (Number(v.balance) || 0), 0);
+            const avg = weightedAvg(variants);
+            const cfg = config[p.id];
+            const meta = STATUS_META[cfg?.status || "nao"];
+            return (
+              <Box key={p.id} bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}
+                cursor="pointer" onClick={() => setSelected(p.id)}>
+                <Flex justify="space-between" align="start" gap={2} mb={2}>
+                  <Text fontSize="sm" noOfLines={2}><b>{p.codigo}</b> · {p.descricao}</Text>
+                  <Badge colorScheme={meta.color} flexShrink={0}>{meta.label}</Badge>
+                </Flex>
+                <SimpleGrid columns={3} spacingX={2} spacingY={3}>
+                  <CardStat label="Saldo">{saldo}</CardStat>
+                  <CardStat label="Kit">{p.default_kit_qty || 1}</CardStat>
+                  <CardStat label="Custo médio">{BRL(avg)}</CardStat>
+                </SimpleGrid>
+              </Box>
+            );
+          })}
+        </VStack>
       ) : (
         <Box overflowX="auto">
           <Table size="sm">

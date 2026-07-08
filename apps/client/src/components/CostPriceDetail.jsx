@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from "react";
 import {
   Badge, Box, Button, Flex, FormControl, FormLabel, Input, Select, Spinner, Table,
-  Tbody, Td, Th, Thead, Tr, Text, useColorModeValue, useDisclosure, Modal, ModalOverlay,
+  Tbody, Td, Th, Thead, Tr, Text, useBreakpointValue, useColorModeValue, useDisclosure, Modal, ModalOverlay,
   ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton, SimpleGrid, Stat,
-  StatLabel, StatNumber,
+  StatLabel, StatNumber, VStack,
 } from "@chakra-ui/react";
 import useAppToast from "../hooks/useAppToast";
+import CardStat from "./CardStat";
 import {
   fetchStockProduct, updateStockProduct, fetchProductCosts, createProductCost,
   updateProductCost, deleteProductCost, fetchSuppliers,
@@ -42,6 +43,7 @@ export default function CostPriceDetail({ productId, onBack }) {
   const subtle = useColorModeValue("gray.500", "gray.400");
   const cardBg = useColorModeValue("white", "gray.800");
   const border = useColorModeValue("gray.200", "gray.700");
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -138,7 +140,7 @@ export default function CostPriceDetail({ productId, onBack }) {
           <Text fontWeight="bold" fontSize="lg">{product.codigo} · {product.descricao}</Text>
           <Text fontSize="xs" color={subtle}>Grade: {variants.map(v => v.tamanho).join(", ") || "—"} · Saldo total: {saldo} pç</Text>
         </Box>
-        <Box ml="auto" textAlign="right">
+        <Box ml={{ md: "auto" }} textAlign={{ base: "left", md: "right" }}>
           <Text fontSize="xs" color={subtle}>CUSTO MÉDIO (ponderado)</Text>
           <Text fontSize="xl" fontWeight="bold">{BRL(avg)}</Text>
           <Badge colorScheme="purple">média móvel · por peça</Badge>
@@ -171,6 +173,33 @@ export default function CostPriceDetail({ productId, onBack }) {
         </Box>
         <Button size="sm" colorScheme="blue" ml="auto" onClick={openNew}>+ Novo custo</Button>
       </Flex>
+      {isMobile ? (
+        <Box mb={5}>
+          {!costs.length ? (
+            <Text fontSize="sm" color={subtle}>Nenhum custo cadastrado.</Text>
+          ) : (
+            <VStack spacing={2} align="stretch">
+              {costs.map(c => (
+                <Box key={c.id} bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
+                  <Flex justify="space-between" align="start" gap={2} mb={2}>
+                    <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>{c.supplier_name || "—"}</Text>
+                    <Badge colorScheme={isVigente(c) ? "green" : "gray"} flexShrink={0}>{isVigente(c) ? "Vigente" : "Encerrado"}</Badge>
+                  </Flex>
+                  <SimpleGrid columns={2} spacingX={2} spacingY={3} mb={2}>
+                    <CardStat label="Custo/pç">{BRL(c.cost)}</CardStat>
+                    <CardStat label="Vigência">{c.valid_from?.slice(0, 10)} → {c.valid_until ? c.valid_until.slice(0, 10) : "aberto"}</CardStat>
+                  </SimpleGrid>
+                  {c.note && <Text fontSize="xs" color={subtle} mb={2}>{c.note}</Text>}
+                  <Flex gap={2}>
+                    <Button size="xs" variant="outline" flex="1" onClick={() => openEdit(c)}>Editar</Button>
+                    <Button size="xs" variant="outline" colorScheme="red" flex="1" onClick={() => removeCost(c)}>Excluir</Button>
+                  </Flex>
+                </Box>
+              ))}
+            </VStack>
+          )}
+        </Box>
+      ) : (
       <Box overflowX="auto" mb={5}>
         <Table size="sm">
           <Thead><Tr><Th>Fornecedor</Th><Th isNumeric>Custo/pç</Th><Th>Vigência</Th><Th>Status</Th><Th>Obs.</Th><Th isNumeric>Ações</Th></Tr></Thead>
@@ -193,6 +222,7 @@ export default function CostPriceDetail({ productId, onBack }) {
           </Tbody>
         </Table>
       </Box>
+      )}
 
       {/* Custo médio por variante */}
       <Text fontWeight="semibold" mb={2}>Custo médio por tamanho</Text>
@@ -218,6 +248,51 @@ export default function CostPriceDetail({ productId, onBack }) {
         Cada loja (conta num marketplace) tem seu preço/kit/frete. Preço do kit = preço unit. × kit.
         O preço já vem <b>sugerido</b> do <b>preço de venda atual do cadastro do produto</b> ({product.sale_price == null ? "não definido" : BRL(product.sale_price)}/pç) — ajuste por loja e clique Salvar para gravar o preço próprio da loja.
       </Text>
+      {isMobile ? (
+        !prices.length ? (
+          <Text fontSize="sm" color={subtle}>Nenhuma loja. Vá em Canais & Taxas → "Sincronizar lojas das vendas" e defina o marketplace de cada uma.</Text>
+        ) : (
+          <VStack spacing={2} align="stretch">
+            {prices.map(row => {
+              const up = Number(row.unit_price) || 0;
+              const kq = Number(row.kit_qty) || (product.default_kit_qty || 1);
+              return (
+                <Box key={row.store_id} bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
+                  <Flex justify="space-between" align="start" gap={2} mb={2}>
+                    <Text fontSize="sm" fontWeight="semibold" noOfLines={1}>{row.store_name}</Text>
+                    <Badge colorScheme="blue" flexShrink={0}>{MPLABEL[row.platform] || row.platform}</Badge>
+                  </Flex>
+                  <SimpleGrid columns={2} spacingX={3} spacingY={2} mb={2}>
+                    <CardStat label="Preço unit./pç">
+                      <Input size="sm" type="number" step="0.01"
+                        borderColor={row._suggested ? "blue.300" : undefined}
+                        value={row.unit_price ?? ""} onChange={e => patchPrice(row.store_id, "unit_price", e.target.value)} />
+                      {row._suggested && <Text fontSize="10px" color="blue.400" mt="2px">sugerido</Text>}
+                    </CardStat>
+                    <CardStat label="Kit">
+                      <Input size="sm" type="number" min={1} value={row.kit_qty ?? (product.default_kit_qty || 1)} onChange={e => patchPrice(row.store_id, "kit_qty", e.target.value)} />
+                    </CardStat>
+                    <CardStat label="Frete">
+                      <Select size="sm" value={row.frete_type || "none"} onChange={e => patchPrice(row.store_id, "frete_type", e.target.value)}>
+                        <option value="none">Sem frete</option>
+                        <option value="pct">% do preço</option>
+                        <option value="fix">Valor fixo</option>
+                      </Select>
+                    </CardStat>
+                    <CardStat label="Valor frete">
+                      <Input size="sm" type="number" step="0.01" value={row.frete_value ?? ""} onChange={e => patchPrice(row.store_id, "frete_value", e.target.value)} isDisabled={(row.frete_type || "none") === "none"} />
+                    </CardStat>
+                  </SimpleGrid>
+                  <Flex align="center" justify="space-between" gap={2}>
+                    <CardStat label="Preço kit">{BRL(up * kq)}</CardStat>
+                    <Button size="sm" colorScheme="blue" variant="outline" onClick={() => savePrice(row)}>Salvar</Button>
+                  </Flex>
+                </Box>
+              );
+            })}
+          </VStack>
+        )
+      ) : (
       <Box overflowX="auto">
         <Table size="sm">
           <Thead><Tr><Th>Loja</Th><Th>MP</Th><Th isNumeric>Preço unit./pç</Th><Th isNumeric>Kit</Th><Th>Frete</Th><Th isNumeric>Valor frete</Th><Th isNumeric>Preço kit</Th><Th isNumeric>Ações</Th></Tr></Thead>
@@ -254,6 +329,7 @@ export default function CostPriceDetail({ productId, onBack }) {
           </Tbody>
         </Table>
       </Box>
+      )}
 
       <Modal isOpen={isOpen} onClose={onClose}>
         <ModalOverlay />
