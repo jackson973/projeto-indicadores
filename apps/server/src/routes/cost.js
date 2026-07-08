@@ -173,5 +173,10 @@ router.delete('/simulations/:id', requireAdmin, async (req, res) => {
   try { await sim.remove(req.params.id); res.json({ ok: true }); }
   catch (err) { res.status(400).json({ error: err.message }); }
 });
+// Exclui o grupo inteiro (todas as versões de um cenário)
+router.delete('/simulation-groups/:id', requireAdmin, async (req, res) => {
+  try { await sim.removeGroup(req.params.id); res.json({ ok: true }); }
+  catch (err) { res.status(400).json({ error: err.message }); }
+});
 
 module.exports = router;

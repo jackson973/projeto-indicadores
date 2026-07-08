@@ -28,7 +28,8 @@ async function buildBase() {
 
 async function list() {
   const { rows } = await db.query(
-    'SELECT id, name, mode, total_vendas, total_fat, total_lucro, created_at FROM pricing_simulations ORDER BY created_at DESC'
+    `SELECT id, name, mode, total_vendas, total_fat, total_lucro, group_id, version, created_at
+       FROM pricing_simulations ORDER BY created_at DESC`
   );
   return rows;
 }
@@ -38,29 +39,51 @@ async function get(id) {
   return rows[0] || null;
 }
 
-async function create({ name, mode = 'mix', totals = {}, data = {}, user_id = null }) {
+const RETURNING = 'id, name, mode, total_vendas, total_fat, total_lucro, group_id, version, created_at';
+
+async function create({ name, mode = 'mix', totals = {}, data = {}, user_id = null, group_id = null }) {
   if (!name || !name.trim()) throw new Error('Informe o nome do cenário');
+  if (group_id) {
+    // Nova versão de um grupo existente
+    const { rows } = await db.query(
+      `INSERT INTO pricing_simulations (name, mode, user_id, total_vendas, total_fat, total_lucro, data, group_id, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+               (SELECT COALESCE(MAX(version),0)+1 FROM pricing_simulations WHERE group_id=$8))
+       RETURNING ${RETURNING}`,
+      [name.trim(), mode, user_id, totals.vendas || 0, totals.fat || 0, totals.lucro || 0, JSON.stringify(data), group_id]
+    );
+    return rows[0];
+  }
+  // Cenário novo: vira a v1 do próprio grupo (group_id = id)
   const { rows } = await db.query(
-    `INSERT INTO pricing_simulations (name, mode, user_id, total_vendas, total_fat, total_lucro, data)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, name, mode, total_vendas, total_fat, total_lucro, created_at`,
+    `INSERT INTO pricing_simulations (name, mode, user_id, total_vendas, total_fat, total_lucro, data, version)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,1) RETURNING ${RETURNING}`,
     [name.trim(), mode, user_id, totals.vendas || 0, totals.fat || 0, totals.lucro || 0, JSON.stringify(data)]
   );
-  return rows[0];
+  await db.query('UPDATE pricing_simulations SET group_id=id WHERE id=$1', [rows[0].id]);
+  return { ...rows[0], group_id: rows[0].id };
 }
 
 async function remove(id) {
   await db.query('DELETE FROM pricing_simulations WHERE id=$1', [id]);
 }
 
+async function removeGroup(groupId) {
+  await db.query('DELETE FROM pricing_simulations WHERE group_id=$1 OR id=$1', [groupId]);
+}
+
 async function duplicate(id, user_id = null) {
   const s = await get(id);
   if (!s) throw new Error('Cenário não encontrado');
+  const group = s.group_id || s.id;
   const { rows } = await db.query(
-    `INSERT INTO pricing_simulations (name, mode, user_id, total_vendas, total_fat, total_lucro, data)
-     VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id, name, mode, total_vendas, total_fat, total_lucro, created_at`,
-    [`${s.name} (cópia)`, s.mode, user_id, s.total_vendas, s.total_fat, s.total_lucro, JSON.stringify(s.data)]
+    `INSERT INTO pricing_simulations (name, mode, user_id, total_vendas, total_fat, total_lucro, data, group_id, version)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,
+             (SELECT COALESCE(MAX(version),0)+1 FROM pricing_simulations WHERE group_id=$8))
+     RETURNING ${RETURNING}`,
+    [s.name, s.mode, user_id, s.total_vendas, s.total_fat, s.total_lucro, JSON.stringify(s.data), group]
   );
   return rows[0];
 }
 
-module.exports = { buildBase, list, get, create, remove, duplicate };
+module.exports = { buildBase, list, get, create, remove, removeGroup, duplicate };

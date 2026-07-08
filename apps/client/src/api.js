@@ -1606,6 +1606,8 @@ export const duplicateSimulation = async (id) =>
   handleResponse(await authFetch(`/api/cost/simulations/${id}/duplicate`, { method: 'POST' }));
 export const deleteSimulation = async (id) =>
   handleResponse(await authFetch(`/api/cost/simulations/${id}`, { method: 'DELETE' }));
+export const deleteSimulationGroup = async (groupId) =>
+  handleResponse(await authFetch(`/api/cost/simulation-groups/${groupId}`, { method: 'DELETE' }));
 
 // ─── Fase 4: Acesso por módulo ────────────────────────────────────────────────
 export const fetchMyModules = async () => handleResponse(await authFetch('/api/access/my-modules'));
