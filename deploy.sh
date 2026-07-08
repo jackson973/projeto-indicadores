@@ -35,9 +35,14 @@ if [ ! -f "package.json" ]; then
     exit 1
 fi
 
-# 1. Git Pull
+# 1. Atualizar código
+# fetch + reset --hard em vez de pull: o npm install modifica o
+# package-lock.json no servidor e bloqueia o merge do pull. O servidor é
+# só destino de deploy — alterações locais em arquivos rastreados devem
+# ser descartadas. Não afeta não-rastreados (.env, files/, backups).
 print_step "Atualizando código..."
-git pull origin main
+git fetch origin main
+git reset --hard origin/main
 
 # 2. Instalar dependências
 print_step "Instalando dependências..."
