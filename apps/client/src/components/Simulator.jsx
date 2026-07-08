@@ -4,10 +4,12 @@ import {
   StatNumber, Text, useColorModeValue, Accordion, AccordionItem, AccordionButton,
   AccordionPanel, AccordionIcon,
 } from "@chakra-ui/react";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import useAppToast from "../hooks/useAppToast";
 import {
   fetchSimulationBase, fetchSimulations, fetchSimulation, createSimulation,
-  duplicateSimulation, deleteSimulation, deleteSimulationGroup,
+  duplicateSimulation, deleteSimulation, deleteSimulationGroup, fetchSystemSettings,
 } from "../api";
 
 const BRL = (n) => Number(n || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -160,75 +162,260 @@ function buildAnalysis(iniD, curD, iniCalc, curCalc) {
   return bullets;
 }
 
-// ─── Montagem do PDF (relatório + capa opcional) ─────────────────────────────
-const REPORT_CSS = `*{font-family:Arial,sans-serif}h1{font-size:18px;margin:0 0 2px}.meta{color:#555;font-size:12px;margin-bottom:10px}
-  .summary{display:flex;gap:26px;margin:10px 0 16px;padding:12px;border:1px solid #ccc;border-radius:8px;font-size:12px;color:#555}.summary b{display:block;font-size:16px;color:#111}
-  h3{font-size:13px;margin:16px 0 6px;background:#eef;border:1px solid #cdf;padding:5px 8px;border-radius:5px}h3 .s{font-weight:normal;color:#555}
-  table.rep{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px}.rep th{background:#eee;border:1px solid #ccc;padding:4px 6px;text-align:right}.rep th:first-child{text-align:left}
-  .rep td{border:1px solid #ddd;padding:3px 6px}.rep td.n{text-align:right}.rep td.d{color:#c0392b}.rep tr.sub td{background:#f6f6f6;font-weight:bold;border-top:2px solid #999}
-  table.rep,tr{break-inside:avoid}@page{size:A4 landscape;margin:10mm}
-  .cover{page-break-after:always}.cover h1{font-size:20px}.cover h2{font-size:14px;margin:16px 0 6px;border-bottom:2px solid #3182ce;padding-bottom:3px;color:#1a365d}
-  .cover ul{margin:4px 0 10px 18px;padding:0;font-size:12px;line-height:1.7}.cover li{margin-bottom:2px}
-  table.kpi{border-collapse:collapse;font-size:12px;margin:8px 0 4px;min-width:60%}.kpi th{background:#1a365d;color:#fff;padding:5px 12px;text-align:right}.kpi th:first-child{text-align:left}
-  .kpi td{border:1px solid #ccc;padding:5px 12px;text-align:right}.kpi td:first-child{text-align:left;font-weight:bold;background:#f5f7fa}
-  .kpi .pos{color:#276749;font-weight:bold}.kpi .neg{color:#c0392b;font-weight:bold}
-  .tag{display:inline-block;background:#eef;border:1px solid #cdf;border-radius:4px;padding:1px 8px;font-size:11px;color:#333;margin-left:6px}`;
+// ─── Montagem do PDF (arquivo real, baixado — abre no leitor de PDF) ─────────
+const PDF_W = 297, PDF_H = 210, PDF_M = 10; // A4 paisagem, em mm
+const NAVY = [26, 54, 93], BLUE = [49, 130, 206], RED = [192, 57, 43], GRAY = [85, 85, 85];
 
-function buildStoreTables(calc, stores, products, mix) {
-  return stores.map(st => {
-    const pRows = products.map(p => {
-      const c = calc.cell[key(st.id, p.id)]; if (!c || c.vendas === 0) return "";
-      return `<tr><td>${esc(p.codigo)} · ${esc(p.descricao)}</td><td class=n>${c.vendas}</td><td class=n>${BRL(c.kitPrice)}</td><td class=n>${BRL(c.fat)}</td><td class="n d">${BRL(c.comV)}</td><td class="n d">${BRL(c.fixV)}</td><td class="n d">${BRL(c.freteV)}</td><td class="n d">${BRL(c.nfV)}</td><td class="n d">${BRL(c.cost)}</td><td class=n><b>${BRL(c.lucro)}</b></td><td class=n>${c.margem.toFixed(0)}%</td></tr>`;
-    }).join("");
+// Texto plano para o PDF: tira tags (<b>) e troca caracteres fora do WinAnsi da fonte padrão
+const plain = (s) => String(s ?? "")
+  .replace(/<[^>]+>/g, "")
+  .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+  .replace(/→/g, "->").replace(/−/g, "-").replace(/Δ/g, "Dif.");
+
+function pdfEnsureSpace(doc, y, need) {
+  if (y + need > PDF_H - PDF_M) { doc.addPage(); return PDF_M + 6; }
+  return y;
+}
+
+// Logo do sistema (mesmo upload usado no topo do app) convertido p/ PNG data-URL, com cache
+let _logoPromise = null;
+function loadCompanyLogo() {
+  if (!_logoPromise) {
+    _logoPromise = (async () => {
+      const st = await fetchSystemSettings();
+      if (!st?.logoPath) return null;
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = `/uploads/${st.logoPath}`; });
+      const cv = document.createElement("canvas");
+      cv.width = img.naturalWidth || img.width; cv.height = img.naturalHeight || img.height;
+      cv.getContext("2d").drawImage(img, 0, 0);
+      return { dataUrl: cv.toDataURL("image/png"), w: cv.width, h: cv.height };
+    })().catch(() => { _logoPromise = null; return null; });
+  }
+  return _logoPromise;
+}
+
+// ─── Capa decorativa (inspirada no relatório Básico + Criativo: céu, balões e cartão) ─
+const CAPA = {
+  navy: [30, 58, 95],
+  coral: [224, 90, 58],
+  stripes: [[195, 74, 50], [212, 100, 72], [227, 131, 103], [240, 166, 140], [248, 201, 181], [253, 231, 221]],
+  cream: [250, 238, 232],
+  gold: [212, 136, 12],
+};
+
+function capaBalloon(doc, cx, cy, r, fill, hi) {
+  const ry = r * 1.15;
+  // cordas e cesto primeiro (ficam atrás do envelope)
+  doc.setDrawColor(255, 255, 255); doc.setLineWidth(0.35);
+  const by = cy + ry + r * 0.32, bw = r * 0.52, bh = r * 0.34;
+  doc.line(cx - bw / 2, by, cx - r * 0.55, cy + ry * 0.75);
+  doc.line(cx + bw / 2, by, cx + r * 0.55, cy + ry * 0.75);
+  doc.setFillColor(...CAPA.gold); doc.setDrawColor(...CAPA.navy); doc.setLineWidth(0.25);
+  doc.rect(cx - bw / 2, by, bw, bh, "FD");
+  // envelope com contorno branco + brilho vertical
+  doc.setFillColor(...fill); doc.setDrawColor(255, 255, 255); doc.setLineWidth(r * 0.055);
+  doc.ellipse(cx, cy, r, ry, "FD");
+  doc.setFillColor(...hi);
+  doc.ellipse(cx - r * 0.1, cy - ry * 0.18, r * 0.22, ry * 0.42, "F");
+}
+
+function capaClouds(doc, spots) {
+  if (!doc.GState) return;
+  doc.saveGraphicsState();
+  doc.setGState(new doc.GState({ opacity: 0.13 }));
+  doc.setFillColor(255, 255, 255);
+  for (const [x, y, r] of spots) {
+    doc.circle(x, y, r, "F");
+    doc.circle(x + r * 0.9, y + r * 0.25, r * 0.75, "F");
+    doc.circle(x - r * 0.85, y + r * 0.3, r * 0.65, "F");
+  }
+  doc.restoreGraphicsState();
+}
+
+function pdfCapa(doc, { title, subtitle, logo }) {
+  // céu: faixa navy + degradê coral (pôr do sol)
+  doc.setFillColor(...CAPA.navy); doc.rect(0, 0, PDF_W, 24, "F");
+  const y0 = 24, n = CAPA.stripes.length, sh = (PDF_H - y0) / n;
+  CAPA.stripes.forEach((c, i) => { doc.setFillColor(...c); doc.rect(0, y0 + i * sh, PDF_W, sh + 0.5, "F"); });
+  capaClouds(doc, [[36, 16, 9], [150, 8, 7], [258, 14, 8], [86, 32, 8], [216, 30, 7]]);
+
+  // balões: navy pequeno, coral grande ao centro, creme pequeno
+  capaBalloon(doc, 66, 44, 9.5, CAPA.navy, [58, 88, 128]);
+  capaBalloon(doc, PDF_W / 2, 44, 17, CAPA.coral, [236, 124, 96]);
+  capaBalloon(doc, 232, 46, 8.5, CAPA.cream, [255, 250, 247]);
+
+  // cartão branco arredondado (estende além da borda p/ base reta)
+  doc.setFillColor(255, 255, 255);
+  doc.roundedRect(9, 96, PDF_W - 18, PDF_H - 96 + 12, 9, 9, "F");
+
+  // logo da empresa centralizado no cartão
+  const cx = PDF_W / 2;
+  let ty = 148;
+  if (logo) {
+    const maxW = 64, maxH = 30;
+    const s = Math.min(maxW / logo.w, maxH / logo.h);
+    const w = logo.w * s, h = logo.h * s;
+    doc.addImage(logo.dataUrl, "PNG", cx - w / 2, 124 - h / 2, w, h);
+    ty = 124 + h / 2 + 16;
+  }
+
+  doc.setFont("helvetica", "bold"); doc.setFontSize(22); doc.setTextColor(...NAVY);
+  doc.text(plain(title), cx, ty, { align: "center" });
+  doc.setFont("helvetica", "normal"); doc.setFontSize(12); doc.setTextColor(...CAPA.coral);
+  doc.text(plain(subtitle), cx, ty + 8, { align: "center" });
+
+  // divisor pontilhado rosa-claro
+  doc.setDrawColor(240, 190, 175); doc.setLineWidth(0.4); doc.setLineDashPattern([1.4, 1.8], 0);
+  doc.line(38, ty + 15, PDF_W - 38, ty + 15);
+  doc.setLineDashPattern([], 0);
+
+  doc.setFont("helvetica", "bold"); doc.setFontSize(8.5); doc.setTextColor(...NAVY);
+  doc.text(plain("Custo & Preço  •  Simulador de Cenários"), cx, PDF_H - 9, { align: "center" });
+  doc.addPage();
+}
+
+function pdfSectionTitle(doc, y, title) {
+  y = pdfEnsureSpace(doc, y, 16);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(11); doc.setTextColor(...NAVY);
+  doc.text(plain(title), PDF_M, y);
+  doc.setDrawColor(...BLUE); doc.setLineWidth(0.4);
+  doc.line(PDF_M, y + 1.5, PDF_W - PDF_M, y + 1.5);
+  return y + 7;
+}
+
+function pdfBullets(doc, y, title, arr, emptyMsg) {
+  y = pdfSectionTitle(doc, y, title);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(60, 60, 60);
+  const items = arr.length ? arr : [emptyMsg];
+  for (const item of items) {
+    const lines = doc.splitTextToSize(`• ${plain(item)}`, PDF_W - PDF_M * 2 - 3);
+    y = pdfEnsureSpace(doc, y, lines.length * 4.2 + 2);
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(60, 60, 60);
+    doc.text(lines, PDF_M + 2, y);
+    y += lines.length * 4.2 + 1.5;
+  }
+  return y + 5;
+}
+
+function pdfCover(doc, { name, version, createdAt, iniVersion, iniCreatedAt, changes, bullets, iniTotals, curTotals }) {
+  let y = PDF_M + 6;
+  doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(20, 20, 20);
+  doc.text(plain(`Resumo da simulação — ${name} (v${version})`), PDF_M, y); y += 6;
+  const nChanges = changes.mix.length + changes.params.length + changes.items.length + changes.base.length;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GRAY);
+  const meta = doc.splitTextToSize(plain(
+    `Versão v${version} de ${new Date(createdAt).toLocaleString("pt-BR")} · comparada com o cenário inicial (v${iniVersion} de ${new Date(iniCreatedAt).toLocaleString("pt-BR")}) · ${nChanges} alteração(ões) de configuração`
+  ), PDF_W - PDF_M * 2);
+  doc.text(meta, PDF_M, y); y += meta.length * 4 + 2;
+
+  const dv = curTotals.vendas - iniTotals.vendas;
+  const dm = curTotals.margem - iniTotals.margem;
+  autoTable(doc, {
+    startY: y,
+    margin: { left: PDF_M, right: PDF_M },
+    tableWidth: 160,
+    head: [["Indicador", `Inicial (v${iniVersion})`, `Esta versão (v${version})`, "Dif."]],
+    body: [
+      ["Vendas (kits)", String(iniTotals.vendas), String(curTotals.vendas), `${dv >= 0 ? "+" : ""}${dv}`],
+      ["Faturamento", BRL(iniTotals.fat), BRL(curTotals.fat), plain(dBRL(curTotals.fat - iniTotals.fat))],
+      ["Lucro líquido", BRL(iniTotals.lucro), BRL(curTotals.lucro), plain(dBRL(curTotals.lucro - iniTotals.lucro))],
+      ["Margem", `${pctBR(iniTotals.margem)}%`, `${pctBR(curTotals.margem)}%`, `${dm >= 0 ? "+" : "-"}${pctBR(Math.abs(dm))} pp`],
+    ],
+    styles: { fontSize: 9, halign: "right", cellPadding: 1.6 },
+    headStyles: { fillColor: NAVY, halign: "right" },
+    columnStyles: { 0: { halign: "left", fontStyle: "bold" } },
+    didParseCell: (d) => {
+      if (d.section === "body" && d.column.index === 3) {
+        const v = String(d.cell.raw);
+        if (/^\+/.test(v) && !/^\+0([,.]0+)?( pp)?$/.test(v)) d.cell.styles.textColor = [39, 103, 73];
+        else if (/^-/.test(v)) d.cell.styles.textColor = RED;
+      }
+    },
+  });
+  y = doc.lastAutoTable.finalY + 8;
+
+  y = pdfBullets(doc, y, "Análise automática", bullets, "Sem variações relevantes.");
+  y = pdfBullets(doc, y, "Mix de vendas alterado", changes.mix, "Mix inalterado.");
+  y = pdfBullets(doc, y, "Parâmetros por loja alterados", changes.params, "Comissão, NF e ajuste de preço inalterados.");
+  y = pdfBullets(doc, y, "Preços & itens alterados", changes.items, "Preços, kits, taxas e fretes inalterados.");
+  pdfBullets(doc, y, "Base de estoque/custo", changes.base, "Mesma base de estoque e custo do cenário inicial.");
+  doc.addPage();
+}
+
+function pdfReport(doc, { name, subtitle, calc, stores, products, mix }) {
+  let y = PDF_M + 6;
+  doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(20, 20, 20);
+  doc.text(plain("Simulação de cenário — Mix de canais (por loja)"), PDF_M, y); y += 6;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GRAY);
+  doc.text(plain(`Cenário: ${name}${subtitle ? ` · ${subtitle}` : ""}`), PDF_M, y); y += 4;
+
+  const t = calc.totals;
+  autoTable(doc, {
+    startY: y, margin: { left: PDF_M, right: PDF_M }, tableWidth: 170,
+    head: [["Vendas (kits)", "Faturamento", "Lucro líquido", "Margem"]],
+    body: [[String(t.vendas), BRL(t.fat), BRL(t.lucro), `${t.margem.toFixed(0)}%`]],
+    styles: { fontSize: 10, halign: "center", fontStyle: "bold", cellPadding: 1.6 },
+    headStyles: { fillColor: NAVY, halign: "center" },
+  });
+  y = doc.lastAutoTable.finalY + 9;
+
+  stores.forEach(st => {
+    const rows = products.map(p => {
+      const c = calc.cell[key(st.id, p.id)];
+      if (!c || c.vendas === 0) return null;
+      return [plain(`${p.codigo} · ${p.descricao}`), String(c.vendas), BRL(c.kitPrice), BRL(c.fat),
+        BRL(c.comV), BRL(c.fixV), BRL(c.freteV), BRL(c.nfV), BRL(c.cost), BRL(c.lucro), `${c.margem.toFixed(0)}%`];
+    }).filter(Boolean);
+    if (!rows.length) return;
     const ps = calc.perStore[st.id] || { vendas: 0, fat: 0, lucro: 0 };
     const m = ps.fat ? ps.lucro / ps.fat * 100 : 0;
-    if (!pRows) return "";
-    return `<h3>${esc(st.name)} — ${MPLABEL[st.platform] || esc(st.platform)} <span class=s>(${Math.round(Number(mix[st.id]) || 0)}% do mix)</span></h3>
-      <table class=rep><thead><tr><th>Produto</th><th>Vendas</th><th>Preço kit</th><th>Faturam.</th><th>Comissão</th><th>Taxa fixa</th><th>Frete</th><th>NF</th><th>Custo</th><th>Lucro líq.</th><th>Margem</th></tr></thead>
-      <tbody>${pRows}<tr class=sub><td>Subtotal ${esc(st.name)}</td><td class=n>${ps.vendas}</td><td></td><td class=n>${BRL(ps.fat)}</td><td colspan=5></td><td class=n><b>${BRL(ps.lucro)}</b></td><td class=n>${m.toFixed(0)}%</td></tr></tbody></table>`;
-  }).join("");
+    rows.push([plain(`Subtotal ${st.name}`), String(ps.vendas), "", BRL(ps.fat), "", "", "", "", "", BRL(ps.lucro), `${m.toFixed(0)}%`]);
+
+    y = pdfEnsureSpace(doc, y, 34);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10.5); doc.setTextColor(...NAVY);
+    doc.text(plain(`${st.name} — ${MPLABEL[st.platform] || st.platform} (${Math.round(Number(mix[st.id]) || 0)}% do mix)`), PDF_M, y);
+    y += 2;
+
+    autoTable(doc, {
+      startY: y, margin: { left: PDF_M, right: PDF_M },
+      head: [["Produto", "Vendas", "Preço kit", "Faturam.", "Comissão", "Taxa fixa", "Frete", "NF", "Custo", "Lucro líq.", "Margem"]],
+      body: rows,
+      styles: { fontSize: 7.5, halign: "right", cellPadding: 1.2 },
+      headStyles: { fillColor: [235, 238, 245], textColor: 30, halign: "right" },
+      columnStyles: { 0: { halign: "left", cellWidth: 72 } },
+      didParseCell: (d) => {
+        if (d.section !== "body") return;
+        const sub = d.row.index === rows.length - 1;
+        if (sub) { d.cell.styles.fontStyle = "bold"; d.cell.styles.fillColor = [235, 235, 235]; }
+        else if (d.column.index >= 4 && d.column.index <= 8) d.cell.styles.textColor = RED;
+      },
+    });
+    y = doc.lastAutoTable.finalY + 8;
+  });
+
+  y = pdfEnsureSpace(doc, y, 12);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...GRAY);
+  const nota = doc.splitTextToSize(plain(
+    "Fórmula: Lucro = Faturamento − Comissão% − Taxa fixa×vendas − Frete − NF% − (Custo médio × vendas × kit). Faturamento = preço do kit × vendas."
+  ), PDF_W - PDF_M * 2);
+  doc.text(nota, PDF_M, y);
 }
 
-function buildCoverHTML({ name, version, createdAt, iniVersion, iniCreatedAt, changes, bullets, iniTotals, curTotals }) {
-  const kpiRow = (label, a, b, fmtFn, deltaFmt) => {
-    const d = b - a;
-    const cls = d > 0 ? "pos" : d < 0 ? "neg" : "";
-    return `<tr><td>${label}</td><td>${fmtFn(a)}</td><td>${fmtFn(b)}</td><td class="${cls}">${deltaFmt(d)}</td></tr>`;
-  };
-  const section = (title, arr, emptyMsg) =>
-    `<h2>${title}</h2>` + (arr.length ? `<ul>${arr.map(c => `<li>${c}</li>`).join("")}</ul>` : `<ul><li style="color:#777">${emptyMsg}</li></ul>`);
-  const nChanges = changes.mix.length + changes.params.length + changes.items.length + changes.base.length;
-  return `<div class=cover>
-    <h1>Resumo da simulação — ${esc(name)} <span class=tag>v${version}</span></h1>
-    <div class=meta>Versão v${version} de ${new Date(createdAt).toLocaleString("pt-BR")} · comparada com o cenário inicial (v${iniVersion} de ${new Date(iniCreatedAt).toLocaleString("pt-BR")}) · ${nChanges} alteração(ões) de configuração</div>
-    <table class=kpi>
-      <thead><tr><th>Indicador</th><th>Inicial (v${iniVersion})</th><th>Esta versão (v${version})</th><th>Δ</th></tr></thead>
-      <tbody>
-        ${kpiRow("Vendas (kits)", iniTotals.vendas, curTotals.vendas, v => v, d => (d >= 0 ? "+" : "") + d)}
-        ${kpiRow("Faturamento", iniTotals.fat, curTotals.fat, BRL, dBRL)}
-        ${kpiRow("Lucro líquido", iniTotals.lucro, curTotals.lucro, BRL, dBRL)}
-        ${kpiRow("Margem", iniTotals.margem, curTotals.margem, v => pctBR(v) + "%", d => (d >= 0 ? "+" : "−") + pctBR(Math.abs(d)) + " pp")}
-      </tbody>
-    </table>
-    ${section("Análise automática", bullets, "Sem variações relevantes.")}
-    ${section("Mix de vendas alterado", changes.mix, "Mix inalterado.")}
-    ${section("Parâmetros por loja alterados", changes.params, "Comissão, NF e ajuste de preço inalterados.")}
-    ${section("Preços & itens alterados", changes.items, "Preços, kits, taxas e fretes inalterados.")}
-    ${section("Base de estoque/custo", changes.base, "Mesma base de estoque e custo do cenário inicial.")}
-  </div>`;
+function buildPdfDoc({ capa = null, cover = null, name, subtitle, calc, stores, products, mix }) {
+  const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+  if (capa) pdfCapa(doc, capa);
+  if (cover) pdfCover(doc, cover);
+  pdfReport(doc, { name, subtitle, calc, stores, products, mix });
+  return doc;
 }
 
-function buildReportDoc({ title, name, subtitle, coverHtml = "", calc, stores, products, mix }) {
-  const t = calc.totals;
-  return `<!doctype html><html><head><meta charset=utf-8><title>${esc(title)}</title><style>${REPORT_CSS}</style></head><body>
-    ${coverHtml}
-    <h1>Simulação de cenário — Mix de canais (por loja)</h1>
-    <div class=meta>Cenário: <b>${esc(name)}</b>${subtitle ? ` · ${subtitle}` : ""}</div>
-    <div class=summary><div>Vendas (kits)<b>${t.vendas}</b></div><div>Faturamento<b>${BRL(t.fat)}</b></div><div>Lucro líquido<b>${BRL(t.lucro)}</b></div><div>Margem<b>${t.margem.toFixed(0)}%</b></div></div>
-    ${buildStoreTables(calc, stores, products, mix)}
-    <div class=meta style="margin-top:14px">Fórmula: Lucro = Faturamento − Comissão% − Taxa fixa×vendas − Frete − NF% − (Custo médio × vendas × kit). Faturamento = preço do kit × vendas.</div>
-    </body></html>`;
-}
+const pdfFileName = (s) => {
+  const base = String(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9_-]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 60);
+  return `${base || "simulacao"}.pdf`;
+};
 
 export default function Simulator() {
   const [base, setBase] = useState(null);
@@ -336,21 +523,17 @@ export default function Simulator() {
     try { await deleteSimulationGroup(g.gid); load(); } catch (e) { toast({ status: "error", title: "Erro", description: e.message }); }
   }
 
-  function openPrint(doc) {
-    const w = window.open("", "_blank");
-    if (!w) { toast({ status: "warning", title: "Permita pop-ups para gerar o PDF" }); return; }
-    w.document.write(doc); w.document.close();
-    w.onload = () => { w.focus(); w.print(); };
-    setTimeout(() => { try { w.focus(); w.print(); } catch (e) {} }, 400);
-  }
-
-  // PDF do editor (estado atual em edição)
-  function printPDF() {
-    const doc = buildReportDoc({
-      title: name, name, subtitle: new Date().toLocaleString("pt-BR"),
-      calc, stores, products, mix,
-    });
-    openPrint(doc);
+  // PDF do editor (estado atual em edição) — gera o arquivo e baixa, sem sair da tela
+  async function printPDF() {
+    try {
+      const logo = await loadCompanyLogo();
+      const capa = { title: "Simulação de Cenário", subtitle: `${name} · ${new Date().toLocaleString("pt-BR")}`, logo };
+      const doc = buildPdfDoc({ capa, name, subtitle: new Date().toLocaleString("pt-BR"), calc, stores, products, mix });
+      doc.save(pdfFileName(name));
+      toast({ status: "success", title: "PDF baixado", description: "Abra pelo leitor de PDF do aparelho (no iPhone: ícone de downloads do Safari ou app Arquivos)." });
+    } catch (e) {
+      toast({ status: "error", title: "Erro ao gerar PDF", description: e.message });
+    }
   }
 
   // PDF de um cenário salvo: capa de resumo (diff vs. versão inicial) + relatório
@@ -361,28 +544,34 @@ export default function Simulator() {
       const curD = cur.data || {};
       const curCalc = computeCalc(curD.stores || [], curD.products || [], curD.mix || {}, curD.params || {}, curD.items || {});
 
-      let coverHtml = "";
+      let cover = null;
       const v1 = group.versions[group.versions.length - 1]; // menor versão = inicial
       if (v1 && v1.id !== row.id) {
         const ini = await fetchSimulation(v1.id);
         const iniD = ini.data || {};
         const iniCalc = computeCalc(iniD.stores || [], iniD.products || [], iniD.mix || {}, iniD.params || {}, iniD.items || {});
-        coverHtml = buildCoverHTML({
+        cover = {
           name: cur.name, version: cur.version || 1, createdAt: cur.created_at,
           iniVersion: ini.version || 1, iniCreatedAt: ini.created_at,
           changes: diffVersions(iniD, curD),
           bullets: buildAnalysis(iniD, curD, iniCalc, curCalc),
           iniTotals: iniCalc.totals, curTotals: curCalc.totals,
-        });
+        };
       }
-      const doc = buildReportDoc({
-        title: `${cur.name} (v${cur.version || 1})`,
+      const logo = await loadCompanyLogo();
+      const doc = buildPdfDoc({
+        capa: {
+          title: "Simulação de Cenário",
+          subtitle: `${cur.name} · v${cur.version || 1} · ${new Date(cur.created_at).toLocaleString("pt-BR")}`,
+          logo,
+        },
+        cover,
         name: cur.name,
         subtitle: `v${cur.version || 1} · ${new Date(cur.created_at).toLocaleString("pt-BR")}`,
-        coverHtml,
         calc: curCalc, stores: curD.stores || [], products: curD.products || [], mix: curD.mix || {},
       });
-      openPrint(doc);
+      doc.save(pdfFileName(`${cur.name}_v${cur.version || 1}`));
+      toast({ status: "success", title: "PDF baixado", description: "Abra pelo leitor de PDF do aparelho (no iPhone: ícone de downloads do Safari ou app Arquivos)." });
     } catch (e) {
       toast({ status: "error", title: "Erro ao gerar PDF", description: e.message });
     } finally { setPdfBusy(null); }
@@ -461,7 +650,7 @@ export default function Simulator() {
         <Button size="sm" variant="outline" onClick={() => setView("list")}>← Cenários</Button>
         <Input maxW="320px" fontWeight="bold" value={name} onChange={e => setName(e.target.value)} />
         {snapMeta?.version && <Badge colorScheme="purple">editando a partir da v{snapMeta.version}</Badge>}
-        <Button size="sm" variant="outline" onClick={printPDF} ml="auto">🖨 Imprimir / PDF</Button>
+        <Button size="sm" variant="outline" onClick={printPDF} ml="auto">⬇️ Baixar PDF</Button>
       </Flex>
 
       {/* Mix por loja */}
