@@ -7,6 +7,8 @@ import {
   FormControl,
   FormLabel,
   Input,
+  InputGroup,
+  InputLeftElement,
   Select,
   SimpleGrid,
   Spinner,
@@ -26,9 +28,11 @@ import {
   Tr,
   Text,
   Tooltip,
+  VStack,
+  useBreakpointValue,
   useColorModeValue,
 } from "@chakra-ui/react";
-import { InfoIcon } from "@chakra-ui/icons";
+import { InfoIcon, SearchIcon } from "@chakra-ui/icons";
 import useAppToast from "../hooks/useAppToast";
 import { fetchStockConsumption, fetchStockLowStock, fetchStockMovementsReport } from "../api";
 import { formatSaoPaulo } from "../utils/timezone";
@@ -59,6 +63,17 @@ const COBERTURA_INFO =
   "Cobertura = saldo atual ÷ média de saídas por dia (média/dia = saídas do período ÷ dias do período). " +
   "Indica por quantos dias o estoque atual deve durar mantido o ritmo de vendas do período. " +
   "\"—\" significa que não houve saídas no período (sem consumo para estimar).";
+
+// Rótulo + valor usado nos cards do layout mobile
+function CardStat({ label, children }) {
+  const subtle = useColorModeValue("gray.500", "gray.400");
+  return (
+    <Box>
+      <Text fontSize="10px" textTransform="uppercase" letterSpacing="wide" color={subtle}>{label}</Text>
+      <Box fontSize="sm" fontWeight="medium">{children}</Box>
+    </Box>
+  );
+}
 
 export default function StockReports() {
   const subtle = useColorModeValue("gray.500", "gray.400");
@@ -96,16 +111,19 @@ function ConsumptionReport() {
 
   const [from, setFrom] = useState(toISO(past));
   const [to, setTo] = useState(toISO(today));
+  const [busca, setBusca] = useState("");
   const [report, setReport] = useState(null);
   const [lowStock, setLowStock] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState("codigo");
   const toast = useAppToast();
 
+  const isMobile = useBreakpointValue({ base: true, md: false });
   const cardBg = useColorModeValue("white", "gray.800");
   const border = useColorModeValue("gray.200", "gray.700");
   const subtle = useColorModeValue("gray.500", "gray.400");
   const lowBg = useColorModeValue("red.50", "rgba(254,178,178,0.08)");
+  const theadBg = useColorModeValue("gray.100", "gray.700");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -125,9 +143,16 @@ function ConsumptionReport() {
 
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Ordenação aplicada no cliente; a grade (RN, P, M, G, GG...) é sempre o critério de desempate
+  // Busca (código ou nome) + ordenação no cliente; a grade (RN, P, M, G, GG...) é sempre o desempate
   const sortedItems = useMemo(() => {
-    const items = [...(report?.items || [])];
+    const q = busca.trim().toLowerCase();
+    let items = [...(report?.items || [])];
+    if (q) {
+      items = items.filter(i =>
+        String(i.product_codigo ?? "").toLowerCase().includes(q) ||
+        String(i.descricao ?? "").toLowerCase().includes(q)
+      );
+    }
     const byGrade = (a, b) => sizeRank(a.tamanho) - sizeRank(b.tamanho);
     const cmp = {
       nome: (a, b) =>
@@ -147,20 +172,29 @@ function ConsumptionReport() {
     };
     items.sort(cmp[sortBy] || cmp.codigo);
     return items;
-  }, [report, sortBy]);
+  }, [report, sortBy, busca]);
+
+  const buscando = busca.trim().length > 0;
 
   return (
     <Box>
       <Flex gap={3} align="end" wrap="wrap" mb={4}>
-        <FormControl maxW="180px">
+        <FormControl w={{ base: "calc(50% - 6px)", md: "180px" }}>
           <FormLabel fontSize="sm">De</FormLabel>
           <Input type="date" value={from} onChange={e => setFrom(e.target.value)} />
         </FormControl>
-        <FormControl maxW="180px">
+        <FormControl w={{ base: "calc(50% - 6px)", md: "180px" }}>
           <FormLabel fontSize="sm">Até</FormLabel>
           <Input type="date" value={to} onChange={e => setTo(e.target.value)} />
         </FormControl>
-        <FormControl maxW="180px">
+        <FormControl w={{ base: "100%", md: "260px" }}>
+          <FormLabel fontSize="sm">Buscar produto</FormLabel>
+          <InputGroup>
+            <InputLeftElement pointerEvents="none"><SearchIcon color={subtle} /></InputLeftElement>
+            <Input placeholder="código ou nome" value={busca} onChange={e => setBusca(e.target.value)} />
+          </InputGroup>
+        </FormControl>
+        <FormControl w={{ base: "calc(60% - 6px)", md: "180px" }}>
           <FormLabel fontSize="sm">Ordenar por</FormLabel>
           <Select value={sortBy} onChange={e => setSortBy(e.target.value)}>
             <option value="codigo">Código</option>
@@ -169,7 +203,7 @@ function ConsumptionReport() {
             <option value="cobertura">Cobertura</option>
           </Select>
         </FormControl>
-        <Button colorScheme="blue" onClick={load}>Atualizar</Button>
+        <Button colorScheme="blue" onClick={load} flex={{ base: "1", md: "0 0 auto" }}>Atualizar</Button>
       </Flex>
 
       {loading ? (
@@ -184,7 +218,9 @@ function ConsumptionReport() {
             </Stat>
             <Stat bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
               <StatLabel fontSize="xs">Variantes</StatLabel>
-              <StatNumber fontSize="lg">{report?.items?.length ?? 0}</StatNumber>
+              <StatNumber fontSize="lg">
+                {buscando ? `${sortedItems.length} de ${report?.items?.length ?? 0}` : report?.items?.length ?? 0}
+              </StatNumber>
             </Stat>
             <Stat bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
               <StatLabel fontSize="xs">Total de saídas</StatLabel>
@@ -200,32 +236,87 @@ function ConsumptionReport() {
           {lowStock.length > 0 && (
             <Box bg={lowBg} borderWidth="1px" borderColor="red.300" borderRadius="lg" p={4} mb={5}>
               <Text fontWeight="bold" color="red.500" mb={2}>⚠️ Produtos com estoque baixo</Text>
-              <Box overflowX="auto">
-                <Table size="sm">
-                  <Thead><Tr><Th>Produto</Th><Th>Tam.</Th><Th isNumeric>Saldo</Th><Th isNumeric>Mínimo</Th></Tr></Thead>
-                  <Tbody>
-                    {lowStock.map(v => (
-                      <Tr key={v.variant_id}>
-                        <Td>{v.product_codigo} · {v.descricao}</Td>
-                        <Td>{v.tamanho}</Td>
-                        <Td isNumeric><Badge colorScheme="red">{v.balance}</Badge></Td>
-                        <Td isNumeric>{v.min_stock}</Td>
-                      </Tr>
-                    ))}
-                  </Tbody>
-                </Table>
-              </Box>
+              {isMobile ? (
+                <VStack spacing={2} align="stretch">
+                  {lowStock.map(v => (
+                    <Flex key={v.variant_id} justify="space-between" align="center" gap={2} fontSize="sm">
+                      <Text noOfLines={2}>{v.product_codigo} · {v.descricao} <Badge ml={1}>{v.tamanho}</Badge></Text>
+                      <Text flexShrink={0} whiteSpace="nowrap">
+                        <Badge colorScheme="red">{v.balance}</Badge>
+                        <Text as="span" color={subtle}> / mín {v.min_stock}</Text>
+                      </Text>
+                    </Flex>
+                  ))}
+                </VStack>
+              ) : (
+                <Box overflowX="auto">
+                  <Table size="sm">
+                    <Thead><Tr><Th>Produto</Th><Th>Tam.</Th><Th isNumeric>Saldo</Th><Th isNumeric>Mínimo</Th></Tr></Thead>
+                    <Tbody>
+                      {lowStock.map(v => (
+                        <Tr key={v.variant_id}>
+                          <Td>{v.product_codigo} · {v.descricao}</Td>
+                          <Td>{v.tamanho}</Td>
+                          <Td isNumeric><Badge colorScheme="red">{v.balance}</Badge></Td>
+                          <Td isNumeric>{v.min_stock}</Td>
+                        </Tr>
+                      ))}
+                    </Tbody>
+                  </Table>
+                </Box>
+              )}
             </Box>
           )}
 
           {/* Consumo médio */}
           <Text fontWeight="semibold" mb={2}>Consumo médio &amp; cobertura</Text>
-          {!report?.items?.length ? (
-            <Text fontSize="sm" color={subtle}>Sem dados no período.</Text>
+          {!sortedItems.length ? (
+            <Text fontSize="sm" color={subtle}>
+              {buscando ? "Nenhum produto encontrado para a busca." : "Sem dados no período."}
+            </Text>
+          ) : isMobile ? (
+            <VStack spacing={2} align="stretch">
+              {sortedItems.map(i => {
+                const low = i.min_stock > 0 && i.balance <= i.min_stock;
+                const riscoCobertura = i.coverage_days !== null && i.coverage_days < 7;
+                return (
+                  <Box
+                    key={i.variant_id}
+                    bg={low ? lowBg : cardBg}
+                    borderWidth="1px"
+                    borderColor={low ? "red.300" : border}
+                    borderRadius="lg"
+                    p={3}
+                  >
+                    <Flex justify="space-between" align="start" gap={2} mb={2}>
+                      <Text fontSize="sm" fontWeight="semibold" noOfLines={2}>
+                        {i.product_codigo} · {i.descricao}
+                      </Text>
+                      <Badge flexShrink={0}>{i.tamanho}</Badge>
+                    </Flex>
+                    <SimpleGrid columns={3} spacingX={2} spacingY={3}>
+                      <CardStat label="Saldo">
+                        <Badge colorScheme={low ? "red" : "gray"}>{i.balance}</Badge>
+                      </CardStat>
+                      <CardStat label="Saídas">{i.total_out}</CardStat>
+                      <CardStat label="Média/dia">{fmt(i.avg_daily, 2)}</CardStat>
+                      <CardStat label="Cobertura">
+                        {i.coverage_days === null ? (
+                          <Text as="span" color={subtle}>—</Text>
+                        ) : (
+                          <Badge colorScheme={riscoCobertura ? "orange" : "green"}>{fmt(i.coverage_days, 1)} dias</Badge>
+                        )}
+                      </CardStat>
+                      <CardStat label="Mínimo">{i.min_stock}</CardStat>
+                    </SimpleGrid>
+                  </Box>
+                );
+              })}
+            </VStack>
           ) : (
-            <Box overflowX="auto">
+            <Box overflowX="auto" overflowY="auto" maxH="70vh">
               <Table size="sm">
-                <Thead>
+                <Thead position="sticky" top={0} zIndex={1} bg={theadBg}>
                   <Tr>
                     <Th>Produto</Th><Th>Tam.</Th>
                     <Th isNumeric>Saldo</Th><Th isNumeric>Saídas (período)</Th>
@@ -289,9 +380,11 @@ function MovementsReport() {
   const [loading, setLoading] = useState(false);
   const toast = useAppToast();
 
+  const isMobile = useBreakpointValue({ base: true, md: false });
   const cardBg = useColorModeValue("white", "gray.800");
   const border = useColorModeValue("gray.200", "gray.700");
   const subtle = useColorModeValue("gray.500", "gray.400");
+  const theadBg = useColorModeValue("gray.100", "gray.700");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -317,27 +410,30 @@ function MovementsReport() {
   return (
     <Box>
       <Flex gap={3} align="end" wrap="wrap" mb={4}>
-        <FormControl maxW="160px">
+        <FormControl w={{ base: "calc(50% - 6px)", md: "160px" }}>
           <FormLabel fontSize="sm">De</FormLabel>
           <Input type="date" value={from} onChange={e => setFrom(e.target.value)} />
         </FormControl>
-        <FormControl maxW="160px">
+        <FormControl w={{ base: "calc(50% - 6px)", md: "160px" }}>
           <FormLabel fontSize="sm">Até</FormLabel>
           <Input type="date" value={to} onChange={e => setTo(e.target.value)} />
         </FormControl>
-        <FormControl maxW="140px">
+        <FormControl w={{ base: "calc(50% - 6px)", md: "140px" }}>
           <FormLabel fontSize="sm">Cód. produto</FormLabel>
           <Input placeholder="ex: 004" value={codigo} onChange={e => setCodigo(e.target.value)} />
         </FormControl>
-        <FormControl maxW="110px">
+        <FormControl w={{ base: "calc(50% - 6px)", md: "110px" }}>
           <FormLabel fontSize="sm">Tamanho</FormLabel>
           <Input placeholder="ex: P" value={tamanho} onChange={e => setTamanho(e.target.value)} />
         </FormControl>
-        <FormControl maxW="200px">
+        <FormControl w={{ base: "100%", md: "200px" }}>
           <FormLabel fontSize="sm">Produto / descrição</FormLabel>
-          <Input placeholder="buscar" value={q} onChange={e => setQ(e.target.value)} />
+          <InputGroup>
+            <InputLeftElement pointerEvents="none"><SearchIcon color={subtle} /></InputLeftElement>
+            <Input placeholder="buscar" value={q} onChange={e => setQ(e.target.value)} />
+          </InputGroup>
         </FormControl>
-        <FormControl maxW="150px">
+        <FormControl w={{ base: "calc(60% - 6px)", md: "150px" }}>
           <FormLabel fontSize="sm">Tipo</FormLabel>
           <Select value={tipo} onChange={e => setTipo(e.target.value)}>
             <option value="">Todos</option>
@@ -346,14 +442,14 @@ function MovementsReport() {
             <option value="ajuste">Ajuste</option>
           </Select>
         </FormControl>
-        <Button colorScheme="blue" onClick={load}>Filtrar</Button>
+        <Button colorScheme="blue" onClick={load} flex={{ base: "1", md: "0 0 auto" }}>Filtrar</Button>
       </Flex>
 
       {loading ? (
         <Flex justify="center" py={10}><Spinner /></Flex>
       ) : (
         <>
-          <SimpleGrid columns={{ base: 2, md: 3 }} spacing={3} mb={5}>
+          <SimpleGrid columns={{ base: 3, md: 3 }} spacing={3} mb={5}>
             <Stat bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
               <StatLabel fontSize="xs">Movimentos</StatLabel>
               <StatNumber fontSize="lg">{data?.count ?? 0}</StatNumber>
@@ -370,10 +466,36 @@ function MovementsReport() {
 
           {!items.length ? (
             <Text fontSize="sm" color={subtle}>Nenhuma movimentação no período/filtros.</Text>
+          ) : isMobile ? (
+            <VStack spacing={2} align="stretch">
+              {items.map(m => (
+                <Box key={m.id} bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={3}>
+                  <Flex justify="space-between" align="start" gap={2} mb={2}>
+                    <Text fontSize="sm" fontWeight="semibold" noOfLines={2}>
+                      {m.product_codigo} · {m.descricao}
+                    </Text>
+                    <Badge flexShrink={0}>{m.tamanho}</Badge>
+                  </Flex>
+                  <Flex align="center" gap={3} mb={2} wrap="wrap">
+                    <Badge colorScheme={TIPO_COLOR[m.tipo] || "gray"}>{TIPO_LABEL[m.tipo] || m.tipo}</Badge>
+                    <Text fontWeight="bold" color={m.qty > 0 ? "green.500" : m.qty < 0 ? "red.500" : undefined}>
+                      {m.qty > 0 ? "+" : ""}{m.qty}
+                    </Text>
+                    <Text fontSize="xs" color={subtle}>saldo após: <b>{m.resulting_balance}</b></Text>
+                  </Flex>
+                  <Text fontSize="xs" color={subtle}>
+                    {formatSaoPaulo(m.created_at)}
+                    {m.user_name ? ` · ${m.user_name}` : ""}
+                    {m.reason_nome ? ` · ${m.reason_nome}` : ""}
+                  </Text>
+                  {m.note && <Text fontSize="xs" color={subtle} mt={1}>Obs: {m.note}</Text>}
+                </Box>
+              ))}
+            </VStack>
           ) : (
-            <Box overflowX="auto">
+            <Box overflowX="auto" overflowY="auto" maxH="70vh">
               <Table size="sm">
-                <Thead>
+                <Thead position="sticky" top={0} zIndex={1} bg={theadBg}>
                   <Tr>
                     <Th>Data/Hora</Th>
                     <Th>Produto</Th>
