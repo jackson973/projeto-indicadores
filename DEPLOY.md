@@ -351,7 +351,30 @@ Acesse no navegador: `https://seudominio.com`
 
 ## 🔄 Parte 10: Atualizações Futuras
 
-### Script de Deploy Automático
+### Deploy Automático Contínuo (serviço systemd)
+
+O jeito recomendado: instalar o watcher que verifica novos commits em `origin/main` a cada 20 segundos e roda o `deploy.sh` sozinho quando encontrar.
+
+```bash
+# No servidor, uma única vez, como o usuário de deploy
+cd ~/projeto-indicadores
+bash scripts/install-auto-deploy.sh
+```
+
+Depois disso, basta fazer `git push` para `main` — o servidor se atualiza sozinho em até ~20s.
+
+```bash
+sudo systemctl status auto-deploy        # status do watcher
+sudo journalctl -u auto-deploy -f        # acompanhar logs (fetch, deploys)
+sudo systemctl disable --now auto-deploy # desativar
+```
+
+Observações:
+- O usuário do serviço precisa de **sudo sem senha** (o `deploy.sh` usa sudo para nginx/mount). O instalador avisa se não estiver configurado.
+- Se um deploy falhar, o watcher espera 5 minutos antes de tentar de novo (ou tenta imediatamente se chegar um commit novo).
+- Intervalo e branch são configuráveis via `Environment=` no service (`INTERVAL`, `BRANCH`, `RETRY_DELAY`).
+
+### Deploy Manual
 
 Use o script `deploy.sh` fornecido:
 
