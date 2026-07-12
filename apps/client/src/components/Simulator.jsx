@@ -31,13 +31,17 @@ function topCommission(bands, platform) {
 const key = (s, p) => `${s}:${p}`;
 
 // ─── Cálculo puro do cenário (usado no editor e no PDF de cenários salvos) ────
-function computeCalc(stores, products, mix, params, items) {
+// selection: { store_id -> [product_id...] } — produtos na visão de cada loja; null/ausente = todos
+function computeCalc(stores, products, mix, params, items, selection = null) {
   const perStore = {}; let gV = 0, gF = 0, gL = 0;
   const cell = {};
   stores.forEach(s => { perStore[s.id] = { vendas: 0, fat: 0, lucro: 0 }; });
   stores.forEach(s => {
     const pp = params[s.id] || { com: 0, nf: 0, precoAjuste: 0 };
+    const selArr = selection ? selection[s.id] : null;
+    const selSet = Array.isArray(selArr) ? new Set(selArr.map(Number)) : null;
     products.forEach(p => {
+      if (selSet && !selSet.has(Number(p.id))) return;
       const it = items[key(s.id, p.id)] || { kit: 1, unit_price: 0, fixa: 0, frete_type: "none", frete_value: 0 };
       const kit = Number(it.kit) || 1;
       const pieces = Math.round((Number(p.saldo) || 0) * (Number(mix[s.id]) || 0) / 100);
@@ -65,7 +69,7 @@ const freteLabel = (it) =>
 
 // ─── Diff entre versões (o que foi alterado vs. cenário inicial) ─────────────
 function diffVersions(iniD, curD) {
-  const changes = { mix: [], params: [], items: [], base: [] };
+  const changes = { mix: [], params: [], items: [], base: [], visao: [] };
   const num = (v) => Number(v) || 0;
   const storeOf = (id) =>
     (curD.stores || []).find(s => String(s.id) === String(id)) ||
@@ -118,6 +122,22 @@ function diffVersions(iniD, curD) {
     if (num(a.saldo) !== num(b.saldo)) d.push(`Saldo ${num(a.saldo)} → <b>${num(b.saldo)} pç</b>`);
     if (Math.abs(num(a.avg_cost) - num(b.avg_cost)) >= 0.005) d.push(`Custo médio ${BRL(a.avg_cost)} → <b>${BRL(b.avg_cost)}</b>`);
     if (d.length) changes.base.push(`${esc(prodName(id))}: ${d.join(" · ")}`);
+  });
+
+  // Produtos na visão de cada loja (seleção; ausente = todos os produtos da versão)
+  const selOf = (d, sid) => {
+    const arr = d.selection?.[sid];
+    return new Set(Array.isArray(arr) ? arr.map(String) : (d.products || []).map(p => String(p.id)));
+  };
+  const visStoreIds = [...new Set([...(iniD.stores || []).map(s => String(s.id)), ...(curD.stores || []).map(s => String(s.id))])];
+  visStoreIds.forEach(sid => {
+    const a = selOf(iniD, sid), b = selOf(curD, sid);
+    const added = [...b].filter(x => !a.has(x)).map(x => esc(prodName(x)));
+    const removed = [...a].filter(x => !b.has(x)).map(x => esc(prodName(x)));
+    const parts = [];
+    if (added.length) parts.push(`incluiu <b>${added.join(", ")}</b>`);
+    if (removed.length) parts.push(`removeu <b>${removed.join(", ")}</b>`);
+    if (parts.length) changes.visao.push(`${storeName(sid)}: ${parts.join(" · ")}`);
   });
 
   return changes;
@@ -303,7 +323,7 @@ function pdfCover(doc, { name, version, createdAt, iniVersion, iniCreatedAt, cha
   let y = PDF_M + 6;
   doc.setFont("helvetica", "bold"); doc.setFontSize(15); doc.setTextColor(20, 20, 20);
   doc.text(plain(`Resumo da simulação — ${name} (v${version})`), PDF_M, y); y += 6;
-  const nChanges = changes.mix.length + changes.params.length + changes.items.length + changes.base.length;
+  const nChanges = Object.values(changes).reduce((n, a) => n + a.length, 0);
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GRAY);
   const meta = doc.splitTextToSize(plain(
     `Versão v${version} de ${new Date(createdAt).toLocaleString("pt-BR")} · comparada com o cenário inicial (v${iniVersion} de ${new Date(iniCreatedAt).toLocaleString("pt-BR")}) · ${nChanges} alteração(ões) de configuração`
@@ -340,6 +360,7 @@ function pdfCover(doc, { name, version, createdAt, iniVersion, iniCreatedAt, cha
   y = pdfBullets(doc, y, "Mix de vendas alterado", changes.mix, "Mix inalterado.");
   y = pdfBullets(doc, y, "Parâmetros por loja alterados", changes.params, "Comissão, NF e ajuste de preço inalterados.");
   y = pdfBullets(doc, y, "Preços & itens alterados", changes.items, "Preços, kits, taxas e fretes inalterados.");
+  y = pdfBullets(doc, y, "Produtos na visão (por loja)", changes.visao, "Mesmos produtos do cenário inicial.");
   pdfBullets(doc, y, "Base de estoque/custo", changes.base, "Mesma base de estoque e custo do cenário inicial.");
   doc.addPage();
 }
@@ -430,6 +451,7 @@ export default function Simulator() {
   const [mix, setMix] = useState({});       // store_id -> %
   const [params, setParams] = useState({}); // store_id -> {com, nf, precoAjuste}
   const [items, setItems] = useState({});   // `${store}:${product}` -> {kit, unit_price, fixa, frete_type, frete_value}
+  const [selection, setSelection] = useState({}); // store_id -> [product_id...] (produtos na visão da loja)
   const [snapMeta, setSnapMeta] = useState(null); // when opening a saved snapshot (frozen stores/products + group)
 
   const subtle = useColorModeValue("gray.500", "gray.400");
@@ -482,31 +504,41 @@ export default function Simulator() {
       const fixa = resolveFee(base.feeBands, s.platform, unit * kit).fixa;
       it[key(s.id, p.id)] = { kit, unit_price: unit, fixa, frete_type: row?.frete_type || "none", frete_value: Number(row?.frete_value) || 0 };
     }));
-    setName("Novo cenário"); setMix(mx); setParams(pr); setItems(it); setSnapMeta(null); setView("editor");
+    const sel = {}; base.stores.forEach(s => { sel[s.id] = base.products.map(p => p.id); });
+    setName("Novo cenário"); setMix(mx); setParams(pr); setItems(it); setSelection(sel); setSnapMeta(null); setView("editor");
   }
 
   async function openSaved(id) {
     try {
       const s = await fetchSimulation(id);
       const d = s.data || {};
-      setName(s.name); setMix(d.mix || {}); setParams(d.params || {}); setItems(d.items || {});
+      // Cenários antigos não têm seleção salva: todos os produtos ficam na visão
+      const sel = {};
+      (d.stores || []).forEach(st => { sel[st.id] = d.selection?.[st.id] ?? (d.products || []).map(p => p.id); });
+      setName(s.name); setMix(d.mix || {}); setParams(d.params || {}); setItems(d.items || {}); setSelection(sel);
       setSnapMeta({ stores: d.stores || [], products: d.products || [], group_id: s.group_id || s.id, version: s.version });
       setView("editor");
     } catch (e) { toast({ status: "error", title: "Erro ao abrir cenário", description: e.message }); }
   }
 
   // ─── Cálculo ────────────────────────────────────────────────────────────────
-  const calc = useMemo(() => computeCalc(stores, products, mix, params, items), [stores, products, mix, params, items]);
+  const calc = useMemo(() => computeCalc(stores, products, mix, params, items, selection), [stores, products, mix, params, items, selection]);
 
   const mixSum = stores.reduce((s, st) => s + (Number(mix[st.id]) || 0), 0);
 
   const setItem = (s, p, field, value) => setItems(prev => ({ ...prev, [key(s, p)]: { ...prev[key(s, p)], [field]: value } }));
   const setParam = (s, field, value) => setParams(prev => ({ ...prev, [s]: { ...prev[s], [field]: value } }));
 
+  // Produtos na visão de uma loja (fallback: todos, p/ cenários antigos sem seleção)
+  const selFor = (sid) => selection[sid] ?? products.map(p => p.id);
+  const addProduct = (sid, pid) => setSelection(prev => ({ ...prev, [sid]: [...(prev[sid] ?? products.map(p => p.id)), Number(pid)] }));
+  const addAllProducts = (sid) => setSelection(prev => ({ ...prev, [sid]: products.map(p => p.id) }));
+  const removeProduct = (sid, pid) => setSelection(prev => ({ ...prev, [sid]: (prev[sid] ?? products.map(p => p.id)).filter(id => Number(id) !== Number(pid)) }));
+
   async function save() {
     try {
       const data = {
-        mix, params, items,
+        mix, params, items, selection,
         stores: stores.map(s => ({ id: s.id, name: s.name, platform: s.platform })),
         products: products.map(p => ({ id: p.id, codigo: p.codigo, descricao: p.descricao, saldo: p.saldo, avg_cost: p.avg_cost })),
       };
@@ -542,14 +574,14 @@ export default function Simulator() {
     try {
       const cur = await fetchSimulation(row.id);
       const curD = cur.data || {};
-      const curCalc = computeCalc(curD.stores || [], curD.products || [], curD.mix || {}, curD.params || {}, curD.items || {});
+      const curCalc = computeCalc(curD.stores || [], curD.products || [], curD.mix || {}, curD.params || {}, curD.items || {}, curD.selection || null);
 
       let cover = null;
       const v1 = group.versions[group.versions.length - 1]; // menor versão = inicial
       if (v1 && v1.id !== row.id) {
         const ini = await fetchSimulation(v1.id);
         const iniD = ini.data || {};
-        const iniCalc = computeCalc(iniD.stores || [], iniD.products || [], iniD.mix || {}, iniD.params || {}, iniD.items || {});
+        const iniCalc = computeCalc(iniD.stores || [], iniD.products || [], iniD.mix || {}, iniD.params || {}, iniD.items || {}, iniD.selection || null);
         cover = {
           name: cur.name, version: cur.version || 1, createdAt: cur.created_at,
           iniVersion: ini.version || 1, iniCreatedAt: ini.created_at,
@@ -680,15 +712,18 @@ export default function Simulator() {
       </SimpleGrid>
 
       {/* Por loja */}
-      <Accordion allowMultiple defaultIndex={[0]}>
+      <Accordion allowMultiple>
         {stores.map(s => {
           const ps = calc.perStore[s.id] || { vendas: 0, fat: 0, lucro: 0 };
           const m = ps.fat ? ps.lucro / ps.fat * 100 : 0;
           const pp = params[s.id] || { com: 0, nf: 0, precoAjuste: 0 };
+          const selSet = new Set(selFor(s.id).map(Number));
+          const visProducts = products.filter(p => selSet.has(Number(p.id)));
+          const offProducts = products.filter(p => !selSet.has(Number(p.id)));
           return (
             <AccordionItem key={s.id} bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" mb={2}>
               <AccordionButton>
-                <Box flex="1" textAlign="left"><Badge colorScheme="blue" mr={2}>{s.name}</Badge><Text as="span" fontSize="xs" color={subtle}>{MPLABEL[s.platform]} · {Math.round(Number(mix[s.id]) || 0)}% · {ps.vendas} vendas</Text></Box>
+                <Box flex="1" textAlign="left"><Badge colorScheme="blue" mr={2}>{s.name}</Badge><Text as="span" fontSize="xs" color={subtle}>{MPLABEL[s.platform]} · {Math.round(Number(mix[s.id]) || 0)}% · {ps.vendas} vendas · {visProducts.length} produto(s)</Text></Box>
                 <Text fontSize="sm" mr={3} color={ps.lucro >= 0 ? "green.500" : "red.500"} fontWeight="bold">{BRL(ps.lucro)} · {m.toFixed(0)}%</Text>
                 <AccordionIcon />
               </AccordionButton>
@@ -698,13 +733,39 @@ export default function Simulator() {
                   <Box><Text fontSize="xs" color={subtle}>NF % (CNPJ)</Text><Input size="sm" maxW="90px" type="number" step="0.5" value={pp.nf ?? 0} onChange={e => setParam(s.id, "nf", e.target.value)} /></Box>
                   <Box><Text fontSize="xs" color={subtle}>Preço ajuste %</Text><Input size="sm" maxW="90px" type="number" step="1" value={pp.precoAjuste ?? 0} onChange={e => setParam(s.id, "precoAjuste", e.target.value)} /></Box>
                 </Flex>
+
+                {/* Produtos na visão desta loja */}
+                <Flex gap={2} mb={3} align="center" wrap="wrap">
+                  <Select
+                    size="sm" maxW="320px" value=""
+                    placeholder={offProducts.length ? "+ Adicionar produto…" : "Todos os produtos na visão"}
+                    isDisabled={!offProducts.length}
+                    onChange={e => e.target.value && addProduct(s.id, e.target.value)}
+                  >
+                    {offProducts.map(p => <option key={p.id} value={p.id}>{p.codigo} · {p.descricao}</option>)}
+                  </Select>
+                  <Button size="sm" variant="outline" onClick={() => addAllProducts(s.id)} isDisabled={!offProducts.length}>
+                    + Todos ({offProducts.length})
+                  </Button>
+                </Flex>
+
+                {!visProducts.length && (
+                  <Text fontSize="sm" color={subtle} mb={2}>Nenhum produto na visão desta loja — use “+ Adicionar produto” acima.</Text>
+                )}
                 <SimpleGrid columns={{ base: 1, md: 2, lg: 3 }} spacing={3}>
-                  {products.map(p => {
+                  {visProducts.map(p => {
                     const it = items[key(s.id, p.id)] || {};
                     const c = calc.cell[key(s.id, p.id)] || {};
                     return (
                       <Box key={p.id} borderWidth="1px" borderColor={border} borderRadius="md" p={3}>
-                        <Text fontWeight="bold" fontSize="sm">{p.codigo} · {p.descricao}</Text>
+                        <Flex align="start" justify="space-between" gap={2}>
+                          <Text fontWeight="bold" fontSize="sm">{p.codigo} · {p.descricao}</Text>
+                          <Button
+                            size="xs" variant="ghost" colorScheme="red" flexShrink={0} mt="-4px" mr="-6px"
+                            title="Remover produto da visão desta loja"
+                            onClick={() => removeProduct(s.id, p.id)}
+                          >✕</Button>
+                        </Flex>
                         <Text fontSize="xs" color={subtle} mb={2}>Custo {BRL(p.avg_cost)}/pç · {c.pieces || 0} pç → <b>{c.vendas || 0} vendas</b></Text>
                         <SimpleGrid columns={2} spacing={2} mb={2}>
                           <Box><Text fontSize="xs" color={subtle}>Preço unit./pç</Text><Input size="sm" type="number" step="0.01" value={it.unit_price ?? 0} onChange={e => setItem(s.id, p.id, "unit_price", e.target.value)} /></Box>
