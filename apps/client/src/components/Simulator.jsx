@@ -19,16 +19,20 @@ const esc = (s) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").
 const MPLABEL = { mercadolivre: "Mercado Livre", shopee: "Shopee", shein: "Shein", tiktok: "TikTok" };
 const COLORS = ["#3182ce", "#dd6b20", "#805ad5", "#38a169", "#d53f8c", "#319795", "#718096"];
 
+// Faixa de Canais & Taxas correspondente ao preço do kit (null se nenhuma cobre o valor)
+function findBand(bands, platform, kitPrice) {
+  return bands.find(x => x.marketplace === platform && Number(x.price_min) <= kitPrice && (x.price_max == null || kitPrice <= Number(x.price_max))) || null;
+}
 function resolveFee(bands, platform, kitPrice) {
-  const b = bands.find(x => x.marketplace === platform && Number(x.price_min) <= kitPrice && (x.price_max == null || kitPrice <= Number(x.price_max)));
+  const b = findBand(bands, platform, kitPrice);
   return b ? { com: Number(b.commission_pct), fixa: Number(b.fixed_per_sale) } : { com: 0, fixa: 0 };
 }
-function topCommission(bands, platform) {
-  const list = bands.filter(x => x.marketplace === platform);
-  const top = list.find(x => x.price_max == null) || list[list.length - 1];
-  return top ? Number(top.commission_pct) : 0;
-}
 const key = (s, p) => `${s}:${p}`;
+
+// Comissão efetiva do item: fica no item (como a taxa fixa); cenários antigos
+// guardavam no parâmetro da loja — fallback p/ compatibilidade.
+const hasVal = (v) => v !== undefined && v !== null && v !== "";
+const effCom = (it, pp) => hasVal(it?.com) ? (Number(it.com) || 0) : (Number(pp?.com) || 0);
 
 // ─── Cálculo puro do cenário (usado no editor e no PDF de cenários salvos) ────
 // selection: { store_id -> [product_id...] } — produtos na visão de cada loja; null/ausente = todos
@@ -48,13 +52,14 @@ function computeCalc(stores, products, mix, params, items, selection = null) {
       const kitPrice = Number(it.unit_price) * kit * (1 + (Number(pp.precoAjuste) || 0) / 100);
       const vendas = Math.floor(pieces / kit);
       const fat = kitPrice * vendas;
-      const comV = fat * (Number(pp.com) || 0) / 100;
+      const comPct = effCom(it, pp);
+      const comV = fat * comPct / 100;
       const fixV = (Number(it.fixa) || 0) * vendas;
       const freteV = it.frete_type === "pct" ? fat * (Number(it.frete_value) || 0) / 100 : it.frete_type === "fix" ? (Number(it.frete_value) || 0) * vendas : 0;
       const nfV = fat * (Number(pp.nf) || 0) / 100;
       const cost = (Number(p.avg_cost) || 0) * vendas * kit;
       const lucro = fat - comV - fixV - freteV - nfV - cost;
-      cell[key(s.id, p.id)] = { pieces, kitPrice, vendas, fat, comV, fixV, freteV, nfV, cost, lucro, margem: fat ? lucro / fat * 100 : 0 };
+      cell[key(s.id, p.id)] = { pieces, kitPrice, vendas, fat, comPct, comV, fixV, freteV, nfV, cost, lucro, margem: fat ? lucro / fat * 100 : 0 };
       perStore[s.id].vendas += vendas; perStore[s.id].fat += fat; perStore[s.id].lucro += lucro;
       gV += vendas; gF += fat; gL += lucro;
     });
@@ -87,8 +92,8 @@ function diffVersions(iniD, curD) {
     if (a !== b) changes.mix.push(`${storeName(id)}: ${pctBR(a)}% → <b>${pctBR(b)}%</b>`);
   });
 
-  // Parâmetros por loja
-  const PARAM_LABELS = { com: ["Comissão", "%"], nf: ["NF", "%"], precoAjuste: ["Ajuste de preço", "%"] };
+  // Parâmetros por loja (comissão é por item; ver diff de itens abaixo)
+  const PARAM_LABELS = { nf: ["NF", "%"], precoAjuste: ["Ajuste de preço", "%"] };
   const pIds = [...new Set([...Object.keys(iniD.params || {}), ...Object.keys(curD.params || {})])];
   pIds.forEach(id => {
     const a = (iniD.params || {})[id] || {}, b = (curD.params || {})[id] || {};
@@ -104,6 +109,8 @@ function diffVersions(iniD, curD) {
     const a = (iniD.items || {})[k] || {}, b = (curD.items || {})[k] || {};
     const diffs = [];
     if (num(a.unit_price) !== num(b.unit_price)) diffs.push(`Preço unit. ${BRL(a.unit_price)} → <b>${BRL(b.unit_price)}</b>`);
+    const comA = effCom(a, (iniD.params || {})[sid]), comB = effCom(b, (curD.params || {})[sid]);
+    if (comA !== comB) diffs.push(`Comissão ${pctBR(comA)}% → <b>${pctBR(comB)}%</b>`);
     if (num(a.kit) !== num(b.kit)) diffs.push(`Kit ${num(a.kit) || 1} → <b>${num(b.kit) || 1}</b>`);
     if (num(a.fixa) !== num(b.fixa)) diffs.push(`Taxa fixa ${BRL(a.fixa)} → <b>${BRL(b.fixa)}</b>`);
     if ((a.frete_type || "none") !== (b.frete_type || "none") || num(a.frete_value) !== num(b.frete_value))
@@ -495,14 +502,15 @@ export default function Simulator() {
     const n = base.stores.length || 1;
     const per = Math.floor(100 / n);
     const mx = {}; base.stores.forEach((s, i) => { mx[s.id] = per + (i === 0 ? 100 - per * n : 0); });
-    const pr = {}; base.stores.forEach(s => { pr[s.id] = { com: topCommission(base.feeBands, s.platform), nf: Number(s.nf_pct) || 0, precoAjuste: 0 }; });
+    const pr = {}; base.stores.forEach(s => { pr[s.id] = { nf: Number(s.nf_pct) || 0, precoAjuste: 0 }; });
     const it = {};
     base.stores.forEach(s => base.products.forEach(p => {
       const row = base.prices.find(x => x.store_id === s.id && x.product_id === p.id);
       const kit = Number(row?.kit_qty) || p.default_kit_qty || 1;
       const unit = Number(row?.unit_price) || 0;
-      const fixa = resolveFee(base.feeBands, s.platform, unit * kit).fixa;
-      it[key(s.id, p.id)] = { kit, unit_price: unit, fixa, frete_type: row?.frete_type || "none", frete_value: Number(row?.frete_value) || 0 };
+      // Comissão e taxa fixa sugeridas pela faixa (Canais & Taxas) do preço do kit
+      const fee = resolveFee(base.feeBands, s.platform, unit * kit);
+      it[key(s.id, p.id)] = { kit, unit_price: unit, com: fee.com, fixa: fee.fixa, frete_type: row?.frete_type || "none", frete_value: Number(row?.frete_value) || 0 };
     }));
     const sel = {}; base.stores.forEach(s => { sel[s.id] = base.products.map(p => p.id); });
     setName("Novo cenário"); setMix(mx); setParams(pr); setItems(it); setSelection(sel); setSnapMeta(null); setView("editor");
@@ -515,7 +523,12 @@ export default function Simulator() {
       // Cenários antigos não têm seleção salva: todos os produtos ficam na visão
       const sel = {};
       (d.stores || []).forEach(st => { sel[st.id] = d.selection?.[st.id] ?? (d.products || []).map(p => p.id); });
-      setName(s.name); setMix(d.mix || {}); setParams(d.params || {}); setItems(d.items || {}); setSelection(sel);
+      // Cenários antigos guardavam a comissão na loja: materializa no item para exibir/editar
+      const its = {};
+      Object.entries(d.items || {}).forEach(([k, v]) => {
+        its[k] = hasVal(v?.com) ? v : { ...v, com: Number(d.params?.[k.split(":")[0]]?.com) || 0 };
+      });
+      setName(s.name); setMix(d.mix || {}); setParams(d.params || {}); setItems(its); setSelection(sel);
       setSnapMeta({ stores: d.stores || [], products: d.products || [], group_id: s.group_id || s.id, version: s.version });
       setView("editor");
     } catch (e) { toast({ status: "error", title: "Erro ao abrir cenário", description: e.message }); }
@@ -526,7 +539,18 @@ export default function Simulator() {
 
   const mixSum = stores.reduce((s, st) => s + (Number(mix[st.id]) || 0), 0);
 
-  const setItem = (s, p, field, value) => setItems(prev => ({ ...prev, [key(s, p)]: { ...prev[key(s, p)], [field]: value } }));
+  // Ao mudar preço/kit, re-sugere comissão e taxa fixa pela faixa de Canais & Taxas
+  // do novo preço do kit (se houver faixa cadastrada); ambos continuam editáveis.
+  const setItem = (s, p, field, value) => setItems(prev => {
+    const k = key(s, p);
+    const next = { ...prev[k], [field]: value };
+    if (field === "unit_price" || field === "kit") {
+      const st = stores.find(x => x.id === s);
+      const band = st && findBand(feeBands, st.platform, (Number(next.unit_price) || 0) * (Number(next.kit) || 1));
+      if (band) { next.com = Number(band.commission_pct); next.fixa = Number(band.fixed_per_sale); }
+    }
+    return { ...prev, [k]: next };
+  });
   const setParam = (s, field, value) => setParams(prev => ({ ...prev, [s]: { ...prev[s], [field]: value } }));
 
   // Produtos na visão de uma loja (fallback: todos, p/ cenários antigos sem seleção)
@@ -729,9 +753,9 @@ export default function Simulator() {
               </AccordionButton>
               <AccordionPanel>
                 <Flex gap={4} mb={3} wrap="wrap" bg={paramBg} p={3} borderRadius="md">
-                  <Box><Text fontSize="xs" color={subtle}>Comissão %</Text><Input size="sm" maxW="90px" type="number" step="0.5" value={pp.com ?? 0} onChange={e => setParam(s.id, "com", e.target.value)} /></Box>
                   <Box><Text fontSize="xs" color={subtle}>NF % (CNPJ)</Text><Input size="sm" maxW="90px" type="number" step="0.5" value={pp.nf ?? 0} onChange={e => setParam(s.id, "nf", e.target.value)} /></Box>
                   <Box><Text fontSize="xs" color={subtle}>Preço ajuste %</Text><Input size="sm" maxW="90px" type="number" step="1" value={pp.precoAjuste ?? 0} onChange={e => setParam(s.id, "precoAjuste", e.target.value)} /></Box>
+                  <Text fontSize="xs" color={subtle} alignSelf="end" pb={1.5}>Comissão e taxa fixa ficam em cada produto, sugeridas pela faixa de Canais &amp; Taxas.</Text>
                 </Flex>
 
                 {/* Produtos na visão desta loja */}
@@ -770,6 +794,7 @@ export default function Simulator() {
                         <SimpleGrid columns={2} spacing={2} mb={2}>
                           <Box><Text fontSize="xs" color={subtle}>Preço unit./pç</Text><Input size="sm" type="number" step="0.01" value={it.unit_price ?? 0} onChange={e => setItem(s.id, p.id, "unit_price", e.target.value)} /></Box>
                           <Box><Text fontSize="xs" color={subtle}>Kit</Text><Input size="sm" type="number" min={1} value={it.kit ?? 1} onChange={e => setItem(s.id, p.id, "kit", e.target.value)} /></Box>
+                          <Box><Text fontSize="xs" color={subtle}>Comissão %</Text><Input size="sm" type="number" step="0.5" value={it.com ?? 0} onChange={e => setItem(s.id, p.id, "com", e.target.value)} /></Box>
                           <Box><Text fontSize="xs" color={subtle}>Taxa fixa/venda</Text><Input size="sm" type="number" step="0.01" value={it.fixa ?? 0} onChange={e => setItem(s.id, p.id, "fixa", e.target.value)} /></Box>
                           <Box>
                             <Text fontSize="xs" color={subtle}>Frete</Text>
@@ -823,7 +848,7 @@ function Cascata({ c, p, it, pp, kit, subtle, border }) {
   return (
     <Box fontSize="xs" mb={2} borderTopWidth="1px" borderColor={border} pt={2}>
       <Row l={`Faturamento (${c.vendas} × ${BRL(c.kitPrice)})`} v={BRL(c.fat)} />
-      <Row l={`− Comissão ${pp.com || 0}%`} v={`− ${BRL(c.comV)}`} ded />
+      <Row l={`− Comissão ${c.comPct ?? pp.com ?? 0}%`} v={`− ${BRL(c.comV)}`} ded />
       <Row l={`− Taxa fixa (${c.vendas} × ${BRL(it.fixa || 0)})`} v={`− ${BRL(c.fixV)}`} ded />
       <Row l={freteLbl} v={`− ${BRL(c.freteV)}`} ded />
       <Row l={`− NF ${pp.nf || 0}%`} v={`− ${BRL(c.nfV)}`} ded />
