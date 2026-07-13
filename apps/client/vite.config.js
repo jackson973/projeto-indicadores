@@ -5,14 +5,19 @@ import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 // Versão exibida na UI — permite confirmar rapidamente qual build está no ar.
+// O último número é a contagem de commits: muda a cada commit, sem edição manual.
 const pkgVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
-let gitSha = "nogit";
-try { gitSha = execSync("git rev-parse --short HEAD").toString().trim(); } catch { /* build sem git */ }
+let gitSha = "nogit", gitCount = "";
+try {
+  gitSha = execSync("git rev-parse --short HEAD").toString().trim();
+  gitCount = execSync("git rev-list --count HEAD").toString().trim();
+} catch { /* build sem git */ }
+const appVersion = gitCount ? `${pkgVersion}.${gitCount}` : pkgVersion;
 const buildLabel = `${new Date().toISOString().slice(0, 16).replace("T", " ")}Z · ${gitSha}`;
 
 export default defineConfig({
   define: {
-    __APP_VERSION__: JSON.stringify(pkgVersion),
+    __APP_VERSION__: JSON.stringify(appVersion),
     __BUILD_LABEL__: JSON.stringify(buildLabel),
     __GIT_SHA__: JSON.stringify(gitSha),
   },
