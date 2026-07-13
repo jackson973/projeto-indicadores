@@ -619,6 +619,20 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
     params
   );
 
+  // By store (mesma medida do byGroup: unidades ajustadas pelo kit)
+  const byStoreQ = db.query(
+    `${cte}
+     SELECT
+       COALESCE(st.name, r.store) AS store_name,
+       SUM(r.quantity * r.kit_qty) AS units,
+       SUM(r.total) AS revenue
+     FROM resolved r
+     LEFT JOIN stores st ON st.id = r.cod_store
+     GROUP BY COALESCE(st.name, r.store)
+     ORDER BY units DESC`,
+    params
+  );
+
   // By product
   const byProductQ = db.query(
     `${cte}
@@ -666,7 +680,7 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
     params
   );
 
-  const [summaryRes, byDateRes, byGroupRes, byProductRes] = await Promise.all([summaryQ, byDateQ, byGroupQ, byProductQ]);
+  const [summaryRes, byDateRes, byGroupRes, byStoreRes, byProductRes] = await Promise.all([summaryQ, byDateQ, byGroupQ, byStoreQ, byProductQ]);
 
   const s = summaryRes.rows[0];
   const totalRevenue = parseFloat(s.total_revenue) || 0;
@@ -688,6 +702,11 @@ async function getProductDashboard({ start, end, groupIds, lojas } = {}) {
     byGroup: byGroupRes.rows.map((r) => ({
       group_id: r.group_id,
       group_name: r.group_name,
+      units: parseFloat(r.units) || 0,
+      revenue: parseFloat(r.revenue) || 0,
+    })),
+    byStore: byStoreRes.rows.map((r) => ({
+      store_name: r.store_name,
       units: parseFloat(r.units) || 0,
       revenue: parseFloat(r.revenue) || 0,
     })),

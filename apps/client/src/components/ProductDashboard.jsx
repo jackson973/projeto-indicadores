@@ -89,6 +89,7 @@ const ProductDashboard = () => {
   const [loading, setLoading] = useState(false);
 
   const [pieGroupFilter, setPieGroupFilter] = useState(null);
+  const [pieStoreFilter, setPieStoreFilter] = useState(null);
   const [sortField, setSortField] = useState("adjusted_quantity");
   const [sortDir, setSortDir] = useState("desc");
   const [chartGrouping, setChartGrouping] = useState("auto");
@@ -167,16 +168,17 @@ const ProductDashboard = () => {
 
   const sortedProducts = useMemo(() => {
     if (!data?.byProduct) return [];
-    const base = pieGroupFilter
+    let base = pieGroupFilter
       ? data.byProduct.filter((p) => p.group_name === pieGroupFilter)
       : data.byProduct;
+    if (pieStoreFilter) base = base.filter((p) => (p.loja ?? "Sem loja") === pieStoreFilter);
     return [...base].sort((a, b) => {
       const va = a[sortField] ?? 0;
       const vb = b[sortField] ?? 0;
       if (typeof va === "string") return sortDir === "asc" ? va.localeCompare(vb) : vb.localeCompare(va);
       return sortDir === "asc" ? va - vb : vb - va;
     });
-  }, [data, sortField, sortDir, pieGroupFilter]);
+  }, [data, sortField, sortDir, pieGroupFilter, pieStoreFilter]);
 
   const SortIcon = ({ field }) => {
     if (sortField !== field) return null;
@@ -383,7 +385,7 @@ const ProductDashboard = () => {
           </SimpleGrid>
 
           {/* Charts */}
-          <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={4} mb={6}>
+          <SimpleGrid columns={{ base: 1, lg: 2, "2xl": 3 }} spacing={4} mb={6}>
             {/* Units over time */}
             <Box bg={panelBg} p={4} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
               <Flex justify="space-between" align="center" mb={3}>
@@ -459,6 +461,53 @@ const ProductDashboard = () => {
                 <Center h="280px"><Text color="gray.400" fontSize="sm">Nenhum produto com grupo atribuído</Text></Center>
               )}
             </Box>
+
+            {/* By store pie */}
+            <Box bg={panelBg} p={4} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
+              <Text fontSize="sm" fontWeight="bold" mb={3}>Unidades por Loja</Text>
+              {(data.byStore || []).length > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <PieChart>
+                      <Pie data={data.byStore} dataKey="units" nameKey="store_name" cx="50%" cy="50%"
+                        outerRadius={90} label={({ percent }) => percent >= 0.05 ? `${(percent * 100).toFixed(0)}%` : ""}
+                        labelLine={false} fontSize={10} cursor="pointer"
+                        onClick={(entry) => {
+                          const name = entry?.store_name ?? "Sem loja";
+                          setPieStoreFilter((prev) => prev === name ? null : name);
+                        }}>
+                        {data.byStore.map((st, i) => {
+                          const name = st.store_name ?? "Sem loja";
+                          const active = pieStoreFilter === null || pieStoreFilter === name;
+                          return <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} opacity={active ? 1 : 0.3} />;
+                        })}
+                      </Pie>
+                      <Tooltip content={<CustomTooltipPie />} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <Flex wrap="wrap" gap={2} justify="center" mt={1}>
+                    {data.byStore.map((st, i) => {
+                      const total = data.byStore.reduce((s, x) => s + x.units, 0);
+                      const pct = total > 0 ? ((st.units / total) * 100).toFixed(0) : 0;
+                      const name = st.store_name ?? "Sem loja";
+                      const active = pieStoreFilter === null || pieStoreFilter === name;
+                      return (
+                        <Flex key={name} align="center" gap={1} cursor="pointer"
+                          opacity={active ? 1 : 0.4}
+                          onClick={() => setPieStoreFilter((prev) => prev === name ? null : name)}>
+                          <Box w="10px" h="10px" borderRadius="2px" bg={PIE_COLORS[i % PIE_COLORS.length]} flexShrink={0} />
+                          <Text fontSize="10px" color="gray.600" fontWeight={pieStoreFilter === name ? "bold" : "normal"}>
+                            {name} ({pct}%)
+                          </Text>
+                        </Flex>
+                      );
+                    })}
+                  </Flex>
+                </>
+              ) : (
+                <Center h="280px"><Text color="gray.400" fontSize="sm">Sem dados no período</Text></Center>
+              )}
+            </Box>
           </SimpleGrid>
 
           {/* Product Grid */}
@@ -470,6 +519,11 @@ const ProductDashboard = () => {
               {pieGroupFilter && (
                 <Tag size="sm" colorScheme="purple" cursor="pointer" onClick={() => setPieGroupFilter(null)}>
                   {pieGroupFilter} <SmallCloseIcon ml={1} />
+                </Tag>
+              )}
+              {pieStoreFilter && (
+                <Tag size="sm" colorScheme="blue" cursor="pointer" onClick={() => setPieStoreFilter(null)}>
+                  {pieStoreFilter} <SmallCloseIcon ml={1} />
                 </Tag>
               )}
             </Flex>
