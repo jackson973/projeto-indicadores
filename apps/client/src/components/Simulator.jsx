@@ -131,6 +131,12 @@ function diffVersions(iniD, curD) {
     if (d.length) changes.base.push(`${esc(prodName(id))}: ${d.join(" · ")}`);
   });
 
+  // Lojas na simulação (seleção; ausente = todas as lojas da versão)
+  const storeSelOf = (d) => new Set((Array.isArray(d.store_selection) ? d.store_selection : (d.stores || []).map(s => s.id)).map(String));
+  const stA = storeSelOf(iniD), stB = storeSelOf(curD);
+  [...stB].filter(x => !stA.has(x)).forEach(x => changes.visao.push(`Loja ${storeName(x)}: <b>entrou</b> na simulação`));
+  [...stA].filter(x => !stB.has(x)).forEach(x => changes.visao.push(`Loja ${storeName(x)}: <b>saiu</b> da simulação`));
+
   // Produtos na visão de cada loja (seleção; ausente = todos os produtos da versão)
   const selOf = (d, sid) => {
     const arr = d.selection?.[sid];
@@ -367,7 +373,7 @@ function pdfCover(doc, { name, version, createdAt, iniVersion, iniCreatedAt, cha
   y = pdfBullets(doc, y, "Mix de vendas alterado", changes.mix, "Mix inalterado.");
   y = pdfBullets(doc, y, "Parâmetros por loja alterados", changes.params, "Comissão, NF e ajuste de preço inalterados.");
   y = pdfBullets(doc, y, "Preços & itens alterados", changes.items, "Preços, kits, taxas e fretes inalterados.");
-  y = pdfBullets(doc, y, "Produtos na visão (por loja)", changes.visao, "Mesmos produtos do cenário inicial.");
+  y = pdfBullets(doc, y, "Lojas & produtos na visão", changes.visao, "Mesmas lojas e produtos do cenário inicial.");
   pdfBullets(doc, y, "Base de estoque/custo", changes.base, "Mesma base de estoque e custo do cenário inicial.");
   doc.addPage();
 }
@@ -378,6 +384,12 @@ function pdfReport(doc, { name, subtitle, calc, stores, products, mix }) {
   doc.text(plain("Simulação de cenário — Mix de canais (por loja)"), PDF_M, y); y += 6;
   doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GRAY);
   doc.text(plain(`Cenário: ${name}${subtitle ? ` · ${subtitle}` : ""}`), PDF_M, y); y += 4;
+
+  const mixTotal = stores.reduce((sum, st) => sum + (Number(mix[st.id]) || 0), 0);
+  if (Math.round(mixTotal) !== 100) {
+    doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...RED);
+    doc.text(plain(`Atenção: o mix das lojas soma ${pctBR(mixTotal)}% (deveria somar 100%).`), PDF_M, y); y += 5;
+  }
 
   const t = calc.totals;
   autoTable(doc, {
@@ -459,6 +471,7 @@ export default function Simulator() {
   const [params, setParams] = useState({}); // store_id -> {com, nf, precoAjuste}
   const [items, setItems] = useState({});   // `${store}:${product}` -> {kit, unit_price, fixa, frete_type, frete_value}
   const [selection, setSelection] = useState({}); // store_id -> [product_id...] (produtos na visão da loja)
+  const [storeSel, setStoreSel] = useState(null);  // [store_id...] lojas na simulação (null = todas)
   const [snapMeta, setSnapMeta] = useState(null); // when opening a saved snapshot (frozen stores/products + group)
 
   const subtle = useColorModeValue("gray.500", "gray.400");
@@ -513,7 +526,8 @@ export default function Simulator() {
       it[key(s.id, p.id)] = { kit, unit_price: unit, com: fee.com, fixa: fee.fixa, frete_type: row?.frete_type || "none", frete_value: Number(row?.frete_value) || 0 };
     }));
     const sel = {}; base.stores.forEach(s => { sel[s.id] = base.products.map(p => p.id); });
-    setName("Novo cenário"); setMix(mx); setParams(pr); setItems(it); setSelection(sel); setSnapMeta(null); setView("editor");
+    setName("Novo cenário"); setMix(mx); setParams(pr); setItems(it); setSelection(sel);
+    setStoreSel(base.stores.map(s => s.id)); setSnapMeta(null); setView("editor");
   }
 
   async function openSaved(id) {
@@ -529,15 +543,24 @@ export default function Simulator() {
         its[k] = hasVal(v?.com) ? v : { ...v, com: Number(d.params?.[k.split(":")[0]]?.com) || 0 };
       });
       setName(s.name); setMix(d.mix || {}); setParams(d.params || {}); setItems(its); setSelection(sel);
+      setStoreSel(Array.isArray(d.store_selection) ? d.store_selection : (d.stores || []).map(st => st.id));
       setSnapMeta({ stores: d.stores || [], products: d.products || [], group_id: s.group_id || s.id, version: s.version });
       setView("editor");
     } catch (e) { toast({ status: "error", title: "Erro ao abrir cenário", description: e.message }); }
   }
 
-  // ─── Cálculo ────────────────────────────────────────────────────────────────
-  const calc = useMemo(() => computeCalc(stores, products, mix, params, items, selection), [stores, products, mix, params, items, selection]);
+  // Lojas na simulação (fallback: todas, p/ cenários antigos sem seleção)
+  const storeSet = new Set((storeSel ?? stores.map(s => s.id)).map(Number));
+  const visStores = stores.filter(s => storeSet.has(Number(s.id)));
+  const offStores = stores.filter(s => !storeSet.has(Number(s.id)));
+  const addStore = (sid) => setStoreSel(prev => [...(prev ?? stores.map(s => s.id)), Number(sid)]);
+  const addAllStores = () => setStoreSel(stores.map(s => s.id));
+  const removeStore = (sid) => setStoreSel(prev => (prev ?? stores.map(s => s.id)).filter(id => Number(id) !== Number(sid)));
 
-  const mixSum = stores.reduce((s, st) => s + (Number(mix[st.id]) || 0), 0);
+  // ─── Cálculo ────────────────────────────────────────────────────────────────
+  const calc = useMemo(() => computeCalc(visStores, products, mix, params, items, selection), [stores, storeSel, products, mix, params, items, selection]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const mixSum = visStores.reduce((s, st) => s + (Number(mix[st.id]) || 0), 0);
 
   // Ao mudar preço/kit, re-sugere comissão e taxa fixa pela faixa de Canais & Taxas
   // do novo preço do kit (se houver faixa cadastrada); ambos continuam editáveis.
@@ -560,9 +583,11 @@ export default function Simulator() {
   const removeProduct = (sid, pid) => setSelection(prev => ({ ...prev, [sid]: (prev[sid] ?? products.map(p => p.id)).filter(id => Number(id) !== Number(pid)) }));
 
   async function save() {
+    if (Math.round(mixSum) !== 100 && !window.confirm(`A soma do mix das lojas está em ${mixSum}% (diferente de 100%). Salvar mesmo assim?`)) return;
     try {
       const data = {
         mix, params, items, selection,
+        store_selection: storeSel ?? stores.map(s => s.id),
         stores: stores.map(s => ({ id: s.id, name: s.name, platform: s.platform })),
         products: products.map(p => ({ id: p.id, codigo: p.codigo, descricao: p.descricao, saldo: p.saldo, avg_cost: p.avg_cost })),
       };
@@ -583,8 +608,8 @@ export default function Simulator() {
   async function printPDF() {
     try {
       const logo = await loadCompanyLogo();
-      const capa = { title: "Simulação de Cenário", subtitle: `${name} · ${new Date().toLocaleString("pt-BR")}`, logo };
-      const doc = buildPdfDoc({ capa, name, subtitle: new Date().toLocaleString("pt-BR"), calc, stores, products, mix });
+      const capa = { title: name, subtitle: `Simulação de cenário · ${new Date().toLocaleString("pt-BR")}`, logo };
+      const doc = buildPdfDoc({ capa, name, subtitle: new Date().toLocaleString("pt-BR"), calc, stores: visStores, products, mix });
       doc.save(pdfFileName(name));
       toast({ status: "success", title: "PDF baixado", description: "Abra pelo leitor de PDF do aparelho (no iPhone: ícone de downloads do Safari ou app Arquivos)." });
     } catch (e) {
@@ -596,16 +621,22 @@ export default function Simulator() {
   async function pdfSaved(row, group) {
     setPdfBusy(row.id);
     try {
+      // Só as lojas na visão da versão entram no cálculo e no relatório
+      const visOf = (d) => {
+        const sel = Array.isArray(d.store_selection) ? new Set(d.store_selection.map(Number)) : null;
+        return (d.stores || []).filter(st => !sel || sel.has(Number(st.id)));
+      };
       const cur = await fetchSimulation(row.id);
       const curD = cur.data || {};
-      const curCalc = computeCalc(curD.stores || [], curD.products || [], curD.mix || {}, curD.params || {}, curD.items || {}, curD.selection || null);
+      const curStores = visOf(curD);
+      const curCalc = computeCalc(curStores, curD.products || [], curD.mix || {}, curD.params || {}, curD.items || {}, curD.selection || null);
 
       let cover = null;
       const v1 = group.versions[group.versions.length - 1]; // menor versão = inicial
       if (v1 && v1.id !== row.id) {
         const ini = await fetchSimulation(v1.id);
         const iniD = ini.data || {};
-        const iniCalc = computeCalc(iniD.stores || [], iniD.products || [], iniD.mix || {}, iniD.params || {}, iniD.items || {}, iniD.selection || null);
+        const iniCalc = computeCalc(visOf(iniD), iniD.products || [], iniD.mix || {}, iniD.params || {}, iniD.items || {}, iniD.selection || null);
         cover = {
           name: cur.name, version: cur.version || 1, createdAt: cur.created_at,
           iniVersion: ini.version || 1, iniCreatedAt: ini.created_at,
@@ -617,14 +648,14 @@ export default function Simulator() {
       const logo = await loadCompanyLogo();
       const doc = buildPdfDoc({
         capa: {
-          title: "Simulação de Cenário",
-          subtitle: `${cur.name} · v${cur.version || 1} · ${new Date(cur.created_at).toLocaleString("pt-BR")}`,
+          title: cur.name,
+          subtitle: `Simulação de cenário · v${cur.version || 1} · ${new Date(cur.created_at).toLocaleString("pt-BR")}`,
           logo,
         },
         cover,
         name: cur.name,
         subtitle: `v${cur.version || 1} · ${new Date(cur.created_at).toLocaleString("pt-BR")}`,
-        calc: curCalc, stores: curD.stores || [], products: curD.products || [], mix: curD.mix || {},
+        calc: curCalc, stores: curStores, products: curD.products || [], mix: curD.mix || {},
       });
       doc.save(pdfFileName(`${cur.name}_v${cur.version || 1}`));
       toast({ status: "success", title: "PDF baixado", description: "Abra pelo leitor de PDF do aparelho (no iPhone: ícone de downloads do Safari ou app Arquivos)." });
@@ -712,17 +743,35 @@ export default function Simulator() {
       {/* Mix por loja */}
       <Box bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={4} mb={4}>
         <Text fontWeight="semibold" mb={1}>Mix de vendas por loja</Text>
-        <Text fontSize="xs" color={subtle} mb={3}>% das vendas em cada loja; as peças do estoque são distribuídas por esse mix.</Text>
+        <Text fontSize="xs" color={subtle} mb={3}>% das vendas em cada loja; as peças do estoque são distribuídas por esse mix. O ✕ tira a loja da simulação (e do relatório).</Text>
+        <Flex gap={2} mb={3} align="center" wrap="wrap">
+          <Select
+            size="sm" maxW="320px" value=""
+            placeholder={offStores.length ? "+ Adicionar loja…" : "Todas as lojas na simulação"}
+            isDisabled={!offStores.length}
+            onChange={e => e.target.value && addStore(e.target.value)}
+          >
+            {offStores.map(s => <option key={s.id} value={s.id}>{s.name} · {MPLABEL[s.platform] || s.platform}</option>)}
+          </Select>
+          <Button size="sm" variant="outline" onClick={addAllStores} isDisabled={!offStores.length}>+ Todas ({offStores.length})</Button>
+        </Flex>
+        {!visStores.length && (
+          <Text fontSize="sm" color={subtle} mb={2}>Nenhuma loja na simulação — use “+ Adicionar loja” acima.</Text>
+        )}
         <SimpleGrid columns={{ base: 2, md: 4, lg: 7 }} spacing={2} mb={3}>
-          {stores.map(s => (
+          {visStores.map(s => (
             <Box key={s.id}>
-              <Text fontSize="xs" color={subtle} noOfLines={1}>{s.name} · {MPLABEL[s.platform]?.slice(0, 3) || s.platform}</Text>
+              <Flex align="center" gap={1}>
+                <Text fontSize="xs" color={subtle} noOfLines={1} flex="1">{s.name} · {MPLABEL[s.platform]?.slice(0, 3) || s.platform}</Text>
+                <Button size="xs" variant="ghost" colorScheme="red" h="16px" minW="16px" p={0} flexShrink={0}
+                  title="Remover loja da simulação" onClick={() => removeStore(s.id)}>✕</Button>
+              </Flex>
               <Input size="sm" type="number" step="5" value={mix[s.id] ?? 0} onChange={e => setMix(m => ({ ...m, [s.id]: e.target.value }))} />
             </Box>
           ))}
         </SimpleGrid>
         <Flex h="16px" borderRadius="8px" overflow="hidden" bg="gray.100" mb={2}>
-          {stores.map((s, i) => { const w = mixSum ? (Number(mix[s.id]) || 0) / mixSum * 100 : 0; return w > 0 ? <Box key={s.id} w={`${w}%`} bg={COLORS[i % COLORS.length]} /> : null; })}
+          {visStores.map((s, i) => { const w = mixSum ? (Number(mix[s.id]) || 0) / mixSum * 100 : 0; return w > 0 ? <Box key={s.id} w={`${w}%`} bg={COLORS[i % COLORS.length]} /> : null; })}
         </Flex>
         <Badge colorScheme={mixSum === 100 ? "green" : "orange"}>Soma = {mixSum}%{mixSum === 100 ? " ✓" : " — ajuste para 100%"}</Badge>
       </Box>
@@ -737,7 +786,7 @@ export default function Simulator() {
 
       {/* Por loja */}
       <Accordion allowMultiple>
-        {stores.map(s => {
+        {visStores.map(s => {
           const ps = calc.perStore[s.id] || { vendas: 0, fat: 0, lucro: 0 };
           const m = ps.fat ? ps.lucro / ps.fat * 100 : 0;
           const pp = params[s.id] || { com: 0, nf: 0, precoAjuste: 0 };
