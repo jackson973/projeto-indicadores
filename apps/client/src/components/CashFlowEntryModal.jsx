@@ -17,7 +17,8 @@ import {
   Button,
   HStack,
   ButtonGroup,
-  Textarea
+  Textarea,
+  Text
 } from "@chakra-ui/react";
 import useAppToast from "../hooks/useAppToast";
 import { AttachmentManager } from "./CashFlowReceiptModal";
@@ -26,7 +27,7 @@ import { updateCashflowEntryDetails } from "../api";
 const formatBRL = (value) =>
   (value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave, onAttachmentsChange }) => {
+const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, boxes = [], currentBoxId, onSave, onAttachmentsChange }) => {
   const [form, setForm] = useState({
     date: "",
     categoryId: "",
@@ -35,6 +36,7 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave, onAtta
     amount: 0,
     status: "pending"
   });
+  const [boxId, setBoxId] = useState("");
   const [details, setDetails] = useState("");
   const [saving, setSaving] = useState(false);
   const toast = useAppToast();
@@ -52,6 +54,7 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave, onAtta
         status: entry.status
       });
       setDetails(entry.details || "");
+      setBoxId(String(currentBoxId || ""));
     } else {
       setForm({
         date: getSaoPauloDate(),
@@ -62,8 +65,9 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave, onAtta
         status: "pending"
       });
       setDetails("");
+      setBoxId(String(currentBoxId || ""));
     }
-  }, [entry, isOpen, categories]);
+  }, [entry, isOpen, categories, currentBoxId]);
 
   const handleCurrencyChange = (e) => {
     const digits = e.target.value.replace(/\D/g, "");
@@ -85,7 +89,8 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave, onAtta
         description: form.description.trim(),
         type: form.type,
         amount: form.amount,
-        status: form.status
+        status: form.status,
+        boxId: boxId ? parseInt(boxId) : undefined
       }, entry?.id);
       // Detalhes têm endpoint próprio (a rota de update original permanece intacta)
       if (entry?.id && (details || "") !== (entry.details || "")) {
@@ -106,6 +111,22 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave, onAtta
         <ModalHeader>{entry ? "Editar lançamento" : "Novo lançamento"}</ModalHeader>
         <ModalCloseButton />
         <ModalBody display="flex" flexDirection="column" gap={4}>
+          {boxes.length > 0 && (
+            <FormControl isRequired>
+              <FormLabel>Caixa</FormLabel>
+              <Select value={boxId} onChange={(e) => setBoxId(e.target.value)}>
+                {boxes.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
+              </Select>
+              {entry && boxId && String(boxId) !== String(currentBoxId) && (
+                <Text fontSize="xs" color="orange.500" mt={1}>
+                  Ao salvar, o lançamento será migrado para este caixa (com detalhes e comprovantes).
+                </Text>
+              )}
+            </FormControl>
+          )}
+
           <FormControl isRequired>
             <FormLabel>Data</FormLabel>
             <Input

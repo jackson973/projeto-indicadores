@@ -181,12 +181,13 @@ router.post('/entries', async (req, res) => {
 
 router.put('/entries/:id', async (req, res) => {
   try {
-    const { date, categoryId, description, type, amount, status } = req.body;
+    const { date, categoryId, description, type, amount, status, boxId } = req.body;
     if (!date || !categoryId || !description || !type || amount === undefined) {
       return res.status(400).json({ message: 'Data, categoria, histórico, tipo e valor são obrigatórios.' });
     }
     const entry = await repo.updateEntry(req.params.id, {
-      date, categoryId, description: description.trim(), type, amount, status
+      date, categoryId, description: description.trim(), type, amount, status,
+      boxId: boxId ? parseInt(boxId) : null
     });
     if (!entry) return res.status(404).json({ message: 'Lançamento não encontrado.' });
     return res.json(entry);

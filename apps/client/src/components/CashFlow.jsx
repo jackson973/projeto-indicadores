@@ -189,8 +189,12 @@ const CashFlow = () => {
   const handleSaveEntry = async (data, id) => {
     if (id) {
       await updateCashflowEntry(id, data);
+      if (data.boxId && data.boxId !== selectedBoxId) {
+        const dest = boxes.find(b => b.id === data.boxId);
+        toast({ title: `Lançamento migrado para "${dest?.name || "outro caixa"}".`, status: "success", duration: 4000 });
+      }
     } else {
-      await createCashflowEntry({ ...data, boxId: selectedBoxId });
+      await createCashflowEntry({ ...data, boxId: data.boxId || selectedBoxId });
     }
     await loadData();
   };
@@ -844,6 +848,8 @@ const CashFlow = () => {
         onClose={entryModal.onClose}
         entry={editingEntry}
         categories={categories}
+        boxes={boxes}
+        currentBoxId={selectedBoxId}
         onSave={handleSaveEntry}
         onAttachmentsChange={loadData}
       />

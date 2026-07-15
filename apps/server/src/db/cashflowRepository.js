@@ -137,13 +137,15 @@ async function createEntry({ date, categoryId, description, type, amount, status
   return { ...result.rows[0], amount: parseFloat(result.rows[0].amount) };
 }
 
-async function updateEntry(id, { date, categoryId, description, type, amount, status }) {
+async function updateEntry(id, { date, categoryId, description, type, amount, status, boxId }) {
+  // boxId é opcional: quando informado, migra o lançamento para outro caixa
   const result = await db.query(
-    `UPDATE cashflow_entries SET date = $1, category_id = $2, description = $3, type = $4, amount = $5, status = $6
-     WHERE id = $7
-     RETURNING id, date, category_id AS "categoryId", description, type, amount, status,
+    `UPDATE cashflow_entries SET date = $1, category_id = $2, description = $3, type = $4, amount = $5, status = $6,
+            box_id = COALESCE($7, box_id)
+     WHERE id = $8
+     RETURNING id, date, category_id AS "categoryId", description, type, amount, status, box_id AS "boxId",
                recurrence_id AS "recurrenceId", created_at AS "createdAt"`,
-    [date, categoryId, description, type, amount, status, id]
+    [date, categoryId, description, type, amount, status, boxId || null, id]
   );
   if (!result.rows[0]) return null;
   return { ...result.rows[0], amount: parseFloat(result.rows[0].amount) };
