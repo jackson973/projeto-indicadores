@@ -115,7 +115,8 @@ async function getEntries(year, month, boxId) {
   const result = await db.query(
     `SELECT e.id, e.date, e.category_id AS "categoryId", c.name AS "categoryName",
             e.description, e.type, e.amount, e.status, e.recurrence_id AS "recurrenceId",
-            e.created_at AS "createdAt"
+            e.created_at AS "createdAt", e.details,
+            (SELECT COUNT(*) FROM cashflow_attachments a WHERE a.entry_id = e.id)::int AS "attachmentCount"
      FROM cashflow_entries e
      JOIN cashflow_categories c ON c.id = e.category_id
      WHERE EXTRACT(YEAR FROM e.date) = $1 AND EXTRACT(MONTH FROM e.date) = $2 AND e.box_id = $3
@@ -161,6 +162,60 @@ async function toggleEntryStatus(id) {
 async function deleteEntry(id) {
   const result = await db.query('DELETE FROM cashflow_entries WHERE id = $1 RETURNING id', [id]);
   return result.rowCount > 0;
+}
+
+// ── Detalhes & Anexos (comprovantes) ──
+
+async function updateEntryDetails(id, details) {
+  const result = await db.query(
+    'UPDATE cashflow_entries SET details = $2 WHERE id = $1 RETURNING id, details',
+    [id, details ?? null]
+  );
+  return result.rows[0] || null;
+}
+
+async function getEntryById(id) {
+  const result = await db.query('SELECT id, type, status FROM cashflow_entries WHERE id = $1', [id]);
+  return result.rows[0] || null;
+}
+
+async function addAttachment({ entryId, filePath, originalName, mimeType, sizeBytes, createdBy }) {
+  const result = await db.query(
+    `INSERT INTO cashflow_attachments (entry_id, file_path, original_name, mime_type, size_bytes, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id, entry_id AS "entryId", file_path AS "filePath", original_name AS "originalName",
+               mime_type AS "mimeType", size_bytes AS "sizeBytes", created_at AS "createdAt"`,
+    [entryId, filePath, originalName || null, mimeType || null, sizeBytes || null, createdBy || null]
+  );
+  return result.rows[0];
+}
+
+async function getAttachments(entryId) {
+  const result = await db.query(
+    `SELECT id, entry_id AS "entryId", file_path AS "filePath", original_name AS "originalName",
+            mime_type AS "mimeType", size_bytes AS "sizeBytes", created_at AS "createdAt"
+     FROM cashflow_attachments WHERE entry_id = $1 ORDER BY id`,
+    [entryId]
+  );
+  return result.rows;
+}
+
+async function getAttachment(id) {
+  const result = await db.query(
+    `SELECT id, entry_id AS "entryId", file_path AS "filePath", original_name AS "originalName",
+            mime_type AS "mimeType", size_bytes AS "sizeBytes"
+     FROM cashflow_attachments WHERE id = $1`,
+    [id]
+  );
+  return result.rows[0] || null;
+}
+
+async function deleteAttachment(id) {
+  const result = await db.query(
+    'DELETE FROM cashflow_attachments WHERE id = $1 RETURNING file_path AS "filePath"',
+    [id]
+  );
+  return result.rows[0] || null;
 }
 
 // ── Balances ──
@@ -710,6 +765,12 @@ module.exports = {
   updateEntry,
   toggleEntryStatus,
   deleteEntry,
+  updateEntryDetails,
+  getEntryById,
+  addAttachment,
+  getAttachments,
+  getAttachment,
+  deleteAttachment,
   getBalance,
   setBalance,
   getSummary,

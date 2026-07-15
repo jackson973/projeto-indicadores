@@ -1,12 +1,41 @@
 const express = require('express');
 const multer = require('multer');
 const xlsx = require('xlsx');
+const path = require('path');
+const fs = require('fs');
 const { authenticate, requireModule } = require('../middleware/auth');
 const requireAdmin = requireModule('financeiro');
 const repo = require('../db/cashflowRepository');
 const { getSaoPauloYear, getSaoPauloMonth } = require('../lib/timezone');
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+// ── Anexos (comprovantes): armazenados em uploads/cashflow/ ──
+const UPLOADS_ROOT = path.join(__dirname, '../../uploads');
+const ATTACH_DIR = path.join(UPLOADS_ROOT, 'cashflow');
+fs.mkdirSync(ATTACH_DIR, { recursive: true });
+
+const attachStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, ATTACH_DIR),
+  filename: (req, file, cb) => {
+    const ext = (path.extname(file.originalname || '') || '.bin').toLowerCase().slice(0, 10);
+    cb(null, `${req.params.id}_${Date.now()}_${Math.round(Math.random() * 1e6)}${ext}`);
+  },
+});
+const attachUpload = multer({
+  storage: attachStorage,
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /^(image\/(png|jpe?g|gif|webp|heic|heif)|application\/pdf)$/i.test(file.mimetype);
+    if (ok) cb(null, true);
+    else cb(new Error('Tipo de arquivo não suportado (use imagem ou PDF).'));
+  },
+});
+
+const unlinkQuiet = (relPath) => {
+  if (!relPath) return;
+  fs.unlink(path.join(UPLOADS_ROOT, relPath), () => {});
+};
 
 const router = express.Router();
 router.use(authenticate);
@@ -180,12 +209,92 @@ router.put('/entries/:id/status', async (req, res) => {
 
 router.delete('/entries/:id', async (req, res) => {
   try {
+    // Remove os arquivos de comprovante do disco (as linhas caem via ON DELETE CASCADE)
+    let attachments = [];
+    try { attachments = await repo.getAttachments(req.params.id); } catch (e) { /* não bloqueia a exclusão */ }
     const deleted = await repo.deleteEntry(req.params.id);
     if (!deleted) return res.status(404).json({ message: 'Lançamento não encontrado.' });
+    attachments.forEach(a => unlinkQuiet(a.filePath));
     return res.json({ message: 'Lançamento excluído.' });
   } catch (error) {
     console.error('Delete entry error:', error);
     return res.status(500).json({ message: 'Erro ao excluir lançamento.' });
+  }
+});
+
+// ── Detalhes & Anexos (comprovantes) ──
+
+router.put('/entries/:id/details', async (req, res) => {
+  try {
+    const result = await repo.updateEntryDetails(req.params.id, req.body?.details ?? null);
+    if (!result) return res.status(404).json({ message: 'Lançamento não encontrado.' });
+    return res.json(result);
+  } catch (error) {
+    console.error('Update entry details error:', error);
+    return res.status(500).json({ message: 'Erro ao salvar detalhes.' });
+  }
+});
+
+router.get('/entries/:id/attachments', async (req, res) => {
+  try {
+    return res.json(await repo.getAttachments(req.params.id));
+  } catch (error) {
+    console.error('List attachments error:', error);
+    return res.status(500).json({ message: 'Erro ao listar anexos.' });
+  }
+});
+
+router.post('/entries/:id/attachments', (req, res) => {
+  attachUpload.single('file')(req, res, async (err) => {
+    if (err) return res.status(400).json({ message: err.message || 'Erro no upload.' });
+    if (!req.file) return res.status(400).json({ message: 'Arquivo é obrigatório.' });
+    const relPath = `cashflow/${req.file.filename}`;
+    try {
+      const entry = await repo.getEntryById(req.params.id);
+      if (!entry) { unlinkQuiet(relPath); return res.status(404).json({ message: 'Lançamento não encontrado.' }); }
+      const attachment = await repo.addAttachment({
+        entryId: entry.id,
+        filePath: relPath,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        sizeBytes: req.file.size,
+        createdBy: req.user.id,
+      });
+      return res.status(201).json(attachment);
+    } catch (error) {
+      unlinkQuiet(relPath);
+      console.error('Upload attachment error:', error);
+      return res.status(500).json({ message: 'Erro ao anexar comprovante.' });
+    }
+  });
+});
+
+router.get('/attachments/:id/file', async (req, res) => {
+  try {
+    const attachment = await repo.getAttachment(req.params.id);
+    if (!attachment) return res.status(404).json({ message: 'Anexo não encontrado.' });
+    const absPath = path.join(UPLOADS_ROOT, attachment.filePath);
+    if (!absPath.startsWith(ATTACH_DIR) || !fs.existsSync(absPath)) {
+      return res.status(404).json({ message: 'Arquivo não encontrado no servidor.' });
+    }
+    if (attachment.mimeType) res.type(attachment.mimeType);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(attachment.originalName || 'comprovante')}"`);
+    return res.sendFile(absPath);
+  } catch (error) {
+    console.error('Get attachment file error:', error);
+    return res.status(500).json({ message: 'Erro ao abrir anexo.' });
+  }
+});
+
+router.delete('/attachments/:id', async (req, res) => {
+  try {
+    const removed = await repo.deleteAttachment(req.params.id);
+    if (!removed) return res.status(404).json({ message: 'Anexo não encontrado.' });
+    unlinkQuiet(removed.filePath);
+    return res.json({ message: 'Anexo excluído.' });
+  } catch (error) {
+    console.error('Delete attachment error:', error);
+    return res.status(500).json({ message: 'Erro ao excluir anexo.' });
   }
 });
 

@@ -16,14 +16,17 @@ import {
   Select,
   Button,
   HStack,
-  ButtonGroup
+  ButtonGroup,
+  Textarea
 } from "@chakra-ui/react";
 import useAppToast from "../hooks/useAppToast";
+import { AttachmentManager } from "./CashFlowReceiptModal";
+import { updateCashflowEntryDetails } from "../api";
 
 const formatBRL = (value) =>
   (value || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
+const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave, onAttachmentsChange }) => {
   const [form, setForm] = useState({
     date: "",
     categoryId: "",
@@ -32,6 +35,7 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
     amount: 0,
     status: "pending"
   });
+  const [details, setDetails] = useState("");
   const [saving, setSaving] = useState(false);
   const toast = useAppToast();
 
@@ -47,6 +51,7 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
         amount: entry.amount,
         status: entry.status
       });
+      setDetails(entry.details || "");
     } else {
       setForm({
         date: getSaoPauloDate(),
@@ -56,6 +61,7 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
         amount: 0,
         status: "pending"
       });
+      setDetails("");
     }
   }, [entry, isOpen, categories]);
 
@@ -81,6 +87,10 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
         amount: form.amount,
         status: form.status
       }, entry?.id);
+      // Detalhes têm endpoint próprio (a rota de update original permanece intacta)
+      if (entry?.id && (details || "") !== (entry.details || "")) {
+        await updateCashflowEntryDetails(entry.id, details.trim() || null);
+      }
       onClose();
     } catch (err) {
       toast({  title: err.message || "Erro ao salvar.", status: "error", duration: 3000 });
@@ -186,6 +196,25 @@ const CashFlowEntryModal = ({ isOpen, onClose, entry, categories, onSave }) => {
               </Button>
             </HStack>
           </FormControl>
+
+          <FormControl>
+            <FormLabel>Detalhes</FormLabel>
+            <Textarea
+              value={details}
+              onChange={(e) => setDetails(e.target.value)}
+              placeholder={entry ? "Observações, nº do pedido, forma de pagamento…" : "Disponível após criar o lançamento"}
+              size="sm"
+              rows={3}
+              isDisabled={!entry}
+            />
+          </FormControl>
+
+          {entry?.id && (
+            <FormControl>
+              <FormLabel>Comprovantes</FormLabel>
+              <AttachmentManager entryId={entry.id} pasteActive={isOpen} onCountChange={() => onAttachmentsChange?.()} />
+            </FormControl>
+          )}
         </ModalBody>
 
         <ModalFooter>

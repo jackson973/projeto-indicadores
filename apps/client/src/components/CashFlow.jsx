@@ -34,10 +34,11 @@ import {
   useDisclosure,
   useColorModeValue
 } from "@chakra-ui/react";
-import { AddIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, SearchIcon, CloseIcon, DownloadIcon } from "@chakra-ui/icons";
+import { AddIcon, AttachmentIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, SearchIcon, CloseIcon, DownloadIcon } from "@chakra-ui/icons";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
 import CashFlowEntryModal from "./CashFlowEntryModal";
+import CashFlowReceiptModal from "./CashFlowReceiptModal";
 import CashFlowCategoriesModal from "./CashFlowCategoriesModal";
 import CashFlowRecurrencesModal from "./CashFlowRecurrencesModal";
 import CashFlowBoxesModal from "./CashFlowBoxesModal";
@@ -100,7 +101,9 @@ const CashFlow = () => {
   const [activeFilter, setActiveFilter] = useState(null); // null, 'overdue', 'upcoming'
   const [searchTerm, setSearchTerm] = useState("");
 
+  const [receiptEntry, setReceiptEntry] = useState(null); // pagamento recém-marcado, para anexar comprovante
   const entryModal = useDisclosure();
+  const receiptModal = useDisclosure();
   const categoriesModal = useDisclosure();
   const recurrencesModal = useDisclosure();
   const boxesModal = useDisclosure();
@@ -192,10 +195,16 @@ const CashFlow = () => {
     await loadData();
   };
 
-  const handleToggleStatus = async (id) => {
+  const handleToggleStatus = async (entry) => {
     try {
-      await toggleCashflowEntryStatus(id);
+      const result = await toggleCashflowEntryStatus(entry.id);
       await loadData();
+      // Pagamento (despesa) marcado como realizado → oferece anexar o comprovante.
+      // O check já está persistido; fechar a modal (Esc/clique fora) não desfaz nada.
+      if (entry.type === "expense" && result?.status === "ok") {
+        setReceiptEntry(entry);
+        receiptModal.onOpen();
+      }
     } catch (err) {
       toast({  title: "Erro ao alterar status.", status: "error", duration: 3000 });
     }
@@ -628,13 +637,16 @@ const CashFlow = () => {
                     <Box onClick={(e) => e.stopPropagation()} flexShrink={0}>
                       <Checkbox
                         isChecked={entry.status === "ok"}
-                        onChange={() => handleToggleStatus(entry.id)}
+                        onChange={() => handleToggleStatus(entry)}
                         colorScheme="green"
                         size="lg"
                       />
                     </Box>
                     <Text fontSize="sm" fontWeight="medium" flex={1} noOfLines={1}>
                       {entry.description}
+                      {entry.attachmentCount > 0 && (
+                        <AttachmentIcon boxSize={3} color="gray.400" ml={1} title="Possui comprovante anexo" />
+                      )}
                     </Text>
                     <Text
                       fontSize="sm"
@@ -775,7 +787,7 @@ const CashFlow = () => {
                     <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                       <Checkbox
                         isChecked={entry.status === "ok"}
-                        onChange={() => handleToggleStatus(entry.id)}
+                        onChange={() => handleToggleStatus(entry)}
                         colorScheme="green"
                       />
                     </Td>
@@ -789,7 +801,14 @@ const CashFlow = () => {
                         {entry.categoryName}
                       </Badge>
                     </Td>
-                    <Td fontSize="sm">{entry.description}</Td>
+                    <Td fontSize="sm">
+                      {entry.description}
+                      {entry.attachmentCount > 0 && (
+                        <Tooltip label="Possui comprovante anexo" hasArrow>
+                          <AttachmentIcon boxSize={3} color="gray.400" ml={2} />
+                        </Tooltip>
+                      )}
+                    </Td>
                     <Td isNumeric fontSize="sm" color="red.500" fontWeight="medium">
                       {entry.type === "expense" ? formatCurrency(entry.amount) : ""}
                     </Td>
@@ -826,6 +845,13 @@ const CashFlow = () => {
         entry={editingEntry}
         categories={categories}
         onSave={handleSaveEntry}
+        onAttachmentsChange={loadData}
+      />
+      <CashFlowReceiptModal
+        isOpen={receiptModal.isOpen}
+        onClose={() => { receiptModal.onClose(); setReceiptEntry(null); }}
+        entry={receiptEntry}
+        onChanged={loadData}
       />
       <CashFlowCategoriesModal
         isOpen={categoriesModal.isOpen}

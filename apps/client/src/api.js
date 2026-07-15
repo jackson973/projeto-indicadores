@@ -268,6 +268,43 @@ export const deleteCashflowEntry = async (id) => {
   return handleResponse(response);
 };
 
+// Cashflow: detalhes do lançamento + anexos (comprovantes)
+export const updateCashflowEntryDetails = async (id, details) => {
+  const response = await authFetch(`/api/cashflow/entries/${id}/details`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ details })
+  });
+  return handleResponse(response);
+};
+
+export const fetchCashflowAttachments = async (entryId) => {
+  const response = await authFetch(`/api/cashflow/entries/${entryId}/attachments`);
+  return handleResponse(response);
+};
+
+export const uploadCashflowAttachment = async (entryId, file) => {
+  const formData = new FormData();
+  formData.append("file", file, file.name || "comprovante.png");
+  const response = await authFetch(`/api/cashflow/entries/${entryId}/attachments`, {
+    method: "POST",
+    body: formData
+  });
+  return handleResponse(response);
+};
+
+export const deleteCashflowAttachment = async (id) => {
+  const response = await authFetch(`/api/cashflow/attachments/${id}`, { method: "DELETE" });
+  return handleResponse(response);
+};
+
+// Baixa o arquivo autenticado e devolve uma object URL para abrir/exibir
+export const fetchCashflowAttachmentUrl = async (id) => {
+  const response = await authFetch(`/api/cashflow/attachments/${id}/file`);
+  if (!response.ok) throw new Error("Erro ao abrir anexo.");
+  return URL.createObjectURL(await response.blob());
+};
+
 // Cashflow Balance & Summary API
 export const fetchCashflowBalance = async (year, month, boxId) => {
   const response = await authFetch(`/api/cashflow/balance?year=${year}&month=${month}&boxId=${boxId}`);
