@@ -35,7 +35,7 @@ import {
   useColorModeValue
 } from "@chakra-ui/react";
 import { AddIcon, AttachmentIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, SearchIcon, CloseIcon, DownloadIcon } from "@chakra-ui/icons";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, ReferenceArea } from "recharts";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -103,6 +103,8 @@ const CashFlow = () => {
   });
   const [activeFilter, setActiveFilter] = useState(null); // null, 'paid', 'overdue', 'upcoming'
   const [searchTerm, setSearchTerm] = useState("");
+  const [dayRange, setDayRange] = useState(null); // {start, end} — dias selecionados no gráfico
+  const [dragSel, setDragSel] = useState(null); // seleção em andamento no gráfico (arrasto)
 
   const [receiptEntry, setReceiptEntry] = useState(null); // pagamento recém-marcado, para anexar comprovante
   const [viewerAttachment, setViewerAttachment] = useState(null); // anexo único aberto pelo clipe da listagem
@@ -119,6 +121,8 @@ const CashFlow = () => {
   const tableBg = useColorModeValue("white", "gray.800");
   const headerBg = useColorModeValue("gray.50", "gray.700");
   const cardBorder = useColorModeValue("gray.200", "gray.600");
+  const selPanelBg = useColorModeValue("blue.50", "rgba(49, 130, 206, 0.12)");
+  const selPanelBorder = useColorModeValue("blue.200", "blue.600");
   const pendingOpacity = 0.5;
 
   const loadBoxes = async () => {
@@ -178,6 +182,8 @@ const CashFlow = () => {
 
   useEffect(() => {
     loadData();
+    setDayRange(null); // seleção de dias do gráfico não vale para outro mês/caixa
+    setDragSel(null);
   }, [year, month, selectedBoxId]);
 
   const prevMonth = () => {
@@ -277,6 +283,25 @@ const CashFlow = () => {
 
   const clearFilter = () => {
     setActiveFilter(null);
+    setDayRange(null);
+  };
+
+  // Seleção de dias no gráfico: clique filtra um dia; arrastar seleciona um intervalo
+  const handleChartMouseDown = (e) => {
+    if (e?.activeLabel) setDragSel({ start: e.activeLabel, end: e.activeLabel });
+  };
+
+  const handleChartMouseMove = (e) => {
+    if (!e?.activeLabel) return;
+    setDragSel(s => (s && s.end !== e.activeLabel ? { ...s, end: e.activeLabel } : s));
+  };
+
+  const handleChartMouseUp = () => {
+    if (!dragSel) return;
+    const a = parseInt(dragSel.start), b = parseInt(dragSel.end);
+    setDragSel(null);
+    if (Number.isNaN(a) || Number.isNaN(b)) return;
+    setDayRange({ start: Math.min(a, b), end: Math.max(a, b) });
   };
 
   const openNewEntry = () => {
@@ -383,7 +408,7 @@ const CashFlow = () => {
     y += 6;
 
     doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GRAY);
-    doc.text(`${boxName ? `Caixa: ${boxName} · ` : ""}Gerado em ${generatedAt}${activeFilter || searchTerm ? " · Lista filtrada" : ""}`, M, y);
+    doc.text(`${boxName ? `Caixa: ${boxName} · ` : ""}Gerado em ${generatedAt}${activeFilter || searchTerm || dayRange ? " · Lista filtrada" : ""}${dayRange ? ` (${dayRangeLabel.toLowerCase()})` : ""}`, M, y);
     y += 4;
 
     // Resumo do mês
@@ -496,6 +521,14 @@ const CashFlow = () => {
       result = result.filter(e => upcomingIds.has(e.id));
     }
 
+    // Apply day range filter (seleção no gráfico)
+    if (dayRange) {
+      result = result.filter(e => {
+        const d = parseInt(String(e.date).slice(8, 10));
+        return d >= dayRange.start && d <= dayRange.end;
+      });
+    }
+
     // Apply search filter
     if (searchTerm.trim()) {
       const term = searchTerm.trim().toLowerCase();
@@ -508,7 +541,7 @@ const CashFlow = () => {
     }
 
     return result;
-  }, [entries, summary, activeFilter, alerts, searchTerm]);
+  }, [entries, summary, activeFilter, alerts, searchTerm, dayRange]);
 
   // Chart data
   const chartData = useMemo(() => {
@@ -520,6 +553,37 @@ const CashFlow = () => {
   }, [summary]);
 
   const chartTooltipFormatter = (value) => [formatCurrency(value), "Saldo"];
+
+  // Resumo do(s) dia(s) selecionado(s) no gráfico — calculado sobre todos os
+  // lançamentos do mês no intervalo, independente de busca/outros filtros
+  const daySelectionStats = useMemo(() => {
+    if (!dayRange) return null;
+    const inRange = entries.filter(e => {
+      const d = parseInt(String(e.date).slice(8, 10));
+      return d >= dayRange.start && d <= dayRange.end;
+    });
+    const income = inRange.filter(e => e.type === "income");
+    const expense = inRange.filter(e => e.type === "expense");
+    const totalIncome = income.reduce((s, e) => s + e.amount, 0);
+    const totalExpense = expense.reduce((s, e) => s + e.amount, 0);
+    const endDay = String(dayRange.end).padStart(2, "0");
+    const endPoint = chartData.find(d => d.date === endDay) || chartData[chartData.length - 1];
+    return {
+      count: inRange.length,
+      totalIncome,
+      incomeCount: income.length,
+      totalExpense,
+      expenseCount: expense.length,
+      net: totalIncome - totalExpense,
+      endBalance: endPoint?.saldo ?? 0
+    };
+  }, [dayRange, entries, chartData]);
+
+  const dayRangeLabel = dayRange
+    ? (dayRange.start === dayRange.end
+      ? `Dia ${String(dayRange.start).padStart(2, "0")}`
+      : `Dias ${String(dayRange.start).padStart(2, "0")} a ${String(dayRange.end).padStart(2, "0")}`)
+    : "";
 
   if (loading && !summary) {
     return <Center py={20}><Spinner size="xl" color="blue.500" /></Center>;
@@ -639,19 +703,19 @@ const CashFlow = () => {
         <Box bg={cardBg} p={4} borderRadius="lg" boxShadow="sm" borderWidth="1px">
           <Stat>
             <StatLabel fontSize="xs" color="gray.500">Total Receitas</StatLabel>
-            <StatNumber fontSize="lg" color="green.500">{formatCurrency(summary?.totalIncome)}</StatNumber>
+            <StatNumber fontSize={{ base: "md", "2xl": "lg" }} color="green.500">{formatCurrency(summary?.totalIncome)}</StatNumber>
           </Stat>
         </Box>
         <Box bg={cardBg} p={4} borderRadius="lg" boxShadow="sm" borderWidth="1px">
           <Stat>
             <StatLabel fontSize="xs" color="gray.500">Total Despesas</StatLabel>
-            <StatNumber fontSize="lg" color="red.500">{formatCurrency(summary?.totalExpense)}</StatNumber>
+            <StatNumber fontSize={{ base: "md", "2xl": "lg" }} color="red.500">{formatCurrency(summary?.totalExpense)}</StatNumber>
           </Stat>
         </Box>
         <Box bg={cardBg} p={4} borderRadius="lg" boxShadow="sm" borderWidth="1px">
           <Stat>
             <StatLabel fontSize="xs" color="gray.500">Saldo Final</StatLabel>
-            <StatNumber fontSize="lg" color={(summary?.closingBalance ?? 0) >= 0 ? "blue.500" : "red.500"}>
+            <StatNumber fontSize={{ base: "md", "2xl": "lg" }} color={(summary?.closingBalance ?? 0) >= 0 ? "blue.500" : "red.500"}>
               {formatCurrency(summary?.closingBalance)}
             </StatNumber>
           </Stat>
@@ -675,7 +739,7 @@ const CashFlow = () => {
               Pagos
               {activeFilter === 'paid' && <Badge ml={2} colorScheme="green" fontSize="xs">Filtrado</Badge>}
             </StatLabel>
-            <StatNumber fontSize="lg" color="green.500">
+            <StatNumber fontSize={{ base: "md", "2xl": "lg" }} color="green.500">
               {formatCurrency(paidStats.total)}
             </StatNumber>
             <StatHelpText fontSize="xs" color="gray.600" mt={1}>
@@ -702,7 +766,7 @@ const CashFlow = () => {
               A Vencer
               {activeFilter === 'upcoming' && <Badge ml={2} colorScheme="blue" fontSize="xs">Filtrado</Badge>}
             </StatLabel>
-            <StatNumber fontSize="lg" color="blue.500">
+            <StatNumber fontSize={{ base: "md", "2xl": "lg" }} color="blue.500">
               {formatCurrency(alerts.upcomingTotal)}
             </StatNumber>
             <StatHelpText fontSize="xs" color="gray.600" mt={1}>
@@ -729,7 +793,7 @@ const CashFlow = () => {
               Vencidos
               {activeFilter === 'overdue' && <Badge ml={2} colorScheme="red" fontSize="xs">Filtrado</Badge>}
             </StatLabel>
-            <StatNumber fontSize="lg" color="red.500">
+            <StatNumber fontSize={{ base: "md", "2xl": "lg" }} color="red.500">
               {formatCurrency(alerts.overdueTotal)}
             </StatNumber>
             <StatHelpText fontSize="xs" color="gray.600" mt={1}>
@@ -742,16 +806,106 @@ const CashFlow = () => {
       {/* Chart */}
       {chartData.length > 0 && (
         <Box bg={cardBg} p={4} borderRadius="lg" boxShadow="sm" borderWidth="1px" mb={6}>
-          <Text fontSize="sm" fontWeight="bold" mb={3}>Evolução do saldo</Text>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" fontSize={11} />
-              <YAxis fontSize={11} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-              <RechartsTooltip formatter={chartTooltipFormatter} labelFormatter={(l) => `Dia ${l}`} />
-              <Line type="monotone" dataKey="saldo" stroke="#3182CE" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+          <Flex align="baseline" justify="space-between" mb={3} wrap="wrap" gap={1}>
+            <Text fontSize="sm" fontWeight="bold">Evolução do saldo</Text>
+            {!isMobile && (
+              <Text fontSize="xs" color="gray.400">Clique em um dia ou arraste para filtrar um período</Text>
+            )}
+          </Flex>
+          <Box style={{ userSelect: "none" }} cursor="crosshair">
+            <ResponsiveContainer width="100%" height={220}>
+              <LineChart
+                data={chartData}
+                onMouseDown={handleChartMouseDown}
+                onMouseMove={handleChartMouseMove}
+                onMouseUp={handleChartMouseUp}
+                onMouseLeave={handleChartMouseUp}
+              >
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" fontSize={11} />
+                <YAxis fontSize={11} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                <RechartsTooltip formatter={chartTooltipFormatter} labelFormatter={(l) => `Dia ${l}`} />
+                {dragSel && (
+                  <ReferenceArea
+                    x1={parseInt(dragSel.start) <= parseInt(dragSel.end) ? dragSel.start : dragSel.end}
+                    x2={parseInt(dragSel.start) <= parseInt(dragSel.end) ? dragSel.end : dragSel.start}
+                    fill="#3182CE"
+                    fillOpacity={0.15}
+                  />
+                )}
+                {!dragSel && dayRange && (
+                  <ReferenceArea
+                    x1={String(dayRange.start).padStart(2, "0")}
+                    x2={String(dayRange.end).padStart(2, "0")}
+                    fill="#3182CE"
+                    fillOpacity={0.12}
+                    stroke="#3182CE"
+                    strokeOpacity={0.4}
+                  />
+                )}
+                <Line type="monotone" dataKey="saldo" stroke="#3182CE" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </Box>
+
+          {/* Resumo do período selecionado */}
+          {daySelectionStats && (
+            <Flex
+              mt={3}
+              px={4}
+              py={3}
+              bg={selPanelBg}
+              borderWidth="1px"
+              borderColor={selPanelBorder}
+              borderRadius="lg"
+              align="center"
+              gap={{ base: 3, md: 6 }}
+              wrap="wrap"
+            >
+              <Box minW="110px">
+                <Text fontSize="xs" color="gray.500">Período</Text>
+                <Text fontSize="md" fontWeight="bold" color="blue.500">{dayRangeLabel}</Text>
+                <Text fontSize="2xs" color="gray.500">
+                  {daySelectionStats.count} lançamento{daySelectionStats.count === 1 ? "" : "s"}
+                </Text>
+              </Box>
+              <Box>
+                <Text fontSize="xs" color="gray.500">Entradas ({daySelectionStats.incomeCount})</Text>
+                <Text fontSize="md" fontWeight="bold" color="green.500">
+                  {formatCurrency(daySelectionStats.totalIncome)}
+                </Text>
+              </Box>
+              <Box>
+                <Text fontSize="xs" color="gray.500">Saídas ({daySelectionStats.expenseCount})</Text>
+                <Text fontSize="md" fontWeight="bold" color="red.500">
+                  {formatCurrency(daySelectionStats.totalExpense)}
+                </Text>
+              </Box>
+              <Box>
+                <Text fontSize="xs" color="gray.500">Resultado do período</Text>
+                <Text fontSize="md" fontWeight="bold" color={daySelectionStats.net >= 0 ? "green.500" : "red.500"}>
+                  {daySelectionStats.net >= 0 ? "+" : ""}{formatCurrency(daySelectionStats.net)}
+                </Text>
+              </Box>
+              <Box>
+                <Text fontSize="xs" color="gray.500">
+                  Saldo no dia {String(dayRange.end).padStart(2, "0")}
+                </Text>
+                <Text fontSize="md" fontWeight="bold" color={daySelectionStats.endBalance >= 0 ? "blue.500" : "red.500"}>
+                  {formatCurrency(daySelectionStats.endBalance)}
+                </Text>
+              </Box>
+              <IconButton
+                icon={<CloseIcon boxSize={2.5} />}
+                size="sm"
+                variant="ghost"
+                aria-label="Limpar seleção de dias"
+                title="Limpar seleção"
+                ml="auto"
+                onClick={() => setDayRange(null)}
+              />
+            </Flex>
+          )}
         </Box>
       )}
 
@@ -761,7 +915,7 @@ const CashFlow = () => {
           <Flex justify="space-between" align="center" mb={2}>
             <HStack>
               <Text fontWeight="bold" fontSize="sm">Lançamentos</Text>
-              {activeFilter && (
+              {(activeFilter || dayRange) && (
                 <Button size="xs" colorScheme="gray" variant="outline" onClick={clearFilter}>
                   Limpar filtro
                 </Button>
@@ -899,7 +1053,7 @@ const CashFlow = () => {
           <Flex justify="space-between" align="center" px={4} py={3}>
             <HStack spacing={3}>
               <Text fontWeight="bold" fontSize="sm">Lançamentos</Text>
-              {activeFilter && (
+              {(activeFilter || dayRange) && (
                 <Button size="xs" colorScheme="gray" variant="outline" onClick={clearFilter}>
                   Limpar filtro
                 </Button>
