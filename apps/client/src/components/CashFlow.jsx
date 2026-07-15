@@ -37,6 +37,8 @@ import {
 import { AddIcon, AttachmentIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon, SearchIcon, CloseIcon, DownloadIcon } from "@chakra-ui/icons";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import CashFlowEntryModal from "./CashFlowEntryModal";
 import CashFlowReceiptModal, { AttachmentViewerModal } from "./CashFlowReceiptModal";
 import CashFlowCategoriesModal from "./CashFlowCategoriesModal";
@@ -99,7 +101,7 @@ const CashFlow = () => {
     upcomingTotal: 0,
     upcomingItems: []
   });
-  const [activeFilter, setActiveFilter] = useState(null); // null, 'overdue', 'upcoming'
+  const [activeFilter, setActiveFilter] = useState(null); // null, 'paid', 'overdue', 'upcoming'
   const [searchTerm, setSearchTerm] = useState("");
 
   const [receiptEntry, setReceiptEntry] = useState(null); // pagamento recém-marcado, para anexar comprovante
@@ -261,6 +263,10 @@ const CashFlow = () => {
     }
   };
 
+  const handleFilterPaid = () => {
+    setActiveFilter(activeFilter === 'paid' ? null : 'paid');
+  };
+
   const handleFilterOverdue = () => {
     setActiveFilter(activeFilter === 'overdue' ? null : 'overdue');
   };
@@ -344,6 +350,130 @@ const CashFlow = () => {
     XLSX.writeFile(wb, `fluxo-caixa-${String(month).padStart(2, "0")}-${year}.xlsx`);
   };
 
+  const handleExportPdf = () => {
+    if (!entriesWithBalance.length) {
+      toast({ title: "Nenhum lançamento para exportar.", status: "warning", duration: 3000 });
+      return;
+    }
+
+    const BRL = (n) => Number(n || 0).toLocaleString("pt-BR", {
+      style: "currency", currency: "BRL", minimumFractionDigits: 2, maximumFractionDigits: 2
+    });
+    const NAVY = [26, 54, 93], BLUE = [49, 130, 206], RED = [192, 57, 43],
+      GREEN = [39, 103, 73], GRAY = [85, 85, 85];
+    const M = 12; // margem, em mm (A4 retrato)
+
+    const monthLabel = monthNames[month - 1];
+    const boxName = boxes.find(b => String(b.id) === String(selectedBoxId))?.name || "";
+    const generatedAt = new Date().toLocaleString("pt-BR", {
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit", second: "2-digit"
+    });
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const pageW = doc.internal.pageSize.getWidth();
+    let y = M + 4;
+
+    // Título com o mês em destaque
+    doc.setFont("helvetica", "bold"); doc.setFontSize(14); doc.setTextColor(20, 20, 20);
+    doc.text("Fluxo de Caixa", M, y);
+    const titleW = doc.getTextWidth("Fluxo de Caixa ");
+    doc.setFontSize(16); doc.setTextColor(...BLUE);
+    doc.text(`${monthLabel} / ${year}`, M + titleW + 2, y);
+    y += 6;
+
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...GRAY);
+    doc.text(`${boxName ? `Caixa: ${boxName} · ` : ""}Gerado em ${generatedAt}${activeFilter || searchTerm ? " · Lista filtrada" : ""}`, M, y);
+    y += 4;
+
+    // Resumo do mês
+    autoTable(doc, {
+      startY: y, margin: { left: M, right: M },
+      head: [["Saldo Inicial", "Total Receitas", "Total Despesas", "Saldo Final"]],
+      body: [[
+        BRL(summary?.openingBalance),
+        BRL(summary?.totalIncome),
+        BRL(summary?.totalExpense),
+        BRL(summary?.closingBalance)
+      ]],
+      styles: { fontSize: 9.5, halign: "center", fontStyle: "bold", cellPadding: 1.8 },
+      headStyles: { fillColor: NAVY, halign: "center", fontSize: 8.5 },
+      didParseCell: (d) => {
+        if (d.section !== "body") return;
+        if (d.column.index === 1) d.cell.styles.textColor = GREEN;
+        if (d.column.index === 2) d.cell.styles.textColor = RED;
+        if (d.column.index === 3) d.cell.styles.textColor = (summary?.closingBalance ?? 0) >= 0 ? BLUE : RED;
+      },
+    });
+    y = doc.lastAutoTable.finalY + 5;
+
+    // Lançamentos (mesma lista/ordem da tela, incluindo filtro ativo)
+    const body = [
+      ["", "", "", "SALDO ANTERIOR", "", "", BRL(summary?.openingBalance)],
+      ...entriesWithBalance.map(e => {
+        const [yy, mm, dd] = String(e.date).slice(0, 10).split("-");
+        return [
+          e.status === "ok" ? "OK" : "Pendente",
+          `${dd}/${mm}/${yy}`,
+          e.categoryName || "",
+          e.description || "",
+          e.type === "expense" ? BRL(e.amount) : "",
+          e.type === "income" ? BRL(e.amount) : "",
+          BRL(e.runningBalance)
+        ];
+      })
+    ];
+
+    autoTable(doc, {
+      startY: y, margin: { left: M, right: M, bottom: 14 },
+      head: [["Status", "Data", "Tipo", "Histórico", "Despesa", "Receita", "Saldo"]],
+      body,
+      styles: { fontSize: 7.5, cellPadding: 1.4, halign: "right" },
+      headStyles: { fillColor: NAVY, halign: "right" },
+      columnStyles: {
+        0: { halign: "center", cellWidth: 15 },
+        1: { halign: "center", cellWidth: 16 },
+        2: { halign: "left", cellWidth: 26 },
+        3: { halign: "left" },
+        4: { cellWidth: 21 },
+        5: { cellWidth: 21 },
+        6: { cellWidth: 23 },
+      },
+      didParseCell: (d) => {
+        if (d.section !== "body") return;
+        if (d.row.index === 0) { d.cell.styles.fontStyle = "bold"; d.cell.styles.fillColor = [235, 235, 235]; }
+        if (d.column.index === 0 && d.cell.raw === "Pendente") d.cell.styles.textColor = GRAY;
+        if (d.column.index === 4 && d.cell.raw) d.cell.styles.textColor = RED;
+        if (d.column.index === 5 && d.cell.raw) d.cell.styles.textColor = GREEN;
+        if (d.column.index === 6 && d.cell.raw) {
+          d.cell.styles.fontStyle = "bold";
+          d.cell.styles.textColor = String(d.cell.raw).includes("-") ? RED : BLUE;
+        }
+      },
+    });
+
+    // Rodapé: data/hora de geração + paginação
+    const pages = doc.getNumberOfPages();
+    const pageH = doc.internal.pageSize.getHeight();
+    for (let p = 1; p <= pages; p++) {
+      doc.setPage(p);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7.5); doc.setTextColor(...GRAY);
+      doc.text(`Gerado em ${generatedAt}`, M, pageH - 7);
+      doc.text(`Página ${p} de ${pages}`, pageW - M, pageH - 7, { align: "right" });
+    }
+
+    doc.save(`fluxo-caixa-${String(month).padStart(2, "0")}-${year}.pdf`);
+  };
+
+  // Despesas pagas do mês (espelha a semântica de Vencidos/A Vencer, que são só despesas)
+  const paidStats = useMemo(() => {
+    const items = entries.filter(e => e.type === "expense" && e.status === "ok");
+    return {
+      count: items.length,
+      total: items.reduce((sum, e) => sum + e.amount, 0)
+    };
+  }, [entries]);
+
   // Compute running balance for table and apply filters
   const entriesWithBalance = useMemo(() => {
     if (!summary) return entries.map(e => ({ ...e, runningBalance: 0 }));
@@ -356,7 +486,9 @@ const CashFlow = () => {
     });
 
     // Apply active filter
-    if (activeFilter === 'overdue') {
+    if (activeFilter === 'paid') {
+      result = result.filter(e => e.type === "expense" && e.status === "ok");
+    } else if (activeFilter === 'overdue') {
       const overdueIds = new Set(alerts.overdueItems.map(item => item.id));
       result = result.filter(e => overdueIds.has(e.id));
     } else if (activeFilter === 'upcoming') {
@@ -474,7 +606,7 @@ const CashFlow = () => {
       )}
 
       {/* Summary cards */}
-      <SimpleGrid columns={{ base: 2, md: 6 }} spacing={4} mb={6}>
+      <SimpleGrid columns={{ base: 2, md: 4, xl: 7 }} spacing={{ base: 2, md: 3 }} mb={6}>
         <Box bg={cardBg} p={4} borderRadius="lg" boxShadow="sm" borderWidth="1px">
           <Stat>
             <StatLabel fontSize="xs" color="gray.500">Saldo Inicial</StatLabel>
@@ -525,29 +657,29 @@ const CashFlow = () => {
           </Stat>
         </Box>
 
-        {/* Vencidos Card */}
+        {/* Pagos Card */}
         <Box
           bg={cardBg}
           p={4}
           borderRadius="lg"
-          boxShadow={activeFilter === 'overdue' ? 'lg' : 'sm'}
+          boxShadow={activeFilter === 'paid' ? 'lg' : 'sm'}
           borderWidth="2px"
-          borderColor={activeFilter === 'overdue' ? 'red.500' : (alerts.overdueCount > 0 ? 'red.300' : 'transparent')}
+          borderColor={activeFilter === 'paid' ? 'green.500' : 'transparent'}
           cursor="pointer"
-          onClick={handleFilterOverdue}
+          onClick={handleFilterPaid}
           transition="all 0.2s"
           _hover={{ transform: 'translateY(-2px)', boxShadow: 'md' }}
         >
           <Stat>
             <StatLabel fontSize="xs" color="gray.500">
-              Vencidos
-              {activeFilter === 'overdue' && <Badge ml={2} colorScheme="red" fontSize="xs">Filtrado</Badge>}
+              Pagos
+              {activeFilter === 'paid' && <Badge ml={2} colorScheme="green" fontSize="xs">Filtrado</Badge>}
             </StatLabel>
-            <StatNumber fontSize="lg" color="red.500">
-              {formatCurrency(alerts.overdueTotal)}
+            <StatNumber fontSize="lg" color="green.500">
+              {formatCurrency(paidStats.total)}
             </StatNumber>
             <StatHelpText fontSize="xs" color="gray.600" mt={1}>
-              {alerts.overdueCount} vencimento{alerts.overdueCount !== 1 ? 's' : ''}
+              {paidStats.count} pagamento{paidStats.count !== 1 ? 's' : ''}
             </StatHelpText>
           </Stat>
         </Box>
@@ -575,6 +707,33 @@ const CashFlow = () => {
             </StatNumber>
             <StatHelpText fontSize="xs" color="gray.600" mt={1}>
               {alerts.upcomingCount} vencimento{alerts.upcomingCount !== 1 ? 's' : ''}
+            </StatHelpText>
+          </Stat>
+        </Box>
+
+        {/* Vencidos Card */}
+        <Box
+          bg={cardBg}
+          p={4}
+          borderRadius="lg"
+          boxShadow={activeFilter === 'overdue' ? 'lg' : 'sm'}
+          borderWidth="2px"
+          borderColor={activeFilter === 'overdue' ? 'red.500' : (alerts.overdueCount > 0 ? 'red.300' : 'transparent')}
+          cursor="pointer"
+          onClick={handleFilterOverdue}
+          transition="all 0.2s"
+          _hover={{ transform: 'translateY(-2px)', boxShadow: 'md' }}
+        >
+          <Stat>
+            <StatLabel fontSize="xs" color="gray.500">
+              Vencidos
+              {activeFilter === 'overdue' && <Badge ml={2} colorScheme="red" fontSize="xs">Filtrado</Badge>}
+            </StatLabel>
+            <StatNumber fontSize="lg" color="red.500">
+              {formatCurrency(alerts.overdueTotal)}
+            </StatNumber>
+            <StatHelpText fontSize="xs" color="gray.600" mt={1}>
+              {alerts.overdueCount} vencimento{alerts.overdueCount !== 1 ? 's' : ''}
             </StatHelpText>
           </Stat>
         </Box>
@@ -777,6 +936,15 @@ const CashFlow = () => {
                 onClick={handleExportExcel}
               >
                 Exportar Excel
+              </Button>
+              <Button
+                leftIcon={<DownloadIcon />}
+                colorScheme="red"
+                variant="outline"
+                size="sm"
+                onClick={handleExportPdf}
+              >
+                Exportar PDF
               </Button>
               <Button leftIcon={<AddIcon />} colorScheme="blue" size="sm" onClick={openNewEntry}>
                 Novo lançamento
