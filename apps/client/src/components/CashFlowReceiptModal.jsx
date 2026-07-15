@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Modal, ModalOverlay, ModalContent, ModalHeader, ModalBody, ModalFooter, ModalCloseButton,
-  Box, Flex, Text, Button, IconButton, Badge, Textarea, VStack, HStack, Spinner,
+  Box, Flex, Text, Button, IconButton, Badge, Textarea, HStack, Spinner, Image, Wrap, WrapItem,
   useColorModeValue,
 } from "@chakra-ui/react";
-import { AttachmentIcon, DeleteIcon, ExternalLinkIcon } from "@chakra-ui/icons";
+import { AttachmentIcon, CloseIcon } from "@chakra-ui/icons";
 import {
   fetchCashflowAttachments, uploadCashflowAttachment, deleteCashflowAttachment,
   fetchCashflowAttachmentUrl, updateCashflowEntryDetails,
@@ -24,6 +24,8 @@ export function AttachmentManager({ entryId, pasteActive = false, onCountChange 
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [thumbs, setThumbs] = useState({}); // attachment id -> object URL (miniatura de imagem)
+  const thumbsRef = useRef({});
   const inputRef = useRef(null);
   const toast = useAppToast();
 
@@ -46,6 +48,26 @@ export function AttachmentManager({ entryId, pasteActive = false, onCountChange 
   }, [entryId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { setLoading(true); reload(); }, [reload]);
+
+  // Baixa as miniaturas das imagens (rota autenticada → object URL)
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const urls = {};
+      for (const a of items) {
+        if (a.mimeType?.startsWith("image/") && !thumbsRef.current[a.id]) {
+          try { urls[a.id] = await fetchCashflowAttachmentUrl(a.id); } catch { /* fica sem preview */ }
+        }
+      }
+      if (alive && Object.keys(urls).length) {
+        setThumbs(prev => { const next = { ...prev, ...urls }; thumbsRef.current = next; return next; });
+      }
+    })();
+    return () => { alive = false; };
+  }, [items]);
+
+  // Libera as object URLs ao desmontar
+  useEffect(() => () => { Object.values(thumbsRef.current).forEach(u => URL.revokeObjectURL(u)); }, []);
 
   const uploadFiles = useCallback(async (files) => {
     const valid = [...files].filter(f => /^image\/|^application\/pdf$/.test(f.type));
@@ -124,17 +146,47 @@ export function AttachmentManager({ entryId, pasteActive = false, onCountChange 
       {loading ? (
         <Flex justify="center" py={3}><Spinner size="sm" /></Flex>
       ) : items.length > 0 && (
-        <VStack align="stretch" spacing={1} mt={3}>
-          {items.map(a => (
-            <Flex key={a.id} align="center" gap={2} borderWidth="1px" borderColor={rowBorder} borderRadius="md" px={2} py={1.5}>
-              <AttachmentIcon color="gray.400" flexShrink={0} boxSize={3} />
-              <Text fontSize="xs" flex="1" noOfLines={1}>{a.originalName || "comprovante"}</Text>
-              {a.sizeBytes && <Text fontSize="2xs" color="gray.500" flexShrink={0}>{formatSize(a.sizeBytes)}</Text>}
-              <IconButton icon={<ExternalLinkIcon />} size="xs" variant="ghost" aria-label="Abrir" title="Abrir comprovante" onClick={() => openAttachment(a)} />
-              <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Excluir" title="Excluir comprovante" onClick={() => removeAttachment(a)} />
-            </Flex>
-          ))}
-        </VStack>
+        <Wrap spacing={3} mt={3}>
+          {items.map(a => {
+            const isImg = a.mimeType?.startsWith("image/");
+            return (
+              <WrapItem key={a.id}>
+                <Box w="84px">
+                  <Box position="relative">
+                    <Box
+                      w="84px" h="84px" borderWidth="1px" borderColor={rowBorder} borderRadius="md"
+                      overflow="hidden" cursor="pointer" bg={dropBgIdle}
+                      display="flex" alignItems="center" justifyContent="center"
+                      title={`${a.originalName || "comprovante"}${a.sizeBytes ? ` · ${formatSize(a.sizeBytes)}` : ""} — clique para abrir`}
+                      onClick={() => openAttachment(a)}
+                    >
+                      {isImg && thumbs[a.id] ? (
+                        <Image src={thumbs[a.id]} alt={a.originalName || "comprovante"} w="100%" h="100%" objectFit="cover" />
+                      ) : isImg ? (
+                        <Spinner size="sm" />
+                      ) : (
+                        <Box textAlign="center">
+                          <Text fontSize="xl" lineHeight="1">📄</Text>
+                          <Text fontSize="2xs" color="gray.500" fontWeight="bold">PDF</Text>
+                        </Box>
+                      )}
+                    </Box>
+                    <IconButton
+                      icon={<CloseIcon boxSize={2} />}
+                      size="xs" colorScheme="red" borderRadius="full" aria-label="Excluir comprovante"
+                      title="Excluir comprovante"
+                      position="absolute" top="-7px" right="-7px" h="20px" w="20px" minW="20px"
+                      onClick={(e) => { e.stopPropagation(); removeAttachment(a); }}
+                    />
+                  </Box>
+                  <Text fontSize="2xs" color="gray.500" noOfLines={1} mt={1} textAlign="center">
+                    {a.originalName || "comprovante"}
+                  </Text>
+                </Box>
+              </WrapItem>
+            );
+          })}
+        </Wrap>
       )}
     </Box>
   );

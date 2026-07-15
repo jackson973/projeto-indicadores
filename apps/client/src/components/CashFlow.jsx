@@ -644,10 +644,10 @@ const CashFlow = () => {
                     </Box>
                     <Text fontSize="sm" fontWeight="medium" flex={1} noOfLines={1}>
                       {entry.description}
-                      {entry.attachmentCount > 0 && (
-                        <AttachmentIcon boxSize={3} color="gray.400" ml={1} title="Possui comprovante anexo" />
-                      )}
                     </Text>
+                    {entry.attachmentCount > 0 && (
+                      <AttachmentIcon boxSize={3} color="gray.400" flexShrink={0} title="Possui comprovante anexo" />
+                    )}
                     <Text
                       fontSize="sm"
                       fontWeight="bold"
