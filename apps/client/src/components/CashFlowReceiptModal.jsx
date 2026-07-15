@@ -4,7 +4,7 @@ import {
   Box, Flex, Text, Button, IconButton, Badge, Textarea, HStack, Spinner, Image, Wrap, WrapItem,
   useColorModeValue,
 } from "@chakra-ui/react";
-import { AttachmentIcon, CloseIcon } from "@chakra-ui/icons";
+import { AttachmentIcon, CloseIcon, DownloadIcon } from "@chakra-ui/icons";
 import {
   fetchCashflowAttachments, uploadCashflowAttachment, deleteCashflowAttachment,
   fetchCashflowAttachmentUrl, updateCashflowEntryDetails,
@@ -13,6 +13,79 @@ import useAppToast from "../hooks/useAppToast";
 
 const formatCurrency = (v) => (v ?? 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 const formatSize = (b) => (b > 1024 * 1024 ? `${(b / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`);
+
+/**
+ * Visualizador de comprovante (lightbox): mostra a imagem/PDF sobre o sistema,
+ * fecha ao clicar fora e permite baixar o arquivo sem trocar de aba.
+ */
+export function AttachmentViewerModal({ attachment, isOpen, onClose }) {
+  const [url, setUrl] = useState(null);
+  const toast = useAppToast();
+  const isImg = attachment?.mimeType?.startsWith("image/");
+
+  useEffect(() => {
+    if (!isOpen || !attachment?.id) return undefined;
+    let alive = true;
+    let objectUrl = null;
+    (async () => {
+      try {
+        objectUrl = await fetchCashflowAttachmentUrl(attachment.id);
+        if (alive) setUrl(objectUrl);
+        else URL.revokeObjectURL(objectUrl);
+      } catch (err) {
+        toast({ title: err.message || "Erro ao abrir anexo.", status: "error", duration: 3000 });
+        if (alive) onClose();
+      }
+    })();
+    return () => {
+      alive = false;
+      setUrl(null);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [isOpen, attachment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleDownload = () => {
+    if (!url) return;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = attachment?.originalName || "comprovante";
+    link.click();
+  };
+
+  if (!attachment) return null;
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} size="4xl" isCentered>
+      <ModalOverlay bg="blackAlpha.700" />
+      <ModalContent>
+        <ModalHeader pr={10} fontSize="md" noOfLines={1}>
+          {attachment.originalName || "Comprovante"}
+          {attachment.sizeBytes ? (
+            <Text as="span" fontSize="xs" color="gray.500" fontWeight="normal" ml={2}>
+              {formatSize(attachment.sizeBytes)}
+            </Text>
+          ) : null}
+        </ModalHeader>
+        <ModalCloseButton />
+        <ModalBody p={2} display="flex" alignItems="center" justifyContent="center" minH="200px">
+          {!url ? (
+            <Spinner />
+          ) : isImg ? (
+            <Image src={url} alt={attachment.originalName || "comprovante"} maxH="72vh" maxW="100%" objectFit="contain" />
+          ) : (
+            <Box as="iframe" src={url} title={attachment.originalName || "comprovante"} w="100%" h="72vh" border="none" />
+          )}
+        </ModalBody>
+        <ModalFooter py={2}>
+          <Button variant="ghost" mr={3} onClick={onClose}>Fechar</Button>
+          <Button leftIcon={<DownloadIcon />} colorScheme="blue" onClick={handleDownload} isDisabled={!url}>
+            Download
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  );
+}
 
 /**
  * Lista + upload de comprovantes de um lançamento.
@@ -25,6 +98,7 @@ export function AttachmentManager({ entryId, pasteActive = false, onCountChange 
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [thumbs, setThumbs] = useState({}); // attachment id -> object URL (miniatura de imagem)
+  const [viewing, setViewing] = useState(null); // anexo aberto no visualizador
   const thumbsRef = useRef({});
   const inputRef = useRef(null);
   const toast = useAppToast();
@@ -99,15 +173,6 @@ export function AttachmentManager({ entryId, pasteActive = false, onCountChange 
     return () => window.removeEventListener("paste", onPaste);
   }, [pasteActive, uploadFiles]);
 
-  const openAttachment = async (a) => {
-    try {
-      const url = await fetchCashflowAttachmentUrl(a.id);
-      window.open(url, "_blank");
-    } catch (err) {
-      toast({ title: err.message || "Erro ao abrir anexo.", status: "error", duration: 3000 });
-    }
-  };
-
   const removeAttachment = async (a) => {
     if (!window.confirm("Excluir este comprovante?")) return;
     try {
@@ -158,7 +223,7 @@ export function AttachmentManager({ entryId, pasteActive = false, onCountChange 
                       overflow="hidden" cursor="pointer" bg={dropBgIdle}
                       display="flex" alignItems="center" justifyContent="center"
                       title={`${a.originalName || "comprovante"}${a.sizeBytes ? ` · ${formatSize(a.sizeBytes)}` : ""} — clique para abrir`}
-                      onClick={() => openAttachment(a)}
+                      onClick={() => setViewing(a)}
                     >
                       {isImg && thumbs[a.id] ? (
                         <Image src={thumbs[a.id]} alt={a.originalName || "comprovante"} w="100%" h="100%" objectFit="cover" />
@@ -188,6 +253,8 @@ export function AttachmentManager({ entryId, pasteActive = false, onCountChange 
           })}
         </Wrap>
       )}
+
+      <AttachmentViewerModal attachment={viewing} isOpen={!!viewing} onClose={() => setViewing(null)} />
     </Box>
   );
 }

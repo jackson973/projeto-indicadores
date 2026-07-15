@@ -38,7 +38,7 @@ import { AddIcon, AttachmentIcon, ChevronLeftIcon, ChevronRightIcon, DeleteIcon,
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer } from "recharts";
 import * as XLSX from "xlsx";
 import CashFlowEntryModal from "./CashFlowEntryModal";
-import CashFlowReceiptModal from "./CashFlowReceiptModal";
+import CashFlowReceiptModal, { AttachmentViewerModal } from "./CashFlowReceiptModal";
 import CashFlowCategoriesModal from "./CashFlowCategoriesModal";
 import CashFlowRecurrencesModal from "./CashFlowRecurrencesModal";
 import CashFlowBoxesModal from "./CashFlowBoxesModal";
@@ -55,7 +55,8 @@ import {
   setCashflowBalance,
   importCashflow,
   fetchCashflowBoxes,
-  fetchCashflowAlerts
+  fetchCashflowAlerts,
+  fetchCashflowAttachments
 } from "../api";
 import useAppToast from "../hooks/useAppToast";
 
@@ -102,6 +103,7 @@ const CashFlow = () => {
   const [searchTerm, setSearchTerm] = useState("");
 
   const [receiptEntry, setReceiptEntry] = useState(null); // pagamento recém-marcado, para anexar comprovante
+  const [viewerAttachment, setViewerAttachment] = useState(null); // anexo único aberto pelo clipe da listagem
   const entryModal = useDisclosure();
   const receiptModal = useDisclosure();
   const categoriesModal = useDisclosure();
@@ -279,6 +281,21 @@ const CashFlow = () => {
   const openEditEntry = (entry) => {
     setEditingEntry(entry);
     entryModal.onOpen();
+  };
+
+  // Clipe: com 1 anexo abre o visualizador direto; com vários, a modal de edição (como o clique na linha)
+  const handleClipClick = async (e, entry) => {
+    e.stopPropagation();
+    if (entry.attachmentCount === 1) {
+      try {
+        const list = await fetchCashflowAttachments(entry.id);
+        if (list.length === 1) {
+          setViewerAttachment(list[0]);
+          return;
+        }
+      } catch { /* cai para a modal de edição */ }
+    }
+    openEditEntry(entry);
   };
 
   const handleExportExcel = () => {
@@ -650,7 +667,16 @@ const CashFlow = () => {
                       {entry.description}
                     </Text>
                     {entry.attachmentCount > 0 && (
-                      <AttachmentIcon boxSize={3} color="gray.400" flexShrink={0} title="Possui comprovante anexo" />
+                      <Box
+                        flexShrink={0}
+                        p={1.5}
+                        m={-1.5}
+                        cursor="pointer"
+                        title="Ver comprovante"
+                        onClick={(e) => handleClipClick(e, entry)}
+                      >
+                        <AttachmentIcon boxSize={3} color="gray.400" display="block" />
+                      </Box>
                     )}
                     <Text
                       fontSize="sm"
@@ -808,8 +834,14 @@ const CashFlow = () => {
                     <Td fontSize="sm">
                       {entry.description}
                       {entry.attachmentCount > 0 && (
-                        <Tooltip label="Possui comprovante anexo" hasArrow>
-                          <AttachmentIcon boxSize={3} color="gray.400" ml={2} />
+                        <Tooltip label={entry.attachmentCount === 1 ? "Ver comprovante" : "Ver comprovantes"} hasArrow>
+                          <AttachmentIcon
+                            boxSize={3}
+                            color="gray.400"
+                            ml={2}
+                            cursor="pointer"
+                            onClick={(e) => handleClipClick(e, entry)}
+                          />
                         </Tooltip>
                       )}
                     </Td>
@@ -852,6 +884,11 @@ const CashFlow = () => {
         currentBoxId={selectedBoxId}
         onSave={handleSaveEntry}
         onAttachmentsChange={loadData}
+      />
+      <AttachmentViewerModal
+        attachment={viewerAttachment}
+        isOpen={!!viewerAttachment}
+        onClose={() => setViewerAttachment(null)}
       />
       <CashFlowReceiptModal
         isOpen={receiptModal.isOpen}
