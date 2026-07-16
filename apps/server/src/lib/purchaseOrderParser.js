@@ -46,8 +46,14 @@ function parseOrderText(rawText) {
   const items = [];
   const itemsBlock = text.match(/ITENS DO PEDIDO([\s\S]*?)(?:Total de pe[çc]as|$)/i)?.[1] || '';
   if (itemsBlock) {
+    // Cabeçalho da tabela pode vir com as células coladas ("ProdutoQtdePreço Unit.Total")
+    const isTableHeader = (l) => {
+      const flat = l.toLowerCase().replace(/\s+/g, '');
+      return (flat.startsWith('produto') && flat.includes('qtde') && flat.includes('total'))
+        || /^qtde$|^pre[çc]ounit\.?$|^total$/.test(flat);
+    };
     const bLines = itemsBlock.split('\n').map(l => l.trim()).filter(Boolean)
-      .filter(l => !/^Produto\b|^Qtde\b|^Pre[çc]o|^Total$/i.test(l));
+      .filter(l => !isTableHeader(l));
     let current = null;
     const flush = () => { if (current && current.description) items.push(current); current = null; };
     for (let i = 0; i < bLines.length; i++) {
