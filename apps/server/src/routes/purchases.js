@@ -2,8 +2,13 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const pdfParse = require('pdf-parse');
 const { authenticate, requireModule } = require('../middleware/auth');
+
+// pdf-parse carregado de forma tolerante: se a lib quebrar neste Node,
+// o app sobe normalmente e só a importação de PDF fica indisponível.
+let pdfParse = null;
+try { pdfParse = require('pdf-parse'); }
+catch (e) { console.error('[Compras] pdf-parse indisponível — importação de PDF desativada:', e.message); }
 const repo = require('../db/purchasesRepository');
 const { parseOrderText } = require('../lib/purchaseOrderParser');
 
@@ -63,6 +68,7 @@ router.post('/parse-order', (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err) return res.status(400).json({ message: err.message || 'Erro no upload.' });
     if (!req.file) return res.status(400).json({ message: 'Arquivo é obrigatório.' });
+    if (!pdfParse) return res.status(503).json({ message: 'Leitura de PDF indisponível no servidor — preencha os campos manualmente.' });
     try {
       cleanTmpFiles();
       const parsed = await pdfParse(req.file.buffer);
