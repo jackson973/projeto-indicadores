@@ -45,6 +45,7 @@ import CashFlowCategoriesModal from "./CashFlowCategoriesModal";
 import CashFlowRecurrencesModal from "./CashFlowRecurrencesModal";
 import CashFlowBoxesModal from "./CashFlowBoxesModal";
 import CashFlowImportModal from "./CashFlowImportModal";
+import { makeWeekdayFor, DayTick, buildCumulativeSeries, zeroSplitOffset } from "./cashflowChartUtils";
 import { getSaoPauloYear, getSaoPauloMonth } from "../utils/timezone";
 import {
   fetchCashflowCategories,
@@ -105,6 +106,7 @@ const CashFlow = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [dayRange, setDayRange] = useState(null); // {start, end} — dias selecionados no gráfico
   const [dragSel, setDragSel] = useState(null); // seleção em andamento no gráfico (arrasto)
+  const [chartType, setChartType] = useState(() => localStorage.getItem("cashflow_chartType") || "saldo"); // saldo | rd
 
   const [receiptEntry, setReceiptEntry] = useState(null); // pagamento recém-marcado, para anexar comprovante
   const [viewerAttachment, setViewerAttachment] = useState(null); // anexo único aberto pelo clipe da listagem
@@ -552,7 +554,23 @@ const CashFlow = () => {
     }));
   }, [summary]);
 
+  // Modo "Receitas e Despesas": acumulado do mês, dia a dia
+  const cumChartData = useMemo(() => buildCumulativeSeries(entries, year, month), [entries, year, month]);
+
+  // Trecho da linha de saldo abaixo de zero fica vermelho
+  const saldoSplit = useMemo(() => zeroSplitOffset(chartData.map(d => d.saldo)), [chartData]);
+
+  const weekdayFor = useMemo(() => makeWeekdayFor(year, month), [year, month]);
+
+  const handleChartTypeChange = (e) => {
+    setChartType(e.target.value);
+    localStorage.setItem("cashflow_chartType", e.target.value);
+  };
+
   const chartTooltipFormatter = (value) => [formatCurrency(value), "Saldo"];
+  const rdTooltipFormatter = (value, name) =>
+    [formatCurrency(value), name === "receitas" ? "Receitas acumuladas" : "Despesas acumuladas"];
+  const chartLabelFormatter = (l) => `Dia ${l} · ${weekdayFor(l)}`;
 
   // Resumo do(s) dia(s) selecionado(s) no gráfico — calculado sobre todos os
   // lançamentos do mês no intervalo, independente de busca/outros filtros
@@ -806,25 +824,54 @@ const CashFlow = () => {
       {/* Chart */}
       {chartData.length > 0 && (
         <Box bg={cardBg} p={4} borderRadius="lg" boxShadow="sm" borderWidth="1px" mb={6}>
-          <Flex align="baseline" justify="space-between" mb={3} wrap="wrap" gap={1}>
-            <Text fontSize="sm" fontWeight="bold">Evolução do saldo</Text>
-            {!isMobile && (
-              <Text fontSize="xs" color="gray.400">Clique em um dia ou arraste para filtrar um período</Text>
-            )}
+          <Flex align="center" justify="space-between" mb={3} wrap="wrap" gap={2}>
+            <Text fontSize="sm" fontWeight="bold">
+              {chartType === "rd" ? "Receitas × Despesas (acumulado)" : "Evolução do saldo"}
+            </Text>
+            <HStack spacing={3}>
+              {!isMobile && (
+                <Text fontSize="xs" color="gray.400">Clique em um dia ou arraste para filtrar um período</Text>
+              )}
+              <Select size="xs" w="170px" value={chartType} onChange={handleChartTypeChange}>
+                <option value="saldo">Saldo</option>
+                <option value="rd">Receitas e Despesas</option>
+              </Select>
+            </HStack>
           </Flex>
+          {chartType === "rd" && (
+            <HStack spacing={4} mb={2}>
+              <HStack spacing={1.5}>
+                <Box w="14px" h="3px" borderRadius="full" bg="green.500" />
+                <Text fontSize="xs" color="gray.500">Receitas acumuladas</Text>
+              </HStack>
+              <HStack spacing={1.5}>
+                <Box w="14px" h="3px" borderRadius="full" bg="red.500" />
+                <Text fontSize="xs" color="gray.500">Despesas acumuladas</Text>
+              </HStack>
+            </HStack>
+          )}
           <Box style={{ userSelect: "none" }} cursor="crosshair">
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={230}>
               <LineChart
-                data={chartData}
+                data={chartType === "rd" ? cumChartData : chartData}
                 onMouseDown={handleChartMouseDown}
                 onMouseMove={handleChartMouseMove}
                 onMouseUp={handleChartMouseUp}
                 onMouseLeave={handleChartMouseUp}
               >
+                <defs>
+                  <linearGradient id="saldoSplitBox" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset={saldoSplit} stopColor="#3182CE" />
+                    <stop offset={saldoSplit} stopColor="#E53E3E" />
+                  </linearGradient>
+                </defs>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="date" fontSize={11} />
+                <XAxis dataKey="date" height={34} tick={<DayTick weekdayFor={weekdayFor} />} />
                 <YAxis fontSize={11} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <RechartsTooltip formatter={chartTooltipFormatter} labelFormatter={(l) => `Dia ${l}`} />
+                <RechartsTooltip
+                  formatter={chartType === "rd" ? rdTooltipFormatter : chartTooltipFormatter}
+                  labelFormatter={chartLabelFormatter}
+                />
                 {dragSel && (
                   <ReferenceArea
                     x1={parseInt(dragSel.start) <= parseInt(dragSel.end) ? dragSel.start : dragSel.end}
@@ -843,7 +890,14 @@ const CashFlow = () => {
                     strokeOpacity={0.4}
                   />
                 )}
-                <Line type="monotone" dataKey="saldo" stroke="#3182CE" strokeWidth={2} dot={false} />
+                {chartType === "rd" ? (
+                  <>
+                    <Line type="monotone" dataKey="receitas" stroke="#38A169" strokeWidth={2} dot={false} />
+                    <Line type="monotone" dataKey="despesas" stroke="#E53E3E" strokeWidth={2} dot={false} />
+                  </>
+                ) : (
+                  <Line type="monotone" dataKey="saldo" stroke={saldoSplit < 1 ? "url(#saldoSplitBox)" : "#3182CE"} strokeWidth={2} dot={false} />
+                )}
               </LineChart>
             </ResponsiveContainer>
           </Box>
