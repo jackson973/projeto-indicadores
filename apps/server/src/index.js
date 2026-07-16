@@ -22,6 +22,7 @@ const validadorRouter = require("./routes/validador");
 const stockRouter = require("./routes/stock");
 const costRouter = require("./routes/cost");
 const accessRouter = require("./routes/access");
+const purchasesRouter = require("./routes/purchases");
 const path = require("path");
 const { authenticate, requireModule } = require("./middleware/auth");
 
@@ -119,6 +120,7 @@ async function start() {
   app.use("/api/stock", stockRouter);
   app.use("/api/cost", costRouter);
   app.use("/api/access", accessRouter);
+  app.use("/api/purchases", purchasesRouter);
   app.use("/api", authenticate, apiRouter);
 
   // Serve uploaded files (logos, etc)

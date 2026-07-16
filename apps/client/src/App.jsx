@@ -83,6 +83,7 @@ import StockInventory from "./components/StockInventory";
 import StockReports from "./components/StockReports";
 import StockSettings from "./components/StockSettings";
 import CostPriceList from "./components/CostPriceList";
+import Purchases from "./components/Purchases";
 import SuppliersManagement from "./components/SuppliersManagement";
 import StockOpeningCost from "./components/StockOpeningCost";
 import ChannelsFees from "./components/ChannelsFees";
@@ -212,6 +213,12 @@ const ProductIcon = (props) => (
   </svg>
 );
 
+const CartIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z" />
+  </svg>
+);
+
 const AdsIcon = (props) => (
   <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
     <path d="M3 3h18v2H3V3zm0 4h12v2H3V7zm0 4h18v2H3v-2zm0 4h12v2H3v-2zm0 4h18v2H3v-2z" />
@@ -276,6 +283,7 @@ const App = () => {
     "Financeiro": "financeiro",
     "Dashboard Financeiro": "financial-dashboard",
     "Produtos": "produtos",
+    "Compras": "compras",
     "Pedidos": "pedidos",
     "Estoque": "estoque",
     "Análise de Custo e Preço": "custo-preco",
@@ -512,6 +520,12 @@ const App = () => {
           view: "product-groups"
         }
       ]
+    },
+    {
+      label: "Compras",
+      icon: <CartIcon />,
+      view: "purchases",
+      show: true
     },
     {
       label: "Pedidos",
@@ -1010,6 +1024,10 @@ const App = () => {
 
         {activeView === "products-dashboard" && (
           <ProductDashboard />
+        )}
+
+        {activeView === "purchases" && canView("compras") && (
+          <Purchases />
         )}
 
         {activeView === "products-management" && (

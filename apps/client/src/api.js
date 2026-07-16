@@ -1754,3 +1754,26 @@ export const fetchStockSeparationOptions = async () => {
   const r = await authFetch('/api/stock/reports/separation-options');
   return handleResponse(r);
 };
+
+// ─── Módulo Compras ───────────────────────────────────────────────────────────
+export const fetchPurchases = async () => handleResponse(await authFetch('/api/purchases'));
+export const fetchPurchase = async (id) => handleResponse(await authFetch(`/api/purchases/${id}`));
+export const fetchPurchasesMeta = async () => handleResponse(await authFetch('/api/purchases/meta'));
+export const checkPurchaseOrderNumber = async (orderNumber) =>
+  handleResponse(await authFetch(`/api/purchases/check?orderNumber=${encodeURIComponent(orderNumber)}`));
+export const parsePurchaseOrder = async (file) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  return handleResponse(await authFetch('/api/purchases/parse-order', { method: 'POST', body: formData }));
+};
+export const createPurchase = async (data) =>
+  handleResponse(await authFetch('/api/purchases', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+  }));
+export const deletePurchase = async (id) =>
+  handleResponse(await authFetch(`/api/purchases/${id}`, { method: 'DELETE' }));
+export const fetchPurchaseFileUrl = async (id) => {
+  const response = await authFetch(`/api/purchases/${id}/file`);
+  if (!response.ok) throw new Error('Erro ao abrir a cópia do pedido.');
+  return URL.createObjectURL(await response.blob());
+};
