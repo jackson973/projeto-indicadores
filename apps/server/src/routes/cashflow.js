@@ -10,6 +10,13 @@ const { getSaoPauloYear, getSaoPauloMonth } = require('../lib/timezone');
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+// boxId numérico, ou null quando o cliente pede a visão consolidada (boxId=all)
+function parseBoxIdParam(raw) {
+  if (raw === 'all') return { all: true, boxId: null };
+  const boxId = parseInt(raw);
+  return { all: false, boxId: boxId || null };
+}
+
 // ── Anexos (comprovantes): armazenados em uploads/cashflow/ ──
 const UPLOADS_ROOT = path.join(__dirname, '../../uploads');
 const ATTACH_DIR = path.join(UPLOADS_ROOT, 'cashflow');
@@ -146,13 +153,16 @@ router.get('/entries', async (req, res) => {
   try {
     const year = parseInt(req.query.year) || getSaoPauloYear();
     const month = parseInt(req.query.month) || getSaoPauloMonth();
-    const boxId = parseInt(req.query.boxId);
-    if (!boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
-    // Auto-generate recurrence entries for this month (non-blocking)
-    try {
-      await repo.generateRecurrenceEntries(year, month, req.user.id, boxId);
-    } catch (genErr) {
-      console.error('Auto-generate recurrences error (non-blocking):', genErr);
+    const { all, boxId } = parseBoxIdParam(req.query.boxId);
+    if (!all && !boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
+    // Auto-generate recurrence entries for this month (non-blocking).
+    // Visão consolidada é somente leitura: não gera recorrências.
+    if (!all) {
+      try {
+        await repo.generateRecurrenceEntries(year, month, req.user.id, boxId);
+      } catch (genErr) {
+        console.error('Auto-generate recurrences error (non-blocking):', genErr);
+      }
     }
     const entries = await repo.getEntries(year, month, boxId);
     return res.json(entries);
@@ -335,8 +345,8 @@ router.get('/summary', async (req, res) => {
   try {
     const year = parseInt(req.query.year) || getSaoPauloYear();
     const month = parseInt(req.query.month) || getSaoPauloMonth();
-    const boxId = parseInt(req.query.boxId);
-    if (!boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
+    const { all, boxId } = parseBoxIdParam(req.query.boxId);
+    if (!all && !boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
     const summary = await repo.getSummary(year, month, boxId);
     return res.json(summary);
   } catch (error) {
@@ -349,11 +359,11 @@ router.get('/summary', async (req, res) => {
 
 router.get('/alerts', async (req, res) => {
   try {
-    const boxId = parseInt(req.query.boxId);
+    const { all, boxId } = parseBoxIdParam(req.query.boxId);
     const year = parseInt(req.query.year);
     const month = parseInt(req.query.month);
 
-    if (!boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
+    if (!all && !boxId) return res.status(400).json({ message: 'boxId é obrigatório.' });
     if (!year || !month) return res.status(400).json({ message: 'year e month são obrigatórios.' });
 
     const alerts = await repo.getAlerts(boxId, year, month);

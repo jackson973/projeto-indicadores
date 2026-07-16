@@ -112,17 +112,31 @@ async function deleteBox(id) {
 // ── Entries ──
 
 async function getEntries(year, month, boxId) {
-  const result = await db.query(
-    `SELECT e.id, e.date, e.category_id AS "categoryId", c.name AS "categoryName",
-            e.description, e.type, e.amount, e.status, e.recurrence_id AS "recurrenceId",
-            e.created_at AS "createdAt", e.details,
-            (SELECT COUNT(*) FROM cashflow_attachments a WHERE a.entry_id = e.id)::int AS "attachmentCount"
-     FROM cashflow_entries e
-     JOIN cashflow_categories c ON c.id = e.category_id
-     WHERE EXTRACT(YEAR FROM e.date) = $1 AND EXTRACT(MONTH FROM e.date) = $2 AND e.box_id = $3
-     ORDER BY e.date, e.id`,
-    [year, month, boxId]
-  );
+  // boxId null = visão consolidada: todos os caixas ativos, com nome do caixa por lançamento
+  const result = boxId
+    ? await db.query(
+        `SELECT e.id, e.date, e.category_id AS "categoryId", c.name AS "categoryName",
+                e.description, e.type, e.amount, e.status, e.recurrence_id AS "recurrenceId",
+                e.created_at AS "createdAt", e.details,
+                (SELECT COUNT(*) FROM cashflow_attachments a WHERE a.entry_id = e.id)::int AS "attachmentCount"
+         FROM cashflow_entries e
+         JOIN cashflow_categories c ON c.id = e.category_id
+         WHERE EXTRACT(YEAR FROM e.date) = $1 AND EXTRACT(MONTH FROM e.date) = $2 AND e.box_id = $3
+         ORDER BY e.date, e.id`,
+        [year, month, boxId]
+      )
+    : await db.query(
+        `SELECT e.id, e.date, e.category_id AS "categoryId", c.name AS "categoryName",
+                e.description, e.type, e.amount, e.status, e.recurrence_id AS "recurrenceId",
+                e.created_at AS "createdAt", e.details, e.box_id AS "boxId", b.name AS "boxName",
+                (SELECT COUNT(*) FROM cashflow_attachments a WHERE a.entry_id = e.id)::int AS "attachmentCount"
+         FROM cashflow_entries e
+         JOIN cashflow_categories c ON c.id = e.category_id
+         JOIN cashflow_boxes b ON b.id = e.box_id
+         WHERE EXTRACT(YEAR FROM e.date) = $1 AND EXTRACT(MONTH FROM e.date) = $2 AND b.active = true
+         ORDER BY e.date, e.id`,
+        [year, month]
+      );
   return result.rows.map(row => ({ ...row, amount: parseFloat(row.amount) }));
 }
 
@@ -320,7 +334,10 @@ async function setBalance(year, month, openingBalance, boxId) {
 // ── Summary ──
 
 async function getSummary(year, month, boxId) {
-  const openingBalance = await getBalance(year, month, boxId);
+  // boxId null = visão consolidada: saldo inicial é a soma dos caixas ativos
+  const openingBalance = boxId
+    ? await getBalance(year, month, boxId)
+    : await getAllBoxesBalance(year, month);
   const entries = await getEntries(year, month, boxId);
 
   const totalIncome = entries.filter(e => e.type === 'income').reduce((s, e) => s + e.amount, 0);
@@ -647,18 +664,26 @@ async function getAlerts(boxId, year, month) {
   const lastDay = new Date(year, month, 0).getDate();
   const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
 
+  // boxId null = visão consolidada: todos os caixas ativos
+  const boxJoin = boxId ? '' : 'JOIN cashflow_boxes b ON b.id = e.box_id';
+  const boxWhere = boxId ? 'AND e.box_id = $2' : 'AND b.active = true';
+  const startParam = boxId ? '$3' : '$2';
+  const endParam = boxId ? '$4' : '$3';
+  const params = boxId ? [today, boxId, startDate, endDate] : [today, startDate, endDate];
+
   // Overdue: date < today, type=expense, status=pending, within period
   const overdueQuery = `
     SELECT e.id, e.date, e.category_id AS "categoryId", c.name AS "categoryName",
            e.description, e.amount, e.box_id AS "boxId"
     FROM cashflow_entries e
     JOIN cashflow_categories c ON c.id = e.category_id
+    ${boxJoin}
     WHERE e.date < $1
-      AND e.date >= $3
-      AND e.date <= $4
+      AND e.date >= ${startParam}
+      AND e.date <= ${endParam}
       AND e.type = 'expense'
       AND e.status = 'pending'
-      AND e.box_id = $2
+      ${boxWhere}
     ORDER BY e.date ASC
   `;
 
@@ -668,18 +693,19 @@ async function getAlerts(boxId, year, month) {
            e.description, e.amount, e.box_id AS "boxId"
     FROM cashflow_entries e
     JOIN cashflow_categories c ON c.id = e.category_id
+    ${boxJoin}
     WHERE e.date >= $1
-      AND e.date >= $3
-      AND e.date <= $4
+      AND e.date >= ${startParam}
+      AND e.date <= ${endParam}
       AND e.type = 'expense'
       AND e.status = 'pending'
-      AND e.box_id = $2
+      ${boxWhere}
     ORDER BY e.date ASC
   `;
 
   const [overdueResult, upcomingResult] = await Promise.all([
-    db.query(overdueQuery, [today, boxId, startDate, endDate]),
-    db.query(upcomingQuery, [today, boxId, startDate, endDate])
+    db.query(overdueQuery, params),
+    db.query(upcomingQuery, params)
   ]);
 
   const overdueItems = overdueResult.rows.map(r => ({ ...r, amount: parseFloat(r.amount) }));

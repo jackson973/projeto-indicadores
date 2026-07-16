@@ -60,7 +60,7 @@ import WhatsappSettings from "./components/WhatsappSettings";
 import UpsellerSettings from "./components/UpsellerSettings";
 import ConversationLogs from "./components/ConversationLogs";
 import DatabaseManager from "./components/DatabaseManager";
-import CashFlow from "./components/CashFlow";
+import CashFlowTabs from "./components/CashFlowTabs";
 import CashFlowDashboard from "./components/CashFlowDashboard";
 import TerceirosSettlement from "./components/TerceirosSettlement";
 import TerceirosProductGroups from "./components/TerceirosProductGroups";
@@ -981,7 +981,7 @@ const App = () => {
         )}
 
         {activeView === "cashflow" && (
-          <CashFlow />
+          <CashFlowTabs />
         )}
 
         {activeView === "financial-dashboard" && (
