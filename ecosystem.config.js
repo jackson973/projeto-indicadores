@@ -17,9 +17,11 @@ module.exports = {
       out_file: './logs/out.log',
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
       merge_logs: true,
-      // Configurações de restart em caso de falha
+      // Configurações de restart em caso de falha:
+      // backoff espaça as tentativas (evita 10 restarts em segundos → "errored")
       min_uptime: '10s',
-      max_restarts: 10,
+      max_restarts: 25,
+      exp_backoff_restart_delay: 500,
       // Configurações de cron para reinício automático (opcional)
       // cron_restart: '0 2 * * *', // Reiniciar às 2h da manhã todo dia
       // Variáveis de ambiente adicionais

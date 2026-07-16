@@ -13,10 +13,10 @@ const pool = new Pool({
   connectionTimeoutMillis: parseInt(process.env.DB_POOL_CONNECTION_TIMEOUT || '10000', 10),
 });
 
-// Error handler for pool
+// Error handler for pool: erro em cliente OCIOSO não derruba o app —
+// o pool descarta o cliente com problema e abre outro na próxima query.
 pool.on('error', (err) => {
-  console.error('Unexpected error on idle client', err);
-  process.exit(-1);
+  console.error('Unexpected error on idle client (pool recovers):', err.message);
 });
 
 // Test connection on startup

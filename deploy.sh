@@ -139,12 +139,27 @@ sudo nginx -t && sudo systemctl reload nginx || print_warning "Falha ao recarreg
 
 # 9. Migrations rodam automaticamente ao iniciar o servidor
 
-# 10. Restart PM2
+# 10. Restart PM2 (startOrRestart religa mesmo se o app estiver errored/removido)
 print_step "Reiniciando servidor API..."
-pm2 restart api
+pm2 startOrRestart ecosystem.config.js --only api
+pm2 save || true
 
-# 11. Verificar status
-print_step "Verificando status..."
+# 11. Verificar saúde da API (até 30s)
+print_step "Verificando saúde da API..."
+HEALTH_OK=""
+for i in $(seq 1 15); do
+    sleep 2
+    if curl -sf http://localhost:4000/health >/dev/null 2>&1; then
+        HEALTH_OK=1
+        break
+    fi
+done
+if [ -n "$HEALTH_OK" ]; then
+    print_step "API respondendo em /health ✓"
+else
+    print_error "API não respondeu ao /health em 30s — tentando religar (ver pm2 logs api)"
+    pm2 restart api || true
+fi
 pm2 status
 
 echo ""

@@ -238,7 +238,13 @@ async function sendNotificationEmail(to, subject, message, userName) {
 
 // Helper functions
 function formatDateBR(dateStr) {
-  const [y, m, d] = dateStr.slice(0, 10).split('-');
+  // Datas do pg chegam como objeto Date; strings como 'YYYY-MM-DD'
+  if (dateStr instanceof Date) {
+    const d = String(dateStr.getDate()).padStart(2, '0');
+    const m = String(dateStr.getMonth() + 1).padStart(2, '0');
+    return `${d}/${m}/${dateStr.getFullYear()}`;
+  }
+  const [y, m, d] = String(dateStr ?? '').slice(0, 10).split('-');
   return `${d}/${m}/${y}`;
 }
 

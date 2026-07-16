@@ -33,7 +33,33 @@ log "Monitorando $REPO_DIR (origin/$BRANCH) a cada ${INTERVAL}s — versão atua
 
 CHECKS=0
 
+# Watchdog: se o PM2 marcar a API como errored/stopped (ex.: "too many
+# unstable restarts"), ela NÃO volta sozinha — o watcher ressuscita.
+check_api_alive() {
+    command -v pm2 >/dev/null 2>&1 || return 0
+    local status
+    status=$(pm2 jlist 2>/dev/null | node -e "
+        let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{
+            try{const a=JSON.parse(d);const p=a.find(x=>x.name==='api');
+                console.log(p?p.pm2_env.status:'missing');}
+            catch(e){console.log('unknown');}
+        });" 2>/dev/null)
+    case "$status" in
+        online|launching|unknown|'') return 0 ;;
+        *)
+            log "⚠ API está '$status' no PM2 — ressuscitando..."
+            if (cd "$REPO_DIR" && pm2 startOrRestart ecosystem.config.js --only api >/dev/null 2>&1 && pm2 save >/dev/null 2>&1); then
+                log "✅ API religada pelo watchdog"
+            else
+                log "✗ Watchdog não conseguiu religar a API (ver pm2 logs api)"
+            fi
+            ;;
+    esac
+}
+
 while true; do
+    check_api_alive
+
     if ! git fetch origin "$BRANCH" --quiet; then
         log "⚠ git fetch falhou (rede/GitHub fora?). Nova tentativa em ${INTERVAL}s"
         sleep "$INTERVAL"
