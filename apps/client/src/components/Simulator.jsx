@@ -6,6 +6,7 @@ import {
 } from "@chakra-ui/react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import FloatingCalculator from "./FloatingCalculator";
 import useAppToast from "../hooks/useAppToast";
 import {
   fetchSimulationBase, fetchSimulations, fetchSimulation, createSimulation,
@@ -464,6 +465,7 @@ export default function Simulator() {
   const [view, setView] = useState("list"); // list | editor
   const [expandedGroups, setExpandedGroups] = useState({}); // group_id -> bool
   const [pdfBusy, setPdfBusy] = useState(null); // sim id gerando PDF
+  const [calcOpen, setCalcOpen] = useState(false); // calculadora flutuante
   const toast = useAppToast();
 
   const [name, setName] = useState("Novo cenário");
@@ -737,8 +739,12 @@ export default function Simulator() {
         <Button size="sm" variant="outline" onClick={() => setView("list")}>← Cenários</Button>
         <Input maxW="320px" fontWeight="bold" value={name} onChange={e => setName(e.target.value)} />
         {snapMeta?.version && <Badge colorScheme="purple">editando a partir da v{snapMeta.version}</Badge>}
-        <Button size="sm" variant="outline" onClick={printPDF} ml="auto">⬇️ Baixar PDF</Button>
+        <Button size="sm" variant={calcOpen ? "solid" : "outline"} colorScheme={calcOpen ? "blue" : "gray"}
+          onClick={() => setCalcOpen(v => !v)} ml="auto" title="Calculadora flutuante">🧮</Button>
+        <Button size="sm" variant="outline" onClick={printPDF}>⬇️ Baixar PDF</Button>
       </Flex>
+
+      <FloatingCalculator isOpen={calcOpen} onClose={() => setCalcOpen(false)} />
 
       {/* Mix por loja */}
       <Box bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={4} mb={4}>
