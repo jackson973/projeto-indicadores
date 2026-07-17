@@ -21,6 +21,7 @@ import {
   NumberInputStepper,
   NumberIncrementStepper,
   NumberDecrementStepper,
+  Select,
   Spinner,
   Table,
   Thead,
@@ -43,6 +44,8 @@ import {
   fetchProductStores,
   updateProductKitQty,
   fetchProductVariations,
+  fetchStockProducts,
+  updateProductStockLink,
 } from "../api";
 import useAppToast from "../hooks/useAppToast";
 
@@ -77,6 +80,10 @@ const ProductsManagement = () => {
   const [editingKey, setEditingKey] = useState(null);
   const [editKitQty, setEditKitQty] = useState(1);
   const [savingKit, setSavingKit] = useState(false);
+
+  // vínculo com produto do estoque
+  const [stockProducts, setStockProducts] = useState([]);
+  const [savingLinkKey, setSavingLinkKey] = useState(null);
 
   // accordion / variations state
   const [expandedKey, setExpandedKey] = useState(null);
@@ -118,7 +125,28 @@ const ProductsManagement = () => {
 
   useEffect(() => {
     fetchProductStores().then(setStoresList).catch(() => {});
+    fetchStockProducts().then(setStockProducts).catch(() => {});
   }, []);
+
+  // Vínculo do anúncio com o produto do estoque (1 produto por anúncio)
+  const saveStockLink = async (product, stockProductId) => {
+    const idNum = stockProductId ? parseInt(stockProductId) : null;
+    setSavingLinkKey(product.store_variation_key);
+    try {
+      await updateProductStockLink(product.store_variation_key, idNum, product.nome);
+      const sp = stockProducts.find((s) => s.id === idNum);
+      setProducts((prev) =>
+        prev.map((p) => (p.store_variation_key === product.store_variation_key
+          ? { ...p, stock_product_id: idNum, stock_codigo: sp?.codigo || null, stock_descricao: sp?.descricao || null }
+          : p))
+      );
+      toast({ title: idNum ? "Produto vinculado ao anúncio" : "Vínculo removido", status: "success", duration: 2000 });
+    } catch (err) {
+      toast({ title: "Erro ao vincular", description: err.message, status: "error", duration: 3000 });
+    } finally {
+      setSavingLinkKey(null);
+    }
+  };
 
   const toggleLoja = (lojaId) => {
     setFilterLojas((prev) =>
@@ -201,13 +229,13 @@ const ProductsManagement = () => {
   return (
     <Box p={{ base: 3, md: 6 }} maxW="1400px" mx="auto">
       <VStack spacing={4} align="stretch">
-        <Text fontSize="xl" fontWeight="bold">Gerenciamento de Produtos</Text>
+        <Text fontSize="xl" fontWeight="bold">Gerenciar Anúncios</Text>
 
         {/* Filters */}
         <Box bg={panelBg} p={4} borderRadius="md" borderWidth="1px" borderColor={borderColor}>
           <Flex gap={3} wrap="wrap" align="flex-end">
             <FormControl maxW="300px">
-              <FormLabel fontSize="xs" mb={1}>Nome do Produto</FormLabel>
+              <FormLabel fontSize="xs" mb={1}>Nome do Anúncio</FormLabel>
               <InputGroup size="sm">
                 <InputLeftElement pointerEvents="none"><SearchIcon color="gray.400" boxSize={3} /></InputLeftElement>
                 <Input placeholder="Buscar nome..." value={filterNome} onChange={(e) => setFilterNome(e.target.value)} />
@@ -255,7 +283,7 @@ const ProductsManagement = () => {
 
         {/* Summary */}
         <Text fontSize="sm" color="gray.500">
-          {total} produto{total !== 1 ? "s" : ""} encontrado{total !== 1 ? "s" : ""}
+          {total} anúncio{total !== 1 ? "s" : ""} encontrado{total !== 1 ? "s" : ""}
         </Text>
 
         {/* Table */}
@@ -263,7 +291,7 @@ const ProductsManagement = () => {
           <Flex justify="center" py={10}><Spinner size="lg" /></Flex>
         ) : products.length === 0 ? (
           <Box textAlign="center" py={10}>
-            <Text color="gray.500">Nenhum produto encontrado.</Text>
+            <Text color="gray.500">Nenhum anúncio encontrado.</Text>
           </Box>
         ) : isMobile ? (
           <VStack spacing={3} align="stretch">
@@ -296,6 +324,21 @@ const ProductsManagement = () => {
                       {p.loja && (
                         <Tag size="sm" fontSize="10px" variant="subtle" mt={1}>{p.loja}</Tag>
                       )}
+                      <Box mt={2} onClick={(e) => e.stopPropagation()}>
+                        <Text fontSize="10px" color="gray.500" mb={0.5}>Produto do estoque</Text>
+                        <Select
+                          size="xs"
+                          value={p.stock_product_id || ""}
+                          onChange={(e) => saveStockLink(p, e.target.value)}
+                          isDisabled={savingLinkKey === p.store_variation_key}
+                          placeholder="— vincular produto —"
+                          borderColor={p.stock_product_id ? "green.400" : undefined}
+                        >
+                          {stockProducts.map((sp) => (
+                            <option key={sp.id} value={sp.id}>{sp.codigo} · {sp.descricao}</option>
+                          ))}
+                        </Select>
+                      </Box>
                       {(!isExpanded || !hasVariations) && (
                         <Flex mt={2} align="center" gap={2} onClick={(e) => e.stopPropagation()}>
                           <Text fontSize="xs" fontWeight="medium">Qtd Kit:</Text>
@@ -368,13 +411,14 @@ const ProductsManagement = () => {
           </VStack>
         ) : (
           <Box bg={panelBg} borderRadius="md" borderWidth="1px" borderColor={borderColor} overflowX="auto">
-            <Table size="sm" variant="simple">
+            <Table size="sm" variant="simple" sx={{ tableLayout: "fixed", width: "100%" }}>
               <Thead>
                 <Tr>
                   <Th w="44px" p={1}></Th>
-                  <Th>Nome do Produto</Th>
-                  <Th w="160px">Loja</Th>
-                  <Th textAlign="center" w="100px">Qtd Kit</Th>
+                  <Th>Anúncio</Th>
+                  <Th w="130px">Loja</Th>
+                  <Th w="230px">Produto do estoque</Th>
+                  <Th textAlign="center" w="90px">Qtd Kit</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -409,7 +453,22 @@ const ProductsManagement = () => {
                           </Flex>
                         </Td>
                         <Td>
-                          {p.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue">{p.loja}</Tag>}
+                          {p.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" maxW="100%" overflow="hidden" whiteSpace="nowrap" textOverflow="ellipsis" display="inline-block">{p.loja}</Tag>}
+                        </Td>
+                        <Td onClick={(e) => e.stopPropagation()}>
+                          <Select
+                            size="xs"
+                            value={p.stock_product_id || ""}
+                            onChange={(e) => saveStockLink(p, e.target.value)}
+                            isDisabled={savingLinkKey === p.store_variation_key}
+                            placeholder="— vincular produto —"
+                            borderColor={p.stock_product_id ? "green.400" : undefined}
+                            title={p.stock_product_id ? `${p.stock_codigo} · ${p.stock_descricao}` : "Vincular ao cadastro de produtos do estoque"}
+                          >
+                            {stockProducts.map((sp) => (
+                              <option key={sp.id} value={sp.id}>{sp.codigo} · {sp.descricao}</option>
+                            ))}
+                          </Select>
                         </Td>
                         <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                           {(!isExpanded || !hasVariations) && (
@@ -444,7 +503,7 @@ const ProductsManagement = () => {
                       </Tr>
                       {isExpanded && (
                         loadingVariations ? (
-                          <Tr><Td colSpan={4} textAlign="center" py={3}><Spinner size="sm" /></Td></Tr>
+                          <Tr><Td colSpan={5} textAlign="center" py={3}><Spinner size="sm" /></Td></Tr>
                         ) : hasVariations ? (
                           variations.map((v) => (
                             <Tr key={v.prefix} bg={varRowBg}>
@@ -453,6 +512,7 @@ const ProductsManagement = () => {
                                 {v.prefix} <Text as="span" color="gray.400">({v.count} vendas)</Text>
                                 {!v.configured && !variations.some((x) => x.configured) && <Badge colorScheme="orange" fontSize="8px" ml={1}>Novo</Badge>}
                               </Td>
+                              <Td />
                               <Td />
                               <Td textAlign="center">
                                 {editingVarPrefix === v.prefix ? (
@@ -475,7 +535,7 @@ const ProductsManagement = () => {
                             </Tr>
                           ))
                         ) : (
-                          <Tr><Td colSpan={4} textAlign="center" py={2}><Text fontSize="xs" color="gray.400">Sem sub-variações</Text></Td></Tr>
+                          <Tr><Td colSpan={5} textAlign="center" py={2}><Text fontSize="xs" color="gray.400">Sem sub-variações</Text></Td></Tr>
                         )
                       )}
                     </React.Fragment>

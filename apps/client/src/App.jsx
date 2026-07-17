@@ -282,7 +282,7 @@ const App = () => {
     "Dashboard Vendas": "dashboard",
     "Financeiro": "financeiro",
     "Dashboard Financeiro": "financial-dashboard",
-    "Produtos": "produtos",
+    "Anúncios": "produtos",
     "Compras": "compras",
     "Pedidos": "pedidos",
     "Estoque": "estoque",
@@ -503,20 +503,20 @@ const App = () => {
       show: true
     },
     {
-      label: "Produtos",
+      label: "Anúncios",
       icon: <ProductIcon />,
       show: true,
       submenu: [
         {
-          label: "Dashboard de Produtos",
+          label: "Dashboard de Anúncios",
           view: "products-dashboard"
         },
         {
-          label: "Gerenciar Produtos",
+          label: "Gerenciar Anúncios",
           view: "products-management"
         },
         {
-          label: "Grupos de Produtos",
+          label: "Grupos de Anúncios",
           view: "product-groups"
         }
       ]

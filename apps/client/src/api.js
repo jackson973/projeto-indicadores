@@ -1083,6 +1083,15 @@ export const fetchProductStores = async () => {
   return handleResponse(response);
 };
 
+export const updateProductStockLink = async (storeVariationKey, stockProductId, nome) => {
+  const response = await authFetch('/api/products/stock-link', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store_variation_key: storeVariationKey, stock_product_id: stockProductId, nome }),
+  });
+  return handleResponse(response);
+};
+
 export const updateProductKitQty = async (storeVariationKey, kitQty, nome) => {
   const response = await authFetch('/api/products/kit-qty', {
     method: 'PUT',

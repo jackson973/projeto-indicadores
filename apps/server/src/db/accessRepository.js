@@ -5,7 +5,7 @@ const MODULES = [
   { key: 'dashboard',           label: 'Dashboard Vendas' },
   { key: 'financeiro',          label: 'Financeiro' },
   { key: 'financial-dashboard', label: 'Dashboard Financeiro' },
-  { key: 'produtos',            label: 'Produtos' },
+  { key: 'produtos',            label: 'Anúncios' },
   { key: 'compras',             label: 'Compras' },
   { key: 'pedidos',             label: 'Pedidos' },
   { key: 'estoque',             label: 'Estoque' },

@@ -72,12 +72,16 @@ async function listProducts({ codigo, nome, lojas, page = 1, limit = 50 } = {}) 
        MAX(CASE WHEN s.image IS NOT NULL AND TRIM(s.image) != '' THEN s.image END) AS thumbnail,
        COALESCE(MAX(st.name), s.store) AS loja,
        COALESCE(p.kit_qty, 1) AS kit_qty,
-       p.id AS product_id
+       p.id AS product_id,
+       p.stock_product_id,
+       sp.codigo AS stock_codigo,
+       sp.descricao AS stock_descricao
      FROM sales s
      LEFT JOIN stores st ON st.id = s.cod_store
      LEFT JOIN products p ON p.store_variation_key = (${keyExpr})
+     LEFT JOIN stock_products sp ON sp.id = p.stock_product_id
      ${where}
-     GROUP BY ${keyExpr}, s.cod_store, s.store, TRIM(s.ad_name), p.kit_qty, p.id
+     GROUP BY ${keyExpr}, s.cod_store, s.store, TRIM(s.ad_name), p.kit_qty, p.id, p.stock_product_id, sp.codigo, sp.descricao
      ORDER BY TRIM(s.ad_name) ASC
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
@@ -186,6 +190,32 @@ async function getVariationsInfo(svks) {
 /**
  * Atualiza (ou cria) o kit_qty usando store_variation_key (cod_store|||ad_name).
  */
+// Vincula o anúncio (svk) a UM produto do estoque; null desvincula.
+// Mesmo padrão de upsert do kit: cria a linha em products se ainda não existir.
+async function updateStockLink(storeVariationKey, stockProductId, meta = {}) {
+  const existing = await db.query(
+    'SELECT id FROM products WHERE store_variation_key = $1',
+    [storeVariationKey]
+  );
+  if (existing.rows.length > 0) {
+    const result = await db.query(
+      'UPDATE products SET stock_product_id = $1 WHERE id = $2 RETURNING *',
+      [stockProductId || null, existing.rows[0].id]
+    );
+    return result.rows[0];
+  }
+  const sepIdx = storeVariationKey.indexOf(KEY_SEP);
+  const codStoreRaw = sepIdx > -1 ? storeVariationKey.substring(0, sepIdx) : null;
+  const adName = sepIdx > -1 ? storeVariationKey.substring(sepIdx + KEY_SEP.length) : storeVariationKey;
+  const codStore = codStoreRaw && /^\d+$/.test(codStoreRaw) ? codStoreRaw : null;
+  const result = await db.query(
+    `INSERT INTO products (nome, cod_store, store_variation_key, kit_qty, stock_product_id)
+     VALUES ($1, $2, $3, 1, $4) RETURNING *`,
+    [meta.nome || adName, codStore, storeVariationKey, stockProductId || null]
+  );
+  return result.rows[0];
+}
+
 async function updateKitQty(storeVariationKey, kitQty, meta = {}) {
   const existing = await db.query(
     'SELECT id FROM products WHERE store_variation_key = $1',
@@ -780,6 +810,7 @@ async function getProductOrders(svk, start, end, variationFilter = null) {
 module.exports = {
   listProducts,
   updateKitQty,
+  updateStockLink,
   getVariationPrefixes,
   getDistinctStores,
   getProductGroups,

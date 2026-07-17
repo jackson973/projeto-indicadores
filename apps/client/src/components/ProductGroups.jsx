@@ -501,7 +501,7 @@ const ProductGroups = () => {
           maxH={isMobile ? undefined : "calc(100vh - 120px)"} display="flex" flexDirection="column">
           <Box flexShrink={0} borderBottomWidth="1px" borderColor={borderColor}>
             <Flex justify="space-between" align="center" p={4}>
-              <Heading size="sm">Grupos de Produtos</Heading>
+              <Heading size="sm">Grupos de Anúncios</Heading>
               <Button leftIcon={<AddIcon />} size="xs" colorScheme="blue" onClick={createModal.onOpen}>Novo Grupo</Button>
             </Flex>
             <Box px={4} pb={3}>

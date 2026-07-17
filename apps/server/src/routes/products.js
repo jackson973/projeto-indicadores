@@ -111,6 +111,23 @@ router.put('/kit-qty', async (req, res) => {
   }
 });
 
+// ── PUT /api/products/stock-link — vincula o anúncio a um produto do estoque ──
+router.put('/stock-link', async (req, res) => {
+  try {
+    const { store_variation_key, stock_product_id, nome } = req.body;
+    if (!store_variation_key) return res.status(400).json({ message: 'store_variation_key é obrigatório.' });
+    const product = await productsRepo.updateStockLink(
+      store_variation_key,
+      stock_product_id ? parseInt(stock_product_id) : null,
+      { nome }
+    );
+    res.json(product);
+  } catch (err) {
+    console.error('[Products] update stock link error:', err);
+    res.status(500).json({ message: 'Erro ao vincular produto do estoque.' });
+  }
+});
+
 // ── GET /api/products/variations — get variation prefixes for a product ───────
 router.get('/variations', async (req, res) => {
   try {
