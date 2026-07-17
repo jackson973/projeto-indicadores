@@ -154,8 +154,7 @@ export default function FloatingCalculator({ isOpen, onClose }) {
     else if (k === "Enter" || k === "=") pressEquals();
     else if (k === "Backspace") backspace();
     else if (k === "%") pressPercent();
-    else if (k.toLowerCase() === "c" || k === "Delete") clearAll();
-    else if (k === "Escape") onClose();
+    else if (k.toLowerCase() === "c" || k === "Delete" || k === "Escape") clearAll();
     else handled = false;
     if (handled) { e.preventDefault(); e.stopPropagation(); }
   };
