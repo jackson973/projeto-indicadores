@@ -1,6 +1,13 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Box, Flex, Text, Button, IconButton, SimpleGrid, useColorModeValue } from "@chakra-ui/react";
 import { CloseIcon, DeleteIcon } from "@chakra-ui/icons";
+
+// Ícone de calculadora (Material) — usado no botão da barra e no cabeçalho
+export const CalcIcon = (props) => (
+  <svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" {...props}>
+    <path d="M19 2H5c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 18H5V4h14v16zM6.25 7.72h5v1.5h-5zM13 15.75h5v1.5h-5zm0-2.5h5v1.5h-5zM8 18h1.5v-2h2v-1.5h-2v-2H8v2H6V16h2zm6.09-7.05 1.41-1.41 1.41 1.41 1.06-1.06-1.41-1.42 1.41-1.41L16.91 6 15.5 7.41 14.09 6l-1.06 1.06 1.41 1.41-1.41 1.42z" />
+  </svg>
+);
 
 // Número no padrão pt-BR para o histórico/resultado
 const fmt = (n) => {
@@ -23,6 +30,9 @@ export default function FloatingCalculator({ isOpen, onClose }) {
   const [history, setHistory] = useState([]);
   const [pos, setPos] = useState(null);      // null = posição padrão (canto inferior direito)
   const boxRef = useRef(null);
+
+  // Ao abrir (ou clicar nela), a calculadora ganha foco e aceita o teclado
+  useEffect(() => { if (isOpen) boxRef.current?.focus(); }, [isOpen]);
 
   const cardBg = useColorModeValue("white", "gray.800");
   const border = useColorModeValue("gray.200", "gray.600");
@@ -122,12 +132,32 @@ export default function FloatingCalculator({ isOpen, onClose }) {
     ["0", ",", "=", "="],
   ];
   const press = (k) => {
-    if (k === "C") return clearAll();
-    if (k === "⌫") return backspace();
-    if (k === "%") return pressPercent();
-    if (k === "=") return pressEquals();
-    if (["+", "−", "×", "÷"].includes(k)) return pressOp(k);
-    return pressDigit(k);
+    if (k === "C") clearAll();
+    else if (k === "⌫") backspace();
+    else if (k === "%") pressPercent();
+    else if (k === "=") pressEquals();
+    else if (["+", "−", "×", "÷"].includes(k)) pressOp(k);
+    else pressDigit(k);
+    boxRef.current?.focus(); // clique nas teclas mantém o teclado ativo
+  };
+
+  // Teclado físico: dígitos, vírgula/ponto, + - * /, Enter (=), Backspace, %, C, Esc
+  const handleKeyDown = (e) => {
+    const k = e.key;
+    let handled = true;
+    if (/^[0-9]$/.test(k)) pressDigit(k);
+    else if (k === "," || k === ".") pressDigit(",");
+    else if (k === "+") pressOp("+");
+    else if (k === "-") pressOp("−");
+    else if (k === "*" || k.toLowerCase() === "x") pressOp("×");
+    else if (k === "/") pressOp("÷");
+    else if (k === "Enter" || k === "=") pressEquals();
+    else if (k === "Backspace") backspace();
+    else if (k === "%") pressPercent();
+    else if (k.toLowerCase() === "c" || k === "Delete") clearAll();
+    else if (k === "Escape") onClose();
+    else handled = false;
+    if (handled) { e.preventDefault(); e.stopPropagation(); }
   };
 
   return (
@@ -143,6 +173,11 @@ export default function FloatingCalculator({ isOpen, onClose }) {
       borderRadius="xl"
       boxShadow="2xl"
       overflow="hidden"
+      tabIndex={0}
+      outline="none"
+      _focusWithin={{ borderColor: "blue.400" }}
+      onKeyDown={handleKeyDown}
+      onPointerDown={() => boxRef.current?.focus()}
       style={pos ? { left: pos.x, top: pos.y } : { right: 16, bottom: 110 }}
     >
       {/* Barra de arrasto */}
@@ -150,8 +185,9 @@ export default function FloatingCalculator({ isOpen, onClose }) {
         align="center" px={3} py={1.5} bg={headBg} cursor="grab"
         onPointerDown={startDrag} style={{ touchAction: "none" }} userSelect="none"
       >
-        <Text fontSize="xs" fontWeight="bold">🧮 Calculadora</Text>
-        <Text fontSize="10px" color={subtle} ml={2}>arraste aqui</Text>
+        <Box color="blue.400" mr={1.5}><CalcIcon /></Box>
+        <Text fontSize="xs" fontWeight="bold">Calculadora</Text>
+        <Text fontSize="10px" color={subtle} ml={2}>arraste · digite</Text>
         <IconButton icon={<CloseIcon boxSize={2} />} size="xs" variant="ghost" aria-label="Fechar" ml="auto"
           onPointerDown={e => e.stopPropagation()} onClick={onClose} />
       </Flex>

@@ -6,7 +6,7 @@ import {
 } from "@chakra-ui/react";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import FloatingCalculator from "./FloatingCalculator";
+import FloatingCalculator, { CalcIcon } from "./FloatingCalculator";
 import useAppToast from "../hooks/useAppToast";
 import {
   fetchSimulationBase, fetchSimulations, fetchSimulation, createSimulation,
@@ -740,7 +740,9 @@ export default function Simulator() {
         <Input maxW="320px" fontWeight="bold" value={name} onChange={e => setName(e.target.value)} />
         {snapMeta?.version && <Badge colorScheme="purple">editando a partir da v{snapMeta.version}</Badge>}
         <Button size="sm" variant={calcOpen ? "solid" : "outline"} colorScheme={calcOpen ? "blue" : "gray"}
-          onClick={() => setCalcOpen(v => !v)} ml="auto" title="Calculadora flutuante">🧮</Button>
+          onClick={() => setCalcOpen(v => !v)} ml="auto" title="Calculadora flutuante" px={2}>
+          <CalcIcon style={{ fontSize: "16px" }} />
+        </Button>
         <Button size="sm" variant="outline" onClick={printPDF}>⬇️ Baixar PDF</Button>
       </Flex>
 
