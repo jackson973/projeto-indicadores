@@ -21,7 +21,6 @@ import {
   NumberInputStepper,
   NumberIncrementStepper,
   NumberDecrementStepper,
-  Select,
   Spinner,
   Table,
   Thead,
@@ -65,6 +64,79 @@ const isVariableKit = (nome) => {
   return false;
 };
 
+const stockLabel = (sp) => `${sp.codigo} · ${sp.descricao}`;
+
+/**
+ * Campo digitável de vínculo com o produto do estoque (100% teclado):
+ * digite o código ("003") ou parte do nome; Enter confirma e pula para o
+ * próximo anúncio; Tab confirma ao sair; Esc desfaz; vazio remove o vínculo.
+ */
+const StockLinkInput = ({ product, stockProducts, onSave, size = "xs" }) => {
+  const current = product.stock_product_id
+    ? (stockProducts.find((s) => s.id === product.stock_product_id)
+        ? stockLabel(stockProducts.find((s) => s.id === product.stock_product_id))
+        : `${product.stock_codigo || ""} · ${product.stock_descricao || ""}`)
+    : "";
+  const [text, setText] = useState(current);
+  const inputRef = React.useRef(null);
+  const toast = useAppToast();
+
+  useEffect(() => { setText(current); }, [current]);
+
+  const resolve = (raw) => {
+    const t = raw.trim().toLowerCase();
+    if (!t) return { id: null, label: "" };
+    let sp = stockProducts.find((s) => stockLabel(s).toLowerCase() === t);
+    if (!sp) sp = stockProducts.find((s) => String(s.codigo).toLowerCase() === t);
+    if (!sp) {
+      const matches = stockProducts.filter((s) => stockLabel(s).toLowerCase().includes(t));
+      if (matches.length === 1) sp = matches[0];
+    }
+    return sp ? { id: sp.id, label: stockLabel(sp) } : null;
+  };
+
+  const commit = async () => {
+    const resolved = resolve(text);
+    if (!resolved) {
+      toast({ title: "Produto não encontrado (ou mais de um combina)", description: `"${text}" — digite o código ou um trecho único do nome.`, status: "warning", duration: 3500 });
+      setText(current);
+      return false;
+    }
+    if (resolved.id === (product.stock_product_id || null)) { setText(resolved.label || current); return true; }
+    const ok = await onSave(product, resolved.id);
+    setText(ok ? resolved.label : current);
+    return ok;
+  };
+
+  const focusNext = () => {
+    const inputs = [...document.querySelectorAll("input[data-stocklink]")];
+    const i = inputs.indexOf(inputRef.current);
+    if (i > -1 && inputs[i + 1]) inputs[i + 1].focus();
+  };
+
+  const onKeyDown = async (e) => {
+    if (e.key === "Enter") { e.preventDefault(); if (await commit()) focusNext(); }
+    else if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); setText(current); }
+  };
+
+  return (
+    <Input
+      ref={inputRef}
+      data-stocklink
+      size={size}
+      list="stock-products-options"
+      value={text}
+      placeholder="cód. ou nome…"
+      onChange={(e) => setText(e.target.value)}
+      onFocus={(e) => e.target.select()}
+      onBlur={commit}
+      onKeyDown={onKeyDown}
+      borderColor={product.stock_product_id ? "green.400" : undefined}
+      title={current || "Vincular ao cadastro de produtos do estoque"}
+    />
+  );
+};
+
 const ProductsManagement = () => {
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
@@ -83,7 +155,6 @@ const ProductsManagement = () => {
 
   // vínculo com produto do estoque
   const [stockProducts, setStockProducts] = useState([]);
-  const [savingLinkKey, setSavingLinkKey] = useState(null);
 
   // accordion / variations state
   const [expandedKey, setExpandedKey] = useState(null);
@@ -131,7 +202,6 @@ const ProductsManagement = () => {
   // Vínculo do anúncio com o produto do estoque (1 produto por anúncio)
   const saveStockLink = async (product, stockProductId) => {
     const idNum = stockProductId ? parseInt(stockProductId) : null;
-    setSavingLinkKey(product.store_variation_key);
     try {
       await updateProductStockLink(product.store_variation_key, idNum, product.nome);
       const sp = stockProducts.find((s) => s.id === idNum);
@@ -140,11 +210,11 @@ const ProductsManagement = () => {
           ? { ...p, stock_product_id: idNum, stock_codigo: sp?.codigo || null, stock_descricao: sp?.descricao || null }
           : p))
       );
-      toast({ title: idNum ? "Produto vinculado ao anúncio" : "Vínculo removido", status: "success", duration: 2000 });
+      toast({ title: idNum ? "Produto vinculado ao anúncio" : "Vínculo removido", status: "success", duration: 1500 });
+      return true;
     } catch (err) {
       toast({ title: "Erro ao vincular", description: err.message, status: "error", duration: 3000 });
-    } finally {
-      setSavingLinkKey(null);
+      return false;
     }
   };
 
@@ -286,6 +356,13 @@ const ProductsManagement = () => {
           {total} anúncio{total !== 1 ? "s" : ""} encontrado{total !== 1 ? "s" : ""}
         </Text>
 
+        {/* Sugestões do campo de vínculo (compartilhada pelas linhas) */}
+        <datalist id="stock-products-options">
+          {stockProducts.map((sp) => (
+            <option key={sp.id} value={stockLabel(sp)} />
+          ))}
+        </datalist>
+
         {/* Table */}
         {loading ? (
           <Flex justify="center" py={10}><Spinner size="lg" /></Flex>
@@ -326,18 +403,7 @@ const ProductsManagement = () => {
                       )}
                       <Box mt={2} onClick={(e) => e.stopPropagation()}>
                         <Text fontSize="10px" color="gray.500" mb={0.5}>Produto do estoque</Text>
-                        <Select
-                          size="xs"
-                          value={p.stock_product_id || ""}
-                          onChange={(e) => saveStockLink(p, e.target.value)}
-                          isDisabled={savingLinkKey === p.store_variation_key}
-                          placeholder="— vincular produto —"
-                          borderColor={p.stock_product_id ? "green.400" : undefined}
-                        >
-                          {stockProducts.map((sp) => (
-                            <option key={sp.id} value={sp.id}>{sp.codigo} · {sp.descricao}</option>
-                          ))}
-                        </Select>
+                        <StockLinkInput product={p} stockProducts={stockProducts} onSave={saveStockLink} size="sm" />
                       </Box>
                       {(!isExpanded || !hasVariations) && (
                         <Flex mt={2} align="center" gap={2} onClick={(e) => e.stopPropagation()}>
@@ -456,19 +522,7 @@ const ProductsManagement = () => {
                           {p.loja && <Tag size="sm" fontSize="10px" variant="subtle" colorScheme="blue" maxW="100%" overflow="hidden" whiteSpace="nowrap" textOverflow="ellipsis" display="inline-block">{p.loja}</Tag>}
                         </Td>
                         <Td onClick={(e) => e.stopPropagation()}>
-                          <Select
-                            size="xs"
-                            value={p.stock_product_id || ""}
-                            onChange={(e) => saveStockLink(p, e.target.value)}
-                            isDisabled={savingLinkKey === p.store_variation_key}
-                            placeholder="— vincular produto —"
-                            borderColor={p.stock_product_id ? "green.400" : undefined}
-                            title={p.stock_product_id ? `${p.stock_codigo} · ${p.stock_descricao}` : "Vincular ao cadastro de produtos do estoque"}
-                          >
-                            {stockProducts.map((sp) => (
-                              <option key={sp.id} value={sp.id}>{sp.codigo} · {sp.descricao}</option>
-                            ))}
-                          </Select>
+                          <StockLinkInput product={p} stockProducts={stockProducts} onSave={saveStockLink} />
                         </Td>
                         <Td textAlign="center" onClick={(e) => e.stopPropagation()}>
                           {(!isExpanded || !hasVariations) && (
