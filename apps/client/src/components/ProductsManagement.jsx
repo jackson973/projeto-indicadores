@@ -72,11 +72,14 @@ const stockLabel = (sp) => `${sp.codigo} · ${sp.descricao}`;
  * próximo anúncio; Tab confirma ao sair; Esc desfaz; vazio remove o vínculo.
  */
 const StockLinkInput = ({ product, stockProducts, onSave, size = "xs" }) => {
-  const current = product.stock_product_id
-    ? (stockProducts.find((s) => s.id === product.stock_product_id)
-        ? stockLabel(stockProducts.find((s) => s.id === product.stock_product_id))
-        : `${product.stock_codigo || ""} · ${product.stock_descricao || ""}`)
-    : "";
+  const linkedSp = product.stock_product_id
+    ? stockProducts.find((s) => String(s.id) === String(product.stock_product_id))
+    : null;
+  const current = linkedSp
+    ? stockLabel(linkedSp)
+    : (product.stock_codigo || product.stock_descricao)
+      ? [product.stock_codigo, product.stock_descricao].filter(Boolean).join(" · ")
+      : "";
   const [text, setText] = useState(current);
   const inputRef = React.useRef(null);
   const toast = useAppToast();
@@ -96,6 +99,8 @@ const StockLinkInput = ({ product, stockProducts, onSave, size = "xs" }) => {
   };
 
   const commit = async () => {
+    // Saiu do campo sem mudar nada (Tab passando reto): não faz nada
+    if (text.trim() === current.trim()) { setText(current); return true; }
     const resolved = resolve(text);
     if (!resolved) {
       toast({ title: "Produto não encontrado (ou mais de um combina)", description: `"${text}" — digite o código ou um trecho único do nome.`, status: "warning", duration: 3500 });
@@ -204,7 +209,7 @@ const ProductsManagement = () => {
     const idNum = stockProductId ? parseInt(stockProductId) : null;
     try {
       await updateProductStockLink(product.store_variation_key, idNum, product.nome);
-      const sp = stockProducts.find((s) => s.id === idNum);
+      const sp = stockProducts.find((s) => String(s.id) === String(idNum));
       setProducts((prev) =>
         prev.map((p) => (p.store_variation_key === product.store_variation_key
           ? { ...p, stock_product_id: idNum, stock_codigo: sp?.codigo || null, stock_descricao: sp?.descricao || null }
