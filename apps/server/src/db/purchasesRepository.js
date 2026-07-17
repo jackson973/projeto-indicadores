@@ -34,7 +34,7 @@ async function get(id) {
   const p = rows[0];
   if (!p) return null;
   const { rows: items } = await db.query(
-    `SELECT id, description, size_grid AS "sizeGrid", qty, unit_price AS "unitPrice", total, obs
+    `SELECT id, description, size, size_grid AS "sizeGrid", qty, unit_price AS "unitPrice", total, obs
        FROM purchase_items WHERE purchase_id = $1 ORDER BY id`, [id]
   );
   const { rows: installments } = await db.query(
@@ -110,9 +110,9 @@ async function create({ orderNumber, supplierName, orderDate, totalAmount, total
 
     for (const it of items) {
       await client.query(
-        `INSERT INTO purchase_items (purchase_id, description, size_grid, qty, unit_price, total, obs)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-        [purchaseId, it.description || '(item)', it.sizeGrid || null, it.qty || 0, it.unitPrice || 0, it.total || 0, it.obs || null]
+        `INSERT INTO purchase_items (purchase_id, description, size, size_grid, qty, unit_price, total, obs)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [purchaseId, it.description || '(item)', it.size || null, it.sizeGrid || null, it.qty || 0, it.unitPrice || 0, it.total || 0, it.obs || null]
       );
     }
 

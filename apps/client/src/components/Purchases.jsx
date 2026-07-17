@@ -96,7 +96,7 @@ function PurchaseFormModal({ isOpen, onClose, prefill, boxes, categories, suppli
     };
     setForm(f);
     setItems((p.items || []).map(it => ({
-      description: it.description || "", sizeGrid: it.size_grid || "", qty: it.qty || 0,
+      description: it.description || "", size: it.size || "", qty: it.qty || 0,
       unitPrice: it.unit_price || 0, total: it.total || 0, obs: it.obs || null,
     })));
     setParcels(buildInstallments(f.paymentTerms, f.orderDate, f.totalAmount));
@@ -129,7 +129,7 @@ function PurchaseFormModal({ isOpen, onClose, prefill, boxes, categories, suppli
   const removeParcel = (idx) => setParcels(prev => redistribute(prev.filter((_, i) => i !== idx), form.totalAmount));
 
   const setItem = (idx, field, value) => setItems(prev => prev.map((it, i) => i === idx ? { ...it, [field]: value } : it));
-  const addItem = () => setItems(prev => [...prev, { description: "", sizeGrid: "", qty: 0, unitPrice: 0, total: 0 }]);
+  const addItem = () => setItems(prev => [...prev, { description: "", size: "", qty: 0, unitPrice: 0, total: 0 }]);
   const removeItem = (idx) => setItems(prev => prev.filter((_, i) => i !== idx));
 
   const parcelsSum = parcels.reduce((s, p) => s + Math.round((Number(p.amount) || 0) * 100), 0);
@@ -240,10 +240,10 @@ function PurchaseFormModal({ isOpen, onClose, prefill, boxes, categories, suppli
                       <IconButton icon={<DeleteIcon />} size="xs" variant="ghost" colorScheme="red" aria-label="Remover item" onClick={() => removeItem(i)} />
                     </Flex>
                     <Flex gap={2} mt={2}>
-                      <Input size="sm" placeholder="Grade (RN 300 · P 300…)" value={it.sizeGrid || ""} onChange={e => setItem(i, "sizeGrid", e.target.value)} />
+                      <Input size="sm" w="80px" placeholder="Tam." title="Tamanho (uma linha por tamanho)" value={it.size || ""} onChange={e => setItem(i, "size", e.target.value.toUpperCase())} />
                       <Input size="sm" w="90px" type="number" placeholder="Qtde" value={it.qty || ""} onChange={e => setItem(i, "qty", parseInt(e.target.value) || 0)} />
-                      <Input size="sm" w="120px" inputMode="numeric" value={BRL(it.unitPrice)} onChange={e => setItem(i, "unitPrice", currencyToNumber(e.target.value))} />
-                      <Input size="sm" w="130px" inputMode="numeric" value={BRL(it.total)} onChange={e => setItem(i, "total", currencyToNumber(e.target.value))} />
+                      <Input size="sm" flex="1" inputMode="numeric" title="Preço unitário" value={BRL(it.unitPrice)} onChange={e => setItem(i, "unitPrice", currencyToNumber(e.target.value))} />
+                      <Input size="sm" flex="1" inputMode="numeric" title="Total do item" value={BRL(it.total)} onChange={e => setItem(i, "total", currencyToNumber(e.target.value))} />
                     </Flex>
                   </Box>
                 ))}
@@ -381,8 +381,11 @@ function PurchaseDetailModal({ isOpen, onClose, purchaseId }) {
                   <VStack align="stretch" spacing={1} mb={4}>
                     {data.items.map(it => (
                       <Box key={it.id} borderWidth="1px" borderRadius="md" p={2} fontSize="xs">
-                        <Flex justify="space-between" gap={2}>
-                          <Text fontWeight="semibold">{it.description}</Text>
+                        <Flex justify="space-between" gap={2} align="center">
+                          <Text fontWeight="semibold">
+                            {it.description}
+                            {it.size && <Badge ml={2} fontSize="2xs">{it.size}</Badge>}
+                          </Text>
                           <Text fontWeight="bold" flexShrink={0}>{BRL(it.total)}</Text>
                         </Flex>
                         <Text color={subtle}>{it.sizeGrid ? `${it.sizeGrid} · ` : ""}{it.qty} pç × {BRL(it.unitPrice)}</Text>

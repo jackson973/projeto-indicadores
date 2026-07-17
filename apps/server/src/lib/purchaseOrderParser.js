@@ -85,7 +85,7 @@ function parseOrderText(rawText) {
       // token de grade (tamanho) seguido de quantidade
       if (SIZE_TOKENS.includes(l.toUpperCase())) {
         const qty = bLines[i + 1] && /^[\d.]+$/.test(bLines[i + 1]) ? bLines[i + 1].replace(/\./g, '') : null;
-        if (current && qty) { current.sizes.push(`${l.toUpperCase()} ${qty}`); i++; }
+        if (current && qty) { current.sizes.push({ size: l.toUpperCase(), qty: parseInt(qty) || 0 }); i++; }
         continue;
       }
       // números soltos (qtde total do item em outra posição) — ignora
@@ -106,6 +106,34 @@ function parseOrderText(rawText) {
     flush();
   }
 
+  // Grade explode em UMA LINHA POR TAMANHO (prepara o vínculo com a entrada
+  // de estoque por variante): "M 50 · G 50" vira duas linhas de 50 pç.
+  const round2 = (n) => Math.round(n * 100) / 100;
+  const flatItems = [];
+  for (const it of items) {
+    if (it.sizes?.length) {
+      for (const s of it.sizes) {
+        flatItems.push({
+          description: it.description,
+          size: s.size,
+          qty: s.qty,
+          unit_price: it.unit_price || 0,
+          total: round2((it.unit_price || 0) * s.qty),
+          obs: it.obs || null,
+        });
+      }
+    } else {
+      flatItems.push({
+        description: it.description,
+        size: null,
+        qty: it.qty || 0,
+        unit_price: it.unit_price || 0,
+        total: it.total || 0,
+        obs: it.obs || null,
+      });
+    }
+  }
+
   return {
     supplier_name: supplier,
     order_number: nro,
@@ -114,14 +142,7 @@ function parseOrderText(rawText) {
     obs,
     total_pieces: totalPieces ? parseInt(totalPieces) : null,
     total_amount: totalAmount,
-    items: items.map(it => ({
-      description: it.description,
-      size_grid: it.sizes?.length ? it.sizes.join(' · ') : null,
-      qty: it.qty || 0,
-      unit_price: it.unit_price || 0,
-      total: it.total || 0,
-      obs: it.obs || null,
-    })),
+    items: flatItems,
   };
 }
 
