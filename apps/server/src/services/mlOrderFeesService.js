@@ -119,17 +119,54 @@ async function mlGet(path, tokens) {
 
 const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
 
+// Percentual da tarifa de venda por categoria+tipo de anúncio (estável no dia,
+// então cacheado em memória). Fonte: API oficial de preços de anúncio do ML.
+const feePctCache = new Map();
+
+async function getSaleFeePct(categoryId, listingTypeId, price, tokens) {
+  if (!categoryId || !listingTypeId || !(price > 0)) return null;
+  const key = `${categoryId}|${listingTypeId}`;
+  if (feePctCache.has(key)) return feePctCache.get(key);
+
+  let pct = null;
+  try {
+    const body = await mlGet(
+      `/sites/MLB/listing_prices?price=${encodeURIComponent(price)}` +
+      `&listing_type_id=${encodeURIComponent(listingTypeId)}` +
+      `&category_id=${encodeURIComponent(categoryId)}`,
+      tokens
+    );
+    const entry = Array.isArray(body)
+      ? body.find((b) => b.listing_type_id === listingTypeId) || body[0]
+      : body;
+    const det = entry?.sale_fee_details;
+    if (det?.percentage_fee != null) {
+      pct = Number(det.percentage_fee);
+    } else if (det?.gross_amount != null) {
+      // gross_amount = parcela percentual da tarifa para o preço consultado
+      pct = round2((Number(det.gross_amount) / price) * 100);
+    }
+    if (!(pct > 0 && pct < 100)) pct = null;
+  } catch {
+    pct = null;
+  }
+  feePctCache.set(key, pct);
+  return pct;
+}
+
 /**
  * Busca no ML os valores financeiros de um pedido (ou pack/carrinho).
  * Retorna { fee, shipping, bonus, paidAmount, raw } — fee/shipping negativos.
  *
  * ⚠️ Semântica calibrada contra a tela "detalhe da venda" do ML em 20/07/2026
- * (4 pedidos conferidos lado a lado com o relatório de referência de 16/07):
- *   Comissão = tarifa de venda CHEIA  = Σ order_items[].sale_fee × quantidade
- *   Estorno  = bonificação da tarifa  = tarifa cheia − Σ payments[].marketplace_fee
- *   Frete    = custo líquido do vendedor = Σ senders[].cost (sem reabrir descontos)
- * O líquido (fat + comissão + frete + estorno) fecha com o repassado pelo ML.
- * Use GET /api/ml-profit/debug-order para conferir os payloads brutos.
+ * (6 pedidos conferidos lado a lado com o relatório de referência de 16/07):
+ *   order_items[].sale_fee vem JÁ LÍQUIDO da bonificação (valor por unidade).
+ *   Comissão (tarifa cheia) = % da categoria (listing_prices) × preço × qtd
+ *   Estorno  (bonificação)  = tarifa cheia − tarifa líquida real
+ *   Frete    = custo líquido do vendedor = Σ senders[].cost de /shipments/costs
+ * O líquido (fat + comissão + frete + estorno) fecha com o repassado pelo ML;
+ * se o percentual da categoria não puder ser obtido, cai para comissão líquida
+ * com estorno 0 (mesmo líquido). Use /api/ml-profit/debug-order para conferir.
  */
 async function fetchOrderFees(orderId, tokens) {
   // Pedido normal, ou pack (carrinho com vários pedidos) quando /orders dá 404
@@ -150,13 +187,22 @@ async function fetchOrderFees(orderId, tokens) {
   let saleFee = 0;
   let mkFee = 0;
   let paid = 0;
+  let fullFee = 0;
+  let fullOk = true;
+  const feeQuotes = [];
   const shipmentIds = new Set();
 
   for (const order of orders) {
-    saleFee += (order.order_items || []).reduce(
-      (sum, it) => sum + (Number(it.sale_fee) || 0) * (Number(it.quantity) || 1),
-      0
-    );
+    for (const it of order.order_items || []) {
+      const qty = Number(it.quantity) || 1;
+      const price = Number(it.unit_price) || 0;
+      saleFee += (Number(it.sale_fee) || 0) * qty;
+
+      const pct = await getSaleFeePct(it.item?.category_id, it.listing_type_id, price, tokens);
+      feeQuotes.push({ item: it.item?.id, category: it.item?.category_id, pct });
+      if (pct == null) fullOk = false;
+      else fullFee += round2((pct / 100) * price) * qty;
+    }
     const approved = (order.payments || []).filter(
       (p) => p.status === 'approved' || p.status === 'accredited'
     );
@@ -165,10 +211,14 @@ async function fetchOrderFees(orderId, tokens) {
     if (order.shipping?.id) shipmentIds.add(order.shipping.id);
   }
 
-  const fee = saleFee > 0 ? saleFee : mkFee;
-  const bonus = saleFee > 0 && mkFee > 0 && saleFee - mkFee > 0.009
-    ? round2(saleFee - mkFee)
-    : 0;
+  // Tarifa líquida realmente cobrada (sale_fee já vem líquido da bonificação)
+  const netFee = saleFee > 0 ? round2(saleFee) : round2(mkFee);
+  let fee = netFee;
+  let bonus = 0;
+  if (fullOk && fullFee > netFee + 0.009) {
+    fee = round2(fullFee);
+    bonus = round2(fullFee - netFee);
+  }
 
   let shipping = 0;
   const shipCosts = [];
@@ -188,7 +238,7 @@ async function fetchOrderFees(orderId, tokens) {
     shipping: round2(-Math.abs(shipping)),
     bonus: round2(Math.abs(bonus)),
     paidAmount: paid || null,
-    raw: { orders, pack, shipCosts },
+    raw: { orders, pack, shipCosts, feeQuotes },
   };
 }
 
