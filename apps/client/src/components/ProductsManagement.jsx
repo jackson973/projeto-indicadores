@@ -12,6 +12,7 @@ import {
   Input,
   InputGroup,
   InputLeftElement,
+  Link,
   Menu,
   MenuButton,
   MenuList,
@@ -37,7 +38,7 @@ import {
   useColorModeValue,
   useBreakpointValue,
 } from "@chakra-ui/react";
-import { SearchIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, SmallCloseIcon } from "@chakra-ui/icons";
+import { SearchIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, SmallCloseIcon, ExternalLinkIcon } from "@chakra-ui/icons";
 import {
   fetchProducts,
   fetchProductStores,
@@ -65,6 +66,24 @@ const isVariableKit = (nome) => {
 };
 
 const stockLabel = (sp) => `${sp.codigo} · ${sp.descricao}`;
+
+// URL do anúncio no marketplace (mesma lógica dos Grupos de Anúncios):
+// usa product_url das vendas; sem ele, monta busca pelo nome no marketplace da loja
+const getAdUrl = (p) => {
+  if (p.product_url) return p.product_url;
+  const plat = (p.loja || "").toLowerCase();
+  const name = p.nome || "";
+  if (!name) return null;
+  if (plat.includes("shopee")) {
+    const slug = name.replace(/\s+/g, "-").replace(/[^\w-]/g, "");
+    if (/^\d{10,}$/.test(String(p.codigo || ""))) return `https://shopee.com.br/${slug}-i.${p.codigo}`;
+    return `https://shopee.com.br/search?keyword=${encodeURIComponent(name)}`;
+  }
+  if (plat.includes("mercado")) return `https://www.mercadolivre.com.br/jm/search?as_word=${encodeURIComponent(name)}`;
+  if (plat.includes("shein")) return `https://br.shein.com/pdsearch/${encodeURIComponent(name)}`;
+  if (plat.includes("tiktok")) return `https://www.tiktok.com/search?q=${encodeURIComponent(name)}`;
+  return null;
+};
 
 /**
  * Campo digitável de vínculo com o produto do estoque (100% teclado):
@@ -393,6 +412,11 @@ const ProductsManagement = () => {
                           {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
                         </Box>
                         <Text fontSize="sm" fontWeight="bold" noOfLines={2}>{p.nome}</Text>
+                        {getAdUrl(p) && (
+                          <Link href={getAdUrl(p)} isExternal onClick={(e) => e.stopPropagation()} flexShrink={0} title="Abrir anúncio no marketplace">
+                            <ExternalLinkIcon boxSize={3} color="gray.400" />
+                          </Link>
+                        )}
                         {p.unconfigured_variations > 0 ? (
                           <Badge colorScheme="orange" fontSize="9px" ml={1} flexShrink={0} title={`${p.unconfigured_variations} variação(ões) sem kit configurado`}>
                             {p.unconfigured_variations} nova{p.unconfigured_variations > 1 ? "s" : ""}
@@ -511,7 +535,12 @@ const ProductsManagement = () => {
                             <Box as="span" flexShrink={0} color="gray.400">
                               {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
                             </Box>
-                            {p.nome}
+                            <Text as="span" isTruncated>{p.nome}</Text>
+                            {getAdUrl(p) && (
+                              <Link href={getAdUrl(p)} isExternal onClick={(e) => e.stopPropagation()} flexShrink={0} title="Abrir anúncio no marketplace">
+                                <ExternalLinkIcon boxSize={3} color="gray.400" _hover={{ color: "blue.400" }} />
+                              </Link>
+                            )}
                             {p.unconfigured_variations > 0 ? (
                               <Badge colorScheme="orange" fontSize="9px" ml={1} flexShrink={0} title={`${p.unconfigured_variations} variação(ões) sem kit configurado`}>
                                 {p.unconfigured_variations} nova{p.unconfigured_variations > 1 ? "s" : ""}

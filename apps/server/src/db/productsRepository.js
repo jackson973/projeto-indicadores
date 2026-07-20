@@ -70,6 +70,7 @@ async function listProducts({ codigo, nome, lojas, page = 1, limit = 50 } = {}) 
        TRIM(s.ad_name) AS nome,
        MAX(CASE WHEN s.sku IS NOT NULL AND TRIM(s.sku) != '' THEN s.sku END) AS codigo,
        MAX(CASE WHEN s.image IS NOT NULL AND TRIM(s.image) != '' THEN s.image END) AS thumbnail,
+       MAX(s.product_url) AS product_url,
        COALESCE(MAX(st.name), s.store) AS loja,
        COALESCE(p.kit_qty, 1) AS kit_qty,
        p.id AS product_id,
