@@ -23,6 +23,7 @@ const stockRouter = require("./routes/stock");
 const costRouter = require("./routes/cost");
 const accessRouter = require("./routes/access");
 const purchasesRouter = require("./routes/purchases");
+const mlProfitRouter = require("./routes/mlProfit");
 const path = require("path");
 const { authenticate, requireModule } = require("./middleware/auth");
 
@@ -61,6 +62,10 @@ async function start() {
   // Start WhatsApp sales alert scheduler (hourly alerts to users)
   const { startSalesAlertScheduler } = require('./services/salesAlertScheduler');
   startSalesAlertScheduler();
+
+  // Start ML daily profit report scheduler (valores reais via API + PDF)
+  const { startMlProfitScheduler } = require('./services/mlProfitScheduler');
+  startMlProfitScheduler();
 
   // Start WhatsApp bot if active
   try {
@@ -121,6 +126,7 @@ async function start() {
   app.use("/api/cost", costRouter);
   app.use("/api/access", accessRouter);
   app.use("/api/purchases", purchasesRouter);
+  app.use("/api/ml-profit", mlProfitRouter);
   app.use("/api", authenticate, apiRouter);
 
   // Serve uploaded files (logos, etc)

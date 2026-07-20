@@ -158,7 +158,8 @@ async function testMercadoLivre(store, res) {
     platform_seller_name: userData.nickname || userData.first_name,
     platform_user_id: String(userData.id),
     total_listings: totalListings,
-    token_expires_at: null,
+    // Preservar a expiração gravada no OAuth — zerar aqui quebrava o refresh proativo
+    token_expires_at: store.token_expires_at,
   });
 
   return res.json({

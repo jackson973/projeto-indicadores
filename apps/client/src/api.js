@@ -1786,3 +1786,44 @@ export const fetchPurchaseFileUrl = async (id) => {
   if (!response.ok) throw new Error('Erro ao abrir a cópia do pedido.');
   return URL.createObjectURL(await response.blob());
 };
+
+// ─── Relatório de Lucro ML ────────────────────────────────────────────────────
+export const fetchMlProfitOptions = async () =>
+  handleResponse(await authFetch('/api/ml-profit/options'));
+
+export const fetchMlProfitData = async (store, date) =>
+  handleResponse(await authFetch(
+    `/api/ml-profit/data?store=${encodeURIComponent(store)}&date=${encodeURIComponent(date)}`
+  ));
+
+export const syncMlProfitFees = async (store, date, force = false) =>
+  handleResponse(await authFetch('/api/ml-profit/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ store, date, force }),
+  }));
+
+export const downloadMlProfitPdf = async (store, date) => {
+  const response = await authFetch(
+    `/api/ml-profit/pdf?store=${encodeURIComponent(store)}&date=${encodeURIComponent(date)}`
+  );
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.message || 'Erro ao gerar o PDF.');
+  }
+  const blob = await response.blob();
+  const [y, m, d] = date.split('-');
+  const slug = store.replace(/\(.*?\)/g, '').trim().replace(/\s+/g, '_');
+  const filename = `Lucro_ML_${slug}_${d}-${m}-${y}.pdf`;
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = filename;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  }, 2000);
+};

@@ -68,6 +68,7 @@ import TerceirosSupplierPrices from "./components/TerceirosSupplierPrices";
 import OFRastreio from "./components/OFRastreio";
 import SystemSettings from "./components/SystemSettings";
 import StoresManagement from "./components/StoresManagement";
+import MlProfitReport from "./components/MlProfitReport";
 import AnunciosDashboard from "./components/AnunciosDashboard";
 import ProductsManagement from "./components/ProductsManagement";
 import OrderProductsConfig from "./components/OrderProductsConfig";
@@ -594,6 +595,7 @@ const App = () => {
       submenu: [
         { label: "Anúncios", view: "anuncios" },
         { label: "Gerenc. de Lojas", view: "stores-management" },
+        { label: "Lucro ML", view: "ml-profit" },
       ],
     },
     {
@@ -964,6 +966,10 @@ const App = () => {
 
         {activeView === "stores-management" && isAdmin && (
           <StoresManagement />
+        )}
+
+        {activeView === "ml-profit" && isAdmin && (
+          <MlProfitReport />
         )}
 
         {activeView === "users" && isAdmin && (

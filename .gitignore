@@ -15,3 +15,4 @@ sample-data/
 .pm2/
 apps/server/.whatsapp-auth/
 apps/server/uploads/
+apps/server/reports/

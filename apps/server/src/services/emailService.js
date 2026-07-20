@@ -28,15 +28,17 @@ transporter.verify((error, success) => {
  * @param {string} options.text - Plain text body (optional)
  * @param {string} options.html - HTML body (optional)
  * @param {string} options.from - Sender email (optional, defaults to configured Gmail)
+ * @param {Array} options.attachments - Nodemailer attachments (optional)
  * @returns {Promise<Object>} - Nodemailer result
  */
-async function sendEmail({ to, subject, text, html, from }) {
+async function sendEmail({ to, subject, text, html, from, attachments }) {
   const mailOptions = {
     from: from || 'Indicadores <tuckkidsrobot@gmail.com>',
     to,
     subject,
     text,
-    html
+    html,
+    attachments
   };
 
   try {
