@@ -1,6 +1,6 @@
 const db = require('../db/connection');
 const storesRepo = require('../db/storesRepository');
-const { getValidMlToken } = require('./mlTokenService');
+const { getValidMlToken, refreshMlToken } = require('./mlTokenService');
 
 /**
  * Coleta dos valores REAIS de cada venda no Mercado Livre (comissão, frete,
@@ -64,10 +64,50 @@ async function resolveStoreForSalesLabel(salesStoreLabel) {
   return storesRepo.getStoreCredentials(match.id);
 }
 
-async function mlGet(path, token) {
-  const res = await fetch(`${ML_API}${path}`, {
-    headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
-  });
+/**
+ * Fornece o access token da loja com renovação REATIVA: se uma chamada levar
+ * 401 (token de 6h expirado — comum quando token_expires_at não foi gravado),
+ * renova via refresh_token e repete. O refresh é deduplicado para não usar o
+ * mesmo refresh_token duas vezes em paralelo (o ML rotaciona a cada uso).
+ */
+function createTokenProvider(storeId) {
+  let token = null;
+  let refreshing = null;
+  return {
+    async get() {
+      if (!token) {
+        const creds = await storesRepo.getStoreCredentials(storeId);
+        if (!creds) throw new Error(`Loja ${storeId} não encontrada.`);
+        token = await getValidMlToken(creds);
+      }
+      return token;
+    },
+    async refresh() {
+      if (!refreshing) {
+        refreshing = (async () => {
+          // Recarrega as credenciais para usar o refresh_token mais atual
+          const creds = await storesRepo.getStoreCredentials(storeId);
+          token = await refreshMlToken(creds);
+          return token;
+        })().finally(() => { refreshing = null; });
+      }
+      return refreshing;
+    },
+  };
+}
+
+async function mlGet(path, tokens) {
+  const call = async () =>
+    fetch(`${ML_API}${path}`, {
+      headers: { Authorization: `Bearer ${await tokens.get()}`, Accept: 'application/json' },
+    });
+
+  let res = await call();
+  if (res.status === 401) {
+    await tokens.refresh();
+    res = await call();
+  }
+
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(body.message || `HTTP ${res.status} em ${path}`);
@@ -91,18 +131,18 @@ const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
  * O líquido (fat + comissão + frete + estorno) fecha com o repassado pelo ML.
  * Use GET /api/ml-profit/debug-order para conferir os payloads brutos.
  */
-async function fetchOrderFees(orderId, token) {
+async function fetchOrderFees(orderId, tokens) {
   // Pedido normal, ou pack (carrinho com vários pedidos) quando /orders dá 404
   let orders;
   let pack = null;
   try {
-    orders = [await mlGet(`/orders/${orderId}`, token)];
+    orders = [await mlGet(`/orders/${orderId}`, tokens)];
   } catch (err) {
     if (err.status !== 404) throw err;
-    pack = await mlGet(`/packs/${orderId}`, token);
+    pack = await mlGet(`/packs/${orderId}`, tokens);
     orders = [];
     for (const o of pack.orders || []) {
-      orders.push(await mlGet(`/orders/${o.id}`, token));
+      orders.push(await mlGet(`/orders/${o.id}`, tokens));
     }
     if (!orders.length) throw err;
   }
@@ -134,7 +174,7 @@ async function fetchOrderFees(orderId, token) {
   const shipCosts = [];
   for (const shipmentId of shipmentIds) {
     try {
-      const costs = await mlGet(`/shipments/${shipmentId}/costs`, token);
+      const costs = await mlGet(`/shipments/${shipmentId}/costs`, tokens);
       shipCosts.push(costs);
       shipping += (costs.senders || []).reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
     } catch (err) {
@@ -202,7 +242,8 @@ async function syncDayFees({ store: salesStoreLabel, date, force = false }) {
     );
   }
 
-  const token = await getValidMlToken(storeCreds);
+  const tokens = createTokenProvider(storeCreds.id);
+  await tokens.get(); // valida o acesso antes de começar
   const pending = await listPendingOrders(salesStoreLabel, date, force);
 
   const result = { store: salesStoreLabel, date, total: pending.length, ok: 0, errors: [] };
@@ -213,7 +254,7 @@ async function syncDayFees({ store: salesStoreLabel, date, force = false }) {
     await Promise.all(
       chunk.map(async (row) => {
         try {
-          const fees = await fetchOrderFees(row.platform_order_id, token);
+          const fees = await fetchOrderFees(row.platform_order_id, tokens);
           await persistOrderFees(row.platform_order_id, {
             fee: fees.fee,
             shipping: fees.shipping,
@@ -241,6 +282,7 @@ async function syncDayFees({ store: salesStoreLabel, date, force = false }) {
 module.exports = {
   dayWindowUtc,
   resolveStoreForSalesLabel,
+  createTokenProvider,
   fetchOrderFees,
   syncDayFees,
 };

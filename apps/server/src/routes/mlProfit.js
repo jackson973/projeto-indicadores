@@ -6,8 +6,8 @@ const {
   syncDayFees,
   fetchOrderFees,
   resolveStoreForSalesLabel,
+  createTokenProvider,
 } = require('../services/mlOrderFeesService');
-const { getValidMlToken } = require('../services/mlTokenService');
 const { getSaoPauloDate } = require('../lib/timezone');
 
 const router = express.Router();
@@ -87,8 +87,7 @@ router.get('/debug-order', async (req, res) => {
     }
     const creds = await resolveStoreForSalesLabel(store);
     if (!creds) return res.status(404).json({ message: `Loja ML não encontrada para "${store}".` });
-    const token = await getValidMlToken(creds);
-    const fees = await fetchOrderFees(order_id, token);
+    const fees = await fetchOrderFees(order_id, createTokenProvider(creds.id));
     return res.json(fees);
   } catch (error) {
     console.error('[ML Profit] Debug order error:', error);
