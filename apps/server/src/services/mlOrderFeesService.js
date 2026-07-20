@@ -80,55 +80,63 @@ async function mlGet(path, token) {
 const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
 
 /**
- * Busca no ML os valores financeiros de um pedido.
+ * Busca no ML os valores financeiros de um pedido (ou pack/carrinho).
  * Retorna { fee, shipping, bonus, paidAmount, raw } — fee/shipping negativos.
  *
- * ⚠️ Semântica validada contra o relatório de referência de 16/07/2026
- * (README do handover, seção 9.9). Use GET /api/ml-profit/debug-order para
- * conferir os payloads brutos caso algum valor não bata com a tela do ML.
+ * ⚠️ Semântica calibrada contra a tela "detalhe da venda" do ML em 20/07/2026
+ * (4 pedidos conferidos lado a lado com o relatório de referência de 16/07):
+ *   Comissão = tarifa de venda CHEIA  = Σ order_items[].sale_fee × quantidade
+ *   Estorno  = bonificação da tarifa  = tarifa cheia − Σ payments[].marketplace_fee
+ *   Frete    = custo líquido do vendedor = Σ senders[].cost (sem reabrir descontos)
+ * O líquido (fat + comissão + frete + estorno) fecha com o repassado pelo ML.
+ * Use GET /api/ml-profit/debug-order para conferir os payloads brutos.
  */
 async function fetchOrderFees(orderId, token) {
-  const order = await mlGet(`/orders/${orderId}`, token);
+  // Pedido normal, ou pack (carrinho com vários pedidos) quando /orders dá 404
+  let orders;
+  let pack = null;
+  try {
+    orders = [await mlGet(`/orders/${orderId}`, token)];
+  } catch (err) {
+    if (err.status !== 404) throw err;
+    pack = await mlGet(`/packs/${orderId}`, token);
+    orders = [];
+    for (const o of pack.orders || []) {
+      orders.push(await mlGet(`/orders/${o.id}`, token));
+    }
+    if (!orders.length) throw err;
+  }
 
-  // ── Comissão (tarifa de venda) ─────────────────────────────────────────
-  // Preferência: payments[].marketplace_fee (total do pagamento aprovado).
-  // Fallback: order_items[].sale_fee (valor por unidade) × quantidade.
-  let fee = 0;
-  const approved = (order.payments || []).filter(
-    (p) => p.status === 'approved' || p.status === 'accredited'
-  );
-  const mkFee = approved.reduce((sum, p) => sum + (Number(p.marketplace_fee) || 0), 0);
-  if (mkFee > 0) {
-    fee = mkFee;
-  } else {
-    fee = (order.order_items || []).reduce(
+  let saleFee = 0;
+  let mkFee = 0;
+  let paid = 0;
+  const shipmentIds = new Set();
+
+  for (const order of orders) {
+    saleFee += (order.order_items || []).reduce(
       (sum, it) => sum + (Number(it.sale_fee) || 0) * (Number(it.quantity) || 1),
       0
     );
+    const approved = (order.payments || []).filter(
+      (p) => p.status === 'approved' || p.status === 'accredited'
+    );
+    mkFee += approved.reduce((sum, p) => sum + (Number(p.marketplace_fee) || 0), 0);
+    paid += Number(order.paid_amount) || 0;
+    if (order.shipping?.id) shipmentIds.add(order.shipping.id);
   }
 
-  // ── Frete + estorno ────────────────────────────────────────────────────
-  // /shipments/{id}/costs: senders[].cost é o líquido pago pelo vendedor;
-  // discounts/compensations são as bonificações que o ML devolve.
-  // No relatório: Frete = custo bruto (negativo) e Estorno = crédito (positivo),
-  // de modo que frete + estorno = custo líquido do envio.
-  let shippingGross = 0;
-  let bonus = 0;
-  let shipCosts = null;
-  const shipmentId = order.shipping?.id;
-  if (shipmentId) {
+  const fee = saleFee > 0 ? saleFee : mkFee;
+  const bonus = saleFee > 0 && mkFee > 0 && saleFee - mkFee > 0.009
+    ? round2(saleFee - mkFee)
+    : 0;
+
+  let shipping = 0;
+  const shipCosts = [];
+  for (const shipmentId of shipmentIds) {
     try {
-      shipCosts = await mlGet(`/shipments/${shipmentId}/costs`, token);
-      for (const sender of shipCosts.senders || []) {
-        const netCost = Number(sender.cost) || 0;
-        const discounts = (sender.discounts || []).reduce(
-          (sum, d) => sum + (Number(d.promoted_amount) || 0),
-          0
-        );
-        const compensation = Number(sender.compensation) || 0;
-        shippingGross += netCost + discounts;
-        bonus += discounts + compensation;
-      }
+      const costs = await mlGet(`/shipments/${shipmentId}/costs`, token);
+      shipCosts.push(costs);
+      shipping += (costs.senders || []).reduce((sum, s) => sum + (Number(s.cost) || 0), 0);
     } catch (err) {
       // Envio sem custos consultáveis (ex.: retirada) — segue com frete 0
       if (err.status !== 404) throw err;
@@ -137,10 +145,10 @@ async function fetchOrderFees(orderId, token) {
 
   return {
     fee: round2(-Math.abs(fee)),
-    shipping: round2(-Math.abs(shippingGross)),
+    shipping: round2(-Math.abs(shipping)),
     bonus: round2(Math.abs(bonus)),
-    paidAmount: Number(order.paid_amount) || null,
-    raw: { order, shipCosts },
+    paidAmount: paid || null,
+    raw: { orders, pack, shipCosts },
   };
 }
 
@@ -224,6 +232,9 @@ async function syncDayFees({ store: salesStoreLabel, date, force = false }) {
     `[ML Fees] ${salesStoreLabel} ${date}: ${result.ok}/${result.total} pedidos sincronizados` +
     (result.errors.length ? ` (${result.errors.length} erros)` : '')
   );
+  for (const e of result.errors.slice(0, 5)) {
+    console.warn(`[ML Fees]   pedido ${e.order_id}: ${e.message}`);
+  }
   return result;
 }
 

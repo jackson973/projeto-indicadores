@@ -86,12 +86,16 @@ export default function MlProfitReport() {
   const handleSync = async () => {
     setSyncing(true);
     try {
-      const r = await syncMlProfitFees(store, date);
+      // force=true: o botão manual sempre rebusca o dia inteiro (atualiza valores antigos)
+      const r = await syncMlProfitFees(store, date, true);
+      const firstErr = r.errors?.[0]
+        ? ` · ex.: pedido ${r.errors[0].order_id}: ${r.errors[0].message}`
+        : "";
       toast({
         status: r.errors?.length ? "warning" : "success",
         title: `Sincronização concluída`,
         description: `${r.ok}/${r.total} pedidos atualizados` +
-          (r.errors?.length ? ` · ${r.errors.length} erros (ver console do servidor)` : ""),
+          (r.errors?.length ? ` · ${r.errors.length} erros${firstErr}` : ""),
       });
       await load();
     } catch (e) {
