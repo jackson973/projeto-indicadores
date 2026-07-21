@@ -119,13 +119,15 @@ async function mlGet(path, tokens) {
 
 const round2 = (v) => Math.round((v + Number.EPSILON) * 100) / 100;
 
-// Percentual da tarifa de venda por categoria+tipo de anúncio (estável no dia,
-// então cacheado em memória). Fonte: API oficial de preços de anúncio do ML.
+// Percentual da tarifa de venda por categoria+tipo de anúncio+PREÇO.
+// ⚠️ O preço FAZ PARTE da chave: o ML muda o percentual por faixa de preço
+// (ex.: 19% abaixo de R$150, 15% a partir de R$150) — cachear sem o preço
+// causou tarifa errada em pedidos >= R$150. Fonte: API oficial listing_prices.
 const feePctCache = new Map();
 
 async function getSaleFeePct(categoryId, listingTypeId, price, tokens) {
   if (!categoryId || !listingTypeId || !(price > 0)) return null;
-  const key = `${categoryId}|${listingTypeId}`;
+  const key = `${categoryId}|${listingTypeId}|${price.toFixed(2)}`;
   if (feePctCache.has(key)) return feePctCache.get(key);
 
   let pct = null;
@@ -188,6 +190,7 @@ async function fetchOrderFees(orderId, tokens) {
   let mkFee = 0;
   let paid = 0;
   let fullFee = 0;
+  let itemsTotal = 0;
   let fullOk = true;
   const feeQuotes = [];
   const shipmentIds = new Set();
@@ -197,9 +200,10 @@ async function fetchOrderFees(orderId, tokens) {
       const qty = Number(it.quantity) || 1;
       const price = Number(it.unit_price) || 0;
       saleFee += (Number(it.sale_fee) || 0) * qty;
+      itemsTotal += price * qty;
 
       const pct = await getSaleFeePct(it.item?.category_id, it.listing_type_id, price, tokens);
-      feeQuotes.push({ item: it.item?.id, category: it.item?.category_id, pct });
+      feeQuotes.push({ item: it.item?.id, category: it.item?.category_id, price, pct });
       if (pct == null) fullOk = false;
       else fullFee += round2((pct / 100) * price) * qty;
     }
@@ -215,10 +219,14 @@ async function fetchOrderFees(orderId, tokens) {
   const netFee = saleFee > 0 ? round2(saleFee) : round2(mkFee);
   let fee = netFee;
   let bonus = 0;
+  let source = saleFee > 0 ? 'sale_fee_net' : 'marketplace_fee_net';
   if (fullOk && fullFee > netFee + 0.009) {
     fee = round2(fullFee);
     bonus = round2(fullFee - netFee);
+    source = 'listing_prices';
   }
+  // % efetivo da tarifa exibida (auditoria: deve bater com o % da tela do ML)
+  const feePct = itemsTotal > 0 ? round2((100 * fee) / itemsTotal) : null;
 
   let shipping = 0;
   const shipCosts = [];
@@ -238,6 +246,8 @@ async function fetchOrderFees(orderId, tokens) {
     shipping: round2(-Math.abs(shipping)),
     bonus: round2(Math.abs(bonus)),
     paidAmount: paid || null,
+    feePct,
+    source,
     raw: { orders, pack, shipCosts, feeQuotes },
   };
 }
@@ -265,7 +275,7 @@ async function listPendingOrders(salesStoreLabel, dateStr, force = false) {
   return rows;
 }
 
-async function persistOrderFees(orderId, { fee, shipping, bonus, total }) {
+async function persistOrderFees(orderId, { fee, shipping, bonus, total, feePct, source }) {
   const net = round2(total + fee + shipping + bonus);
   await db.query(
     `UPDATE sales
@@ -273,9 +283,11 @@ async function persistOrderFees(orderId, { fee, shipping, bonus, total }) {
          ml_shipping_cost = $3,
          ml_bonus_amount = $4,
          ml_net_received = $5,
+         ml_fee_pct = $6,
+         ml_fees_source = $7,
          ml_fees_synced_at = NOW()
      WHERE platform_order_id = $1 AND platform = 'Mercado Livre'`,
-    [orderId, fee, shipping, bonus, net]
+    [orderId, fee, shipping, bonus, net, feePct, source]
   );
 }
 
@@ -310,6 +322,8 @@ async function syncDayFees({ store: salesStoreLabel, date, force = false }) {
             shipping: fees.shipping,
             bonus: fees.bonus,
             total: Number(row.total) || 0,
+            feePct: fees.feePct,
+            source: fees.source,
           });
           result.ok += 1;
         } catch (err) {

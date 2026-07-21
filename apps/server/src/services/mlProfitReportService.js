@@ -38,6 +38,8 @@ async function getReportRows({ store, date }) {
               s.ml_fee_amount::float       AS ml_fee,
               s.ml_shipping_cost::float    AS ml_ship,
               s.ml_bonus_amount::float     AS ml_bonus,
+              s.ml_fee_pct::float          AS ml_fee_pct,
+              s.ml_fees_source,
               s.ml_fees_synced_at,
               pm.kit_qty,
               COALESCE(cc.cost, sp.initial_cost)::float AS custo_unitario
@@ -63,6 +65,8 @@ async function getReportRows({ store, date }) {
             MAX(ml_fee)       AS comissao,
             MAX(ml_ship)      AS frete,
             MAX(ml_bonus)     AS estorno,
+            MAX(ml_fee_pct)   AS fee_pct,
+            MIN(ml_fees_source) AS fees_source,
             BOOL_OR(ml_fees_synced_at IS NOT NULL) AS fees_ok,
             SUM(CASE WHEN kit_qty IS NOT NULL AND custo_unitario IS NOT NULL
                      THEN kit_qty * custo_unitario * quantity END) AS custo,
@@ -100,6 +104,8 @@ async function getReportRows({ store, date }) {
       custo,
       lucro,
       margem,
+      feePct: r.fee_pct !== null && r.fee_pct !== undefined ? Number(r.fee_pct) : null,
+      feesSource: r.fees_source || null,
       feesOk,
       temCusto,
     };

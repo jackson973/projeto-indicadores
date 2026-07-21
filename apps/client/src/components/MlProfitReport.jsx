@@ -120,6 +120,20 @@ export default function MlProfitReport() {
   const pendentesFees = t ? t.pedidos - t.comFees : 0;
   const pendentesCusto = t ? t.pedidos - t.comCusto : 0;
 
+  // Auditoria: distribuição dos percentuais de tarifa aplicados no dia
+  const pctDist = {};
+  let semPct = 0;
+  (data?.rows || []).forEach((r) => {
+    if (!r.feesOk) return;
+    if (r.feesSource === "listing_prices" && r.feePct != null) {
+      const k = r.feePct.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+      pctDist[k] = (pctDist[k] || 0) + 1;
+    } else {
+      semPct += 1;
+    }
+  });
+  const pctEntries = Object.entries(pctDist).sort((a, b) => b[1] - a[1]);
+
   const kpis = t ? [
     { label: "Faturamento", value: `R$ ${brl(t.fat)}` },
     { label: "Comissão ML", value: `R$ ${brl(t.comissao)}`, color: red },
@@ -200,6 +214,16 @@ export default function MlProfitReport() {
                 )}
               </Box>
             </Alert>
+          )}
+
+          {(pctEntries.length > 0 || semPct > 0) && (
+            <Text fontSize="xs" color={subtle}>
+              <b>Auditoria da tarifa:</b>{" "}
+              {pctEntries.map(([pct, n]) => `${pct}% em ${n} pedido${n > 1 ? "s" : ""}`).join(" · ")}
+              {semPct > 0 &&
+                ` · ${semPct} pedido${semPct > 1 ? "s" : ""} sem % da categoria (comissão líquida, estorno embutido)`}
+              {" "}— confira o % ao lado de cada comissão contra a tela do ML.
+            </Text>
           )}
 
           <SimpleGrid columns={{ base: 3, md: 5, xl: 9 }} spacing={2}>
@@ -316,7 +340,14 @@ export default function MlProfitReport() {
                     </Td>
                     <Td textAlign="center">{Math.round(r.qty)}</Td>
                     <Td {...numTd}>{brl(r.fat)}</Td>
-                    <Td {...numTd} color={red}>{brl(r.comissao)}</Td>
+                    <Td {...numTd} color={red}>
+                      {brl(r.comissao)}
+                      {r.feePct != null && (
+                        <Text as="span" fontSize="10px" color={subtle} ml={1}>
+                          {r.feePct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%
+                        </Text>
+                      )}
+                    </Td>
                     <Td {...numTd} color={red}>{brl(r.frete)}</Td>
                     <Td {...numTd} color={green}>{brl(r.estorno, { sign: true })}</Td>
                     <Td {...numTd}>{brl(r.liquido)}</Td>
