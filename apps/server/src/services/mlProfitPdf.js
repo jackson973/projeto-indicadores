@@ -261,8 +261,12 @@ function createProfitPdf(data) {
 
   const pctCusto = totals.pedidos ? Math.round((100 * totals.comCusto) / totals.pedidos) : 0;
   const pctFees = totals.pedidos ? Math.round((100 * totals.comFees) / totals.pedidos) : 0;
+  const canc = data.canceladosResumo;
+  const cancTxt = canc?.count
+    ? `  ·  ${canc.count} cancelado${canc.count > 1 ? 's' : ''} fora dos totais (R$ ${br(canc.fat)})`
+    : '';
   doc.text(
-    `${totals.pedidos} pedidos  ·  custo cadastrado em ${pctCusto}%  ·  tarifas reais do ML em ${pctFees}%`,
+    `${totals.pedidos} pedidos  ·  custo cadastrado em ${pctCusto}%  ·  tarifas reais do ML em ${pctFees}%${cancTxt}`,
     M_LEFT, y, { width: PW, align: 'center' }
   );
   y = doc.y + 9;
@@ -395,6 +399,40 @@ function createProfitPdf(data) {
     headers: headDetalhe, rows: detalheRows, colWidths: colDetalhe,
     fontSize: 9, padV: 4.4, marginCol: 11, startY: y,
   });
+
+  // ── Pedidos cancelados (fora dos totais) ─────────────────────────────────
+  if ((data.cancelados || []).length) {
+    if (y + 70 > BOTTOM_Y) { doc.addPage(); y = M_TOP; } else { y += 13; }
+    doc.font('Helvetica-Bold').fontSize(12).fillColor(GREY);
+    doc.text('Pedidos cancelados — fora dos totais (valor estornado pelo ML)', M_LEFT, y);
+    y = doc.y + 6;
+
+    const headCanc = [
+      { text: 'Pedido ML', align: 'left' }, { text: 'Anúncio', align: 'left' },
+      { text: 'Qtd', align: 'center' }, { text: 'Valor' },
+    ];
+    const colCanc = [30, 196, 12, 33].map((w) => w * MM);
+    const cancRows = data.cancelados.map((r, i) => ({
+      bg: i % 2 === 1 ? ZEBRA : null,
+      cells: [
+        {
+          segments: [{
+            text: r.oid, color: GREY, underline: true, size: 7.3,
+            link: `https://www.mercadolivre.com.br/vendas/${r.oid}/detalhe`,
+          }],
+          size: 7.3,
+          align: 'left',
+        },
+        { segments: [{ text: r.ad, color: GREY }], align: 'left' },
+        { segments: [{ text: String(Math.round(r.qty)), color: GREY }], align: 'center' },
+        { segments: [{ text: br(r.fat), color: GREY }], align: 'right' },
+      ],
+    }));
+    y = drawTable(doc, {
+      headers: headCanc, rows: cancRows, colWidths: colCanc,
+      fontSize: 9, padV: 4, startY: y,
+    });
+  }
 
   // ── Legenda + notas (seções 9.6/9.9) ─────────────────────────────────────
   if (y + 60 > BOTTOM_Y) { doc.addPage(); y = M_TOP; } else { y += 10; }

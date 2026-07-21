@@ -330,6 +330,35 @@ export default function MlProfitReport() {
             </Table>
           </Box>
 
+          {data.cancelados?.length > 0 && (
+            <Box bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="md" p={3} overflowX="auto">
+              <Heading size="sm" mb={1} color={subtle}>
+                Cancelados — fora dos totais ({data.cancelados.length} pedidos ·
+                R$ {brl(data.canceladosResumo?.fat)})
+              </Heading>
+              <Text fontSize="xs" color={subtle} mb={3}>Valor estornado pelo ML — listados só para conferência.</Text>
+              <Table size="sm" variant="unstyled">
+                <Tbody>
+                  {data.cancelados.map((r, i) => (
+                    <Tr key={r.oid} bg={i % 2 === 1 ? zebra : undefined} color={subtle}>
+                      <Td>
+                        <Link
+                          href={`https://www.mercadolivre.com.br/vendas/${r.oid}/detalhe`}
+                          isExternal textDecoration="underline" fontSize="xs"
+                        >
+                          {r.oid}
+                        </Link>
+                      </Td>
+                      <Td maxW="360px"><Text noOfLines={1} fontSize="xs">{r.ad}</Text></Td>
+                      <Td textAlign="center">{Math.round(r.qty)}</Td>
+                      <Td isNumeric whiteSpace="nowrap">{brl(r.fat)}</Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </Box>
+          )}
+
           <Text fontSize="xs" color={subtle}>
             Margem: <Badge bg="#F6CFD3" color="#A52834">&lt; 10%</Badge>{" "}
             <Badge bg="#CDEBD6" color="#1B7A31">10% a 13%</Badge>{" "}

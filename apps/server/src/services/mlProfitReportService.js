@@ -173,10 +173,42 @@ function aggregate(rows) {
   return { totals, resumo };
 }
 
+/**
+ * Pedidos cancelados do dia — exibidos à parte, FORA dos totais
+ * (o ML estorna o valor; ficam no relatório só para conferência com a
+ * lista de vendas do ML, que os mostra como "Cancelado").
+ */
+async function getCancelledOrders({ store, date }) {
+  const { start, end } = dayWindowUtc(date);
+  const { rows } = await db.query(
+    `SELECT platform_order_id AS oid,
+            MIN(ad_name)      AS ad,
+            SUM(quantity)::float AS qty,
+            SUM(total)::float    AS fat
+     FROM sales
+     WHERE platform = 'Mercado Livre'
+       AND store = $1
+       AND date >= $2::timestamp AND date < $3::timestamp
+       AND platform_order_id IS NOT NULL
+       AND status = 'Cancelado'
+     GROUP BY platform_order_id
+     ORDER BY SUM(total) DESC`,
+    [store, start, end]
+  );
+  return rows.map((r) => ({ ...r, qty: Number(r.qty) || 0, fat: round2(Number(r.fat) || 0) }));
+}
+
 async function getReportData({ store, date }) {
-  const rows = await getReportRows({ store, date });
+  const [rows, cancelados] = await Promise.all([
+    getReportRows({ store, date }),
+    getCancelledOrders({ store, date }),
+  ]);
   const { totals, resumo } = aggregate(rows);
-  return { store, date, nfPct: NF_PCT, rows, resumo, totals };
+  const canceladosResumo = {
+    count: cancelados.length,
+    fat: round2(cancelados.reduce((a, r) => a + r.fat, 0)),
+  };
+  return { store, date, nfPct: NF_PCT, rows, resumo, totals, cancelados, canceladosResumo };
 }
 
 /** Rótulos de loja ML existentes em sales (para o seletor da tela). */
