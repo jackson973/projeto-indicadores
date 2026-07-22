@@ -161,6 +161,7 @@ export default function BarcodeScanner({
   onScan,
   active = true,
   continuous = true,
+  onManualSearch, // opcional: chamado quando a lupa é clicada com o campo vazio
 }) {
   const videoRef = useRef(null);
   const lastCodeRef = useRef(null);
@@ -216,7 +217,11 @@ export default function BarcodeScanner({
     e.preventDefault();
     unlockAudio();
     const code = manualCode.trim();
-    if (!code) return;
+    if (!code) {
+      // Lupa sem código digitado → abre a busca manual (quando disponível)
+      if (onManualSearch) onManualSearch();
+      return;
+    }
     handleScan(code);
     setManualCode("");
     inputRef.current?.focus();

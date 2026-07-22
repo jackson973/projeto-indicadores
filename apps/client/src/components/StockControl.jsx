@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Badge,
   Box,
@@ -8,16 +8,30 @@ import {
   FormControl,
   FormLabel,
   HStack,
+  Input,
+  InputGroup,
+  InputLeftElement,
+  Modal,
+  ModalBody,
+  ModalCloseButton,
+  ModalContent,
+  ModalHeader,
+  ModalOverlay,
   NumberInput,
   NumberInputField,
   Select,
+  Spinner,
   Text,
   VStack,
   useColorModeValue,
+  useDisclosure,
 } from "@chakra-ui/react";
+import { SearchIcon } from "@chakra-ui/icons";
 import BarcodeScanner from "./BarcodeScanner";
 import useAppToast from "../hooks/useAppToast";
-import { fetchStockReasons, scanStockBarcode, createStockMovement, fetchSuppliers } from "../api";
+import {
+  fetchStockReasons, scanStockBarcode, createStockMovement, fetchSuppliers, fetchStockProducts,
+} from "../api";
 
 export default function StockControl() {
   const [tipo, setTipo] = useState("saida"); // operação mais comum no dia a dia
@@ -45,30 +59,36 @@ export default function StockControl() {
 
   const reasonsForTipo = reasons.filter(r => r.direcao === tipo);
 
+  // Registra o movimento para uma variante (usado pela bipagem E pela busca manual)
+  const applyMovement = useCallback(async (v) => {
+    const supplierName = tipo === "entrada" && supplierId
+      ? (suppliers.find(s => String(s.id) === String(supplierId))?.name || null)
+      : null;
+    const mov = await createStockMovement({
+      variant_id: v.variant_id,
+      tipo,
+      qty: Number(qty) || 1,
+      reason_id: reasonId || null,
+      unit_cost: tipo === "entrada" && unitCost !== "" ? Number(unitCost) : null,
+      note: supplierName ? `Fornecedor: ${supplierName}` : null,
+    });
+    const entry = {
+      key: `${mov.id}`,
+      descricao: v.descricao,
+      tamanho: v.tamanho,
+      product_codigo: v.product_codigo,
+      delta: mov.qty,
+      balance: mov.resulting_balance,
+      at: new Date(),
+    };
+    setRecent(r => [entry, ...r].slice(0, 30));
+    return mov;
+  }, [tipo, qty, reasonId, unitCost, supplierId, suppliers]);
+
   const handleScan = useCallback(async (code) => {
     try {
       const v = await scanStockBarcode(code); // { variant_id, tamanho, product_codigo, descricao, balance, ... }
-      const supplierName = tipo === "entrada" && supplierId
-        ? (suppliers.find(s => String(s.id) === String(supplierId))?.name || null)
-        : null;
-      const mov = await createStockMovement({
-        variant_id: v.variant_id,
-        tipo,
-        qty: Number(qty) || 1,
-        reason_id: reasonId || null,
-        unit_cost: tipo === "entrada" && unitCost !== "" ? Number(unitCost) : null,
-        note: supplierName ? `Fornecedor: ${supplierName}` : null,
-      });
-      const entry = {
-        key: `${mov.id}`,
-        descricao: v.descricao,
-        tamanho: v.tamanho,
-        product_codigo: v.product_codigo,
-        delta: mov.qty,
-        balance: mov.resulting_balance,
-        at: new Date(),
-      };
-      setRecent(r => [entry, ...r].slice(0, 30));
+      const mov = await applyMovement(v);
       return {
         status: "success",
         message: `${v.product_codigo} ${v.tamanho} · ${mov.qty > 0 ? "+" : ""}${mov.qty} → saldo ${mov.resulting_balance}`,
@@ -76,7 +96,54 @@ export default function StockControl() {
     } catch (e) {
       return { status: "error", message: e.message || "Erro" };
     }
-  }, [tipo, qty, reasonId, unitCost, supplierId, suppliers]);
+  }, [applyMovement]);
+
+  // ─── Busca manual (lupa sem código): produto/cor + tamanho ────────────────
+  const manualModal = useDisclosure();
+  const [term, setTerm] = useState("");
+  const [results, setResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [applyingVariant, setApplyingVariant] = useState(null);
+  const termRef = useRef("");
+  termRef.current = term;
+
+  useEffect(() => {
+    if (!manualModal.isOpen) return;
+    const q = term.trim();
+    const timer = setTimeout(() => {
+      setSearching(true);
+      fetchStockProducts({ search: q })
+        .then((list) => { if (termRef.current.trim() === q) setResults(list); })
+        .catch(() => {})
+        .finally(() => setSearching(false));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [term, manualModal.isOpen]);
+
+  const handleManualPick = async (product, variant) => {
+    setApplyingVariant(variant.id);
+    try {
+      const mov = await applyMovement({
+        variant_id: variant.id,
+        tamanho: variant.tamanho,
+        product_codigo: product.codigo,
+        descricao: product.descricao,
+      });
+      // Atualiza o saldo exibido no modal sem refazer a busca
+      setResults(rs => rs.map(p => p.id !== product.id ? p : {
+        ...p,
+        variants: p.variants.map(vv => vv.id === variant.id ? { ...vv, balance: mov.resulting_balance } : vv),
+      }));
+      toast({
+        status: "success",
+        title: `${product.codigo} ${variant.tamanho} · ${mov.qty > 0 ? "+" : ""}${mov.qty} → saldo ${mov.resulting_balance}`,
+      });
+    } catch (e) {
+      toast({ status: "error", title: "Erro ao registrar", description: e.message });
+    } finally {
+      setApplyingVariant(null);
+    }
+  };
 
   return (
     <Box>
@@ -136,9 +203,82 @@ export default function StockControl() {
 
         {/* Scanner */}
         <Box bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="lg" p={4} flex="1" minW={0} w="100%">
-          <BarcodeScanner active onScan={handleScan} continuous />
+          <BarcodeScanner
+            active
+            onScan={handleScan}
+            continuous
+            onManualSearch={() => { setTerm(""); setResults([]); manualModal.onOpen(); }}
+          />
+          <Text fontSize="xs" color={subtle} mt={2} textAlign="center">
+            Sem código de barras? Clique na lupa com o campo vazio para buscar por produto e tamanho.
+          </Text>
         </Box>
       </Flex>
+
+      {/* Busca manual: produto/cor + tamanho, sem bipar */}
+      <Modal isOpen={manualModal.isOpen} onClose={manualModal.onClose} size="2xl" scrollBehavior="inside">
+        <ModalOverlay />
+        <ModalContent>
+          <ModalHeader>
+            {tipo === "entrada" ? "Entrada" : "Saída"} manual — buscar produto
+            <Text fontSize="sm" fontWeight="normal" color={subtle}>
+              Clique no tamanho para aplicar {tipo === "entrada" ? "+" : "−"}{Number(qty) || 1} por clique
+              (mesmo motivo{tipo === "entrada" ? ", custo e fornecedor" : ""} do painel).
+            </Text>
+          </ModalHeader>
+          <ModalCloseButton />
+          <ModalBody pb={5}>
+            <InputGroup mb={3}>
+              <InputLeftElement pointerEvents="none"><SearchIcon color={subtle} /></InputLeftElement>
+              <Input
+                autoFocus
+                placeholder="Código ou descrição (produto, cor...)"
+                value={term}
+                onChange={(e) => setTerm(e.target.value)}
+              />
+            </InputGroup>
+
+            {searching && <Flex justify="center" py={4}><Spinner size="sm" /></Flex>}
+
+            {!searching && results.length === 0 && (
+              <Text fontSize="sm" color={subtle} textAlign="center" py={4}>
+                Nenhum produto encontrado.
+              </Text>
+            )}
+
+            <VStack align="stretch" spacing={3}>
+              {results.map((p) => (
+                <Box key={p.id} borderWidth="1px" borderColor={border} borderRadius="md" p={3}>
+                  <Text fontSize="sm" fontWeight="semibold" mb={2}>
+                    {p.codigo} · {p.descricao}
+                    {p.familia && <Badge ml={2} variant="subtle">{p.familia}</Badge>}
+                  </Text>
+                  <Flex gap={2} wrap="wrap">
+                    {(p.variants || []).map((v) => (
+                      <Button
+                        key={v.id}
+                        size="sm"
+                        variant="outline"
+                        colorScheme={tipo === "entrada" ? "green" : "red"}
+                        isLoading={applyingVariant === v.id}
+                        onClick={() => handleManualPick(p, v)}
+                      >
+                        <VStack spacing={0}>
+                          <Text>{v.tamanho}</Text>
+                          <Text fontSize="10px" fontWeight="normal">saldo {v.balance}</Text>
+                        </VStack>
+                      </Button>
+                    ))}
+                    {(p.variants || []).length === 0 && (
+                      <Text fontSize="xs" color={subtle}>Sem grade cadastrada.</Text>
+                    )}
+                  </Flex>
+                </Box>
+              ))}
+            </VStack>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
 
       {/* Bipagens desta sessão (conferência ao vivo; não é o histórico — veja Relatórios) */}
       <Box mt={5}>
