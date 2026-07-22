@@ -123,6 +123,29 @@ function ConsumptionReport() {
   const [sortBy, setSortBy] = useState("codigo");
   const toast = useAppToast();
 
+  // Agrupa o alerta por produto-pai, com os tamanhos na ordem da grade
+  const SIZE_ORDER = ["PRE", "RN", "P", "M", "G", "GG"];
+  const sizeRank = (t) => {
+    const up = String(t || "").toUpperCase().trim();
+    const named = SIZE_ORDER.indexOf(up);
+    if (named >= 0) return named;
+    const n = parseInt(up, 10);
+    return Number.isNaN(n) ? 999 : SIZE_ORDER.length + n;
+  };
+  const lowStockGrouped = useMemo(() => {
+    const byProduct = new Map();
+    for (const v of lowStock) {
+      const g = byProduct.get(v.product_codigo) ||
+        { product_codigo: v.product_codigo, descricao: v.descricao, variants: [] };
+      g.variants.push(v);
+      byProduct.set(v.product_codigo, g);
+    }
+    return [...byProduct.values()]
+      .map(g => ({ ...g, variants: g.variants.sort((a, b) => sizeRank(a.tamanho) - sizeRank(b.tamanho)) }))
+      .sort((a, b) => String(a.product_codigo).localeCompare(String(b.product_codigo), "pt-BR", { numeric: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lowStock]);
+
   const isMobile = useBreakpointValue({ base: true, md: false });
   const cardBg = useColorModeValue("white", "gray.800");
   const border = useColorModeValue("gray.200", "gray.700");
@@ -256,35 +279,47 @@ function ConsumptionReport() {
                   <AccordionIcon color="red.500" />
                 </AccordionButton>
                 <AccordionPanel px={4} pb={4} pt={0}>
-              {isMobile ? (
-                <VStack spacing={2} align="stretch">
-                  {lowStock.map(v => (
-                    <Flex key={v.variant_id} justify="space-between" align="center" gap={2} fontSize="sm">
-                      <Text noOfLines={2}>{v.product_codigo} · {v.descricao} <Badge ml={1}>{v.tamanho}</Badge></Text>
-                      <Text flexShrink={0} whiteSpace="nowrap">
-                        <Badge colorScheme="red">{v.balance}</Badge>
-                        <Text as="span" color={subtle}> / mín {v.min_stock}</Text>
-                      </Text>
-                    </Flex>
-                  ))}
-                </VStack>
-              ) : (
-                <Box overflowX="auto">
-                  <Table size="sm">
-                    <Thead><Tr><Th>Produto</Th><Th>Tam.</Th><Th isNumeric>Saldo</Th><Th isNumeric>Mínimo</Th></Tr></Thead>
-                    <Tbody>
-                      {lowStock.map(v => (
-                        <Tr key={v.variant_id}>
-                          <Td>{v.product_codigo} · {v.descricao}</Td>
-                          <Td>{v.tamanho}</Td>
-                          <Td isNumeric><Badge colorScheme="red">{v.balance}</Badge></Td>
-                          <Td isNumeric>{v.min_stock}</Td>
-                        </Tr>
-                      ))}
-                    </Tbody>
-                  </Table>
-                </Box>
-              )}
+                  {/* Uma linha por produto-pai; tamanhos lado a lado com o saldo embaixo */}
+                  <VStack spacing={2} align="stretch">
+                    {lowStockGrouped.map(g => (
+                      <Flex
+                        key={g.product_codigo}
+                        gap={3}
+                        align="center"
+                        wrap={{ base: "wrap", md: "nowrap" }}
+                        borderBottomWidth="1px"
+                        borderColor="red.200"
+                        _last={{ borderBottomWidth: 0 }}
+                        pb={2}
+                      >
+                        <Text fontSize="sm" flex="1" minW={{ base: "100%", md: "0" }} noOfLines={2}>
+                          {g.product_codigo} · {g.descricao}
+                        </Text>
+                        <Flex gap={1.5} wrap="wrap" flexShrink={0}>
+                          {g.variants.map(v => (
+                            <VStack
+                              key={v.variant_id}
+                              spacing={0}
+                              px={2}
+                              py={0.5}
+                              borderWidth="1px"
+                              borderColor="red.300"
+                              borderRadius="md"
+                              bg={cardBg}
+                              minW="44px"
+                            >
+                              <Text fontSize="xs" fontWeight="bold">{v.tamanho}</Text>
+                              <Text fontSize="xs">
+                                <Text as="span" color="red.500" fontWeight="bold">{v.balance}</Text>
+                                <Text as="span" color={subtle}>/{v.min_stock}</Text>
+                              </Text>
+                            </VStack>
+                          ))}
+                        </Flex>
+                      </Flex>
+                    ))}
+                  </VStack>
+                  <Text fontSize="xs" color={subtle} mt={2}>saldo/mínimo por tamanho</Text>
                 </AccordionPanel>
               </AccordionItem>
             </Accordion>
