@@ -1,5 +1,10 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import {
+  Accordion,
+  AccordionButton,
+  AccordionIcon,
+  AccordionItem,
+  AccordionPanel,
   Badge,
   Box,
   Button,
@@ -232,10 +237,25 @@ function ConsumptionReport() {
             </Stat>
           </SimpleGrid>
 
-          {/* Alerta de estoque baixo */}
+          {/* Alerta de estoque baixo (acordeão minimizável; estado lembrado) */}
           {lowStock.length > 0 && (
-            <Box bg={lowBg} borderWidth="1px" borderColor="red.300" borderRadius="lg" p={4} mb={5}>
-              <Text fontWeight="bold" color="red.500" mb={2}>⚠️ Produtos com estoque baixo</Text>
+            <Accordion
+              allowToggle
+              mb={5}
+              defaultIndex={localStorage.getItem("stockLowStockCollapsed") === "1" ? [] : [0]}
+              onChange={(idx) =>
+                localStorage.setItem("stockLowStockCollapsed", idx === 0 ? "0" : "1")
+              }
+            >
+              <AccordionItem bg={lowBg} borderWidth="1px" borderColor="red.300" borderRadius="lg">
+                <AccordionButton _hover={{ bg: "transparent" }} px={4} py={3}>
+                  <Text flex="1" textAlign="left" fontWeight="bold" color="red.500">
+                    ⚠️ Produtos com estoque baixo
+                    <Badge ml={2} colorScheme="red" variant="solid">{lowStock.length}</Badge>
+                  </Text>
+                  <AccordionIcon color="red.500" />
+                </AccordionButton>
+                <AccordionPanel px={4} pb={4} pt={0}>
               {isMobile ? (
                 <VStack spacing={2} align="stretch">
                   {lowStock.map(v => (
@@ -265,7 +285,9 @@ function ConsumptionReport() {
                   </Table>
                 </Box>
               )}
-            </Box>
+                </AccordionPanel>
+              </AccordionItem>
+            </Accordion>
           )}
 
           {/* Consumo médio */}
