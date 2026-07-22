@@ -249,8 +249,15 @@ function StoreCard({ store, onEdit, onDelete, onTest, testing, onAuthorize }) {
         </Box>
       )}
 
-      {store.has_credentials && store.status === 'connected' && (
+      {store.has_credentials && (store.status === 'connected' || store.status === 'error') && (
         <Box mt={3} display="flex" flexDirection="column" gap={2}>
+          {store.status === 'error' && (
+            <Box p={2} bg="red.50" borderRadius="md" _dark={{ bg: "red.900" }}>
+              <Text fontSize="xs" color="red.600" _dark={{ color: "red.200" }}>
+                Falha na conexão. Reconecte a loja para renovar a autorização.
+              </Text>
+            </Box>
+          )}
           <Button
             size="xs"
             variant="outline"
