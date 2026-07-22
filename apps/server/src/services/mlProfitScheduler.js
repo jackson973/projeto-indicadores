@@ -53,7 +53,23 @@ async function runDailyProfitReport(date = getSaoPauloDate(-1)) {
       }
       const filePath = path.join(REPORTS_DIR, reportFilename(store, date));
       await savePdf(data, filePath);
-      generated.push({ store, date, filePath, sync, totals: data.totals });
+
+      // Auditoria contra o billing do ML (não bloqueia o relatório se falhar)
+      let audit = null;
+      try {
+        const { auditDay } = require('./mlBillingAuditService');
+        audit = await auditDay({ store, date });
+        const div = audit.divergentes?.length || 0;
+        console.log(
+          `${tag} ${store}: auditoria billing — ${audit.conferem}/${audit.auditados} conferem` +
+          (div ? ` · ${div} DIVERGENTES` : '') +
+          (audit.semBilling?.length ? ` · ${audit.semBilling.length} sem cobrança lançada` : '')
+        );
+      } catch (err) {
+        console.warn(`${tag} ${store}: auditoria billing falhou — ${err.message}`);
+      }
+
+      generated.push({ store, date, filePath, sync, totals: data.totals, audit });
       console.log(
         `${tag} ${store}: PDF gerado (${data.totals.pedidos} pedidos, ` +
         `lucro R$ ${(data.totals.lucro ?? 0).toFixed(2)}) → ${filePath}`
@@ -79,9 +95,16 @@ async function emailReports(generated, date) {
     const [y, m, d] = date.split('-');
     const linhas = generated.map((g) => {
       const nome = g.store.replace(/\(.*?\)/g, '').trim();
+      let auditTxt = '';
+      if (g.audit) {
+        const div = g.audit.divergentes?.length || 0;
+        auditTxt = div
+          ? ` · <b style="color:#A52834">auditoria: ${div} divergência${div > 1 ? 's' : ''} com o billing do ML</b>`
+          : ` · auditoria: ${g.audit.conferem}/${g.audit.auditados} conferem com o billing`;
+      }
       return `<li><b>${nome}</b>: ${g.totals.pedidos} pedidos · ` +
         `Lucro R$ ${(g.totals.lucro ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })} · ` +
-        `Margem ${(g.totals.margem ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}%</li>`;
+        `Margem ${(g.totals.margem ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 1 })}%${auditTxt}</li>`;
     });
     await sendEmail({
       to: recipients.join(', '),

@@ -347,6 +347,7 @@ module.exports = {
   dayWindowUtc,
   resolveStoreForSalesLabel,
   createTokenProvider,
+  mlGet,
   fetchOrderFees,
   syncDayFees,
 };

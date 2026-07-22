@@ -8,6 +8,7 @@ import { DownloadIcon, RepeatIcon } from "@chakra-ui/icons";
 import useAppToast from "../hooks/useAppToast";
 import {
   fetchMlProfitOptions, fetchMlProfitData, syncMlProfitFees, downloadMlProfitPdf,
+  auditMlProfit,
 } from "../api";
 
 const brl = (v, { sign = false } = {}) => {
@@ -48,6 +49,9 @@ export default function MlProfitReport() {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [auditing, setAuditing] = useState(false);
+  const [audit, setAudit] = useState(null);
+  const [orderFilter, setOrderFilter] = useState("");
   const toast = useAppToast();
 
   const subtle = useColorModeValue("gray.500", "gray.400");
@@ -81,7 +85,11 @@ export default function MlProfitReport() {
     }
   }, [store, date, toast]);
 
-  useEffect(() => { load(); }, [store, date]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    setAudit(null);
+    setOrderFilter("");
+    load();
+  }, [store, date]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleSync = async () => {
     setSyncing(true);
@@ -116,6 +124,18 @@ export default function MlProfitReport() {
     }
   };
 
+  const handleAudit = async () => {
+    setAuditing(true);
+    setAudit(null);
+    try {
+      setAudit(await auditMlProfit(store, date));
+    } catch (e) {
+      toast({ status: "error", title: "Erro na auditoria", description: e.message });
+    } finally {
+      setAuditing(false);
+    }
+  };
+
   const t = data?.totals;
   const pendentesFees = t ? t.pedidos - t.comFees : 0;
   const pendentesCusto = t ? t.pedidos - t.comCusto : 0;
@@ -133,6 +153,11 @@ export default function MlProfitReport() {
     }
   });
   const pctEntries = Object.entries(pctDist).sort((a, b) => b[1] - a[1]);
+
+  // Filtro por número do pedido (aplica no detalhe e nos cancelados)
+  const filtroPedido = orderFilter.trim();
+  const visibleRows = (data?.rows || []).filter((r) => !filtroPedido || r.oid.includes(filtroPedido));
+  const visibleCancelados = (data?.cancelados || []).filter((r) => !filtroPedido || r.oid.includes(filtroPedido));
 
   const kpis = t ? [
     { label: "Faturamento", value: `R$ ${brl(t.fat)}` },
@@ -184,7 +209,87 @@ export default function MlProfitReport() {
         >
           Baixar PDF
         </Button>
+        <Button
+          size="sm" variant="outline" colorScheme="teal"
+          onClick={handleAudit} isLoading={auditing} loadingText="Auditando..."
+          isDisabled={!t || !t.pedidos}
+        >
+          Auditar (billing ML)
+        </Button>
+        <Box>
+          <Text fontSize="xs" color={subtle} mb={1}>Filtrar pedido</Text>
+          <Input
+            size="sm" maxW="200px" placeholder="nº do pedido ML"
+            value={orderFilter} onChange={(e) => setOrderFilter(e.target.value)}
+          />
+        </Box>
       </Flex>
+
+      {audit && (
+        <Box bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="md" p={3}>
+          <Heading size="sm" mb={2} color="#1F4E78">
+            Auditoria billing ML — período {audit.periodKey}
+          </Heading>
+          {!audit.totalPedidos ? (
+            <Text fontSize="sm" color={subtle}>Nenhum pedido sincronizado para auditar neste dia.</Text>
+          ) : (
+            <VStack align="stretch" spacing={2}>
+              <Text fontSize="sm">
+                <b>{audit.conferem}/{audit.auditados}</b> pedidos conferem com o que o ML faturou
+                {audit.divergentes.length > 0 && (
+                  <Text as="span" color="#A52834" fontWeight="bold">
+                    {" "}· {audit.divergentes.length} divergente{audit.divergentes.length > 1 ? "s" : ""}
+                  </Text>
+                )}
+                {audit.semBilling.length > 0 &&
+                  ` · ${audit.semBilling.length} ainda sem cobrança lançada no billing (defasagem normal para vendas recentes)`}
+              </Text>
+              <Text fontSize="xs" color={subtle}>
+                Cobrança prevista pelo sistema R$ {brl(audit.totals.ours)} · faturado pelo ML
+                R$ {brl(audit.totals.billed)} · diferença R$ {brl(audit.totals.diff)}
+                {Object.keys(audit.byTypeTotals || {}).length > 0 &&
+                  ` · lançamentos: ${Object.entries(audit.byTypeTotals)
+                    .map(([k, v]) => `${k} R$ ${brl(v)}`).join(" · ")}`}
+              </Text>
+              {audit.divergentes.length > 0 && (
+                <Table size="sm" variant="unstyled">
+                  <Thead>
+                    <Tr bg={headBg}>
+                      <Th color="white">Pedido ML</Th>
+                      <Th color="white" isNumeric>Sistema (tarifa+frete)</Th>
+                      <Th color="white" isNumeric>Faturado ML</Th>
+                      <Th color="white" isNumeric>Diferença</Th>
+                      <Th color="white">Lançamentos</Th>
+                    </Tr>
+                  </Thead>
+                  <Tbody>
+                    {audit.divergentes.map((o, i) => (
+                      <Tr key={o.oid} bg={i % 2 === 1 ? zebra : undefined}>
+                        <Td>
+                          <Link
+                            href={`https://www.mercadolivre.com.br/vendas/${o.oid}/detalhe`}
+                            isExternal color="#1F4E78" textDecoration="underline" fontSize="xs"
+                          >
+                            {o.oid}
+                          </Link>
+                        </Td>
+                        <Td isNumeric>{brl(o.ours)}</Td>
+                        <Td isNumeric>{brl(o.billed)}</Td>
+                        <Td isNumeric color="#A52834" fontWeight="bold">{brl(o.diff)}</Td>
+                        <Td>
+                          <Text fontSize="xs" color={subtle}>
+                            {Object.entries(o.byType).map(([k, v]) => `${k}: ${brl(v)}`).join(" · ") || "-"}
+                          </Text>
+                        </Td>
+                      </Tr>
+                    ))}
+                  </Tbody>
+                </Table>
+              )}
+            </VStack>
+          )}
+        </Box>
+      )}
 
       {loading && <Flex justify="center" py={10}><Spinner /></Flex>}
 
@@ -299,7 +404,10 @@ export default function MlProfitReport() {
           </Box>
 
           <Box bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="md" p={3} overflowX="auto">
-            <Heading size="sm" mb={3} color="#1F4E78">Detalhe por pedido</Heading>
+            <Heading size="sm" mb={3} color="#1F4E78">
+              Detalhe por pedido
+              {filtroPedido && ` — ${visibleRows.length} de ${data.rows.length} (filtro: ${filtroPedido})`}
+            </Heading>
             <Table size="sm" variant="unstyled">
               <Thead>
                 <Tr bg={headBg}>
@@ -318,7 +426,7 @@ export default function MlProfitReport() {
                 </Tr>
               </Thead>
               <Tbody>
-                {data.rows.map((r, i) => (
+                {visibleRows.map((r, i) => (
                   <Tr key={r.oid} bg={i % 2 === 1 ? zebra : undefined}>
                     <Td>
                       <Link
@@ -361,7 +469,7 @@ export default function MlProfitReport() {
             </Table>
           </Box>
 
-          {data.cancelados?.length > 0 && (
+          {visibleCancelados.length > 0 && (
             <Box bg={cardBg} borderWidth="1px" borderColor={border} borderRadius="md" p={3} overflowX="auto">
               <Heading size="sm" mb={1} color={subtle}>
                 Cancelados — fora dos totais ({data.cancelados.length} pedidos ·
@@ -370,7 +478,7 @@ export default function MlProfitReport() {
               <Text fontSize="xs" color={subtle} mb={3}>Valor estornado pelo ML — listados só para conferência.</Text>
               <Table size="sm" variant="unstyled">
                 <Tbody>
-                  {data.cancelados.map((r, i) => (
+                  {visibleCancelados.map((r, i) => (
                     <Tr key={r.oid} bg={i % 2 === 1 ? zebra : undefined} color={subtle}>
                       <Td>
                         <Link

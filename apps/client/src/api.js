@@ -1827,3 +1827,8 @@ export const downloadMlProfitPdf = async (store, date) => {
     URL.revokeObjectURL(blobUrl);
   }, 2000);
 };
+
+export const auditMlProfit = async (store, date) =>
+  handleResponse(await authFetch(
+    `/api/ml-profit/audit?store=${encodeURIComponent(store)}&date=${encodeURIComponent(date)}`
+  ));

@@ -78,6 +78,22 @@ router.get('/pdf', async (req, res) => {
   }
 });
 
+// ── Auditoria: reconciliação com o billing do ML ─────────────────────────────
+router.get('/audit', async (req, res) => {
+  try {
+    const { store, date } = req.query;
+    if (!store || !date) {
+      return res.status(400).json({ message: 'Parâmetros store e date são obrigatórios.' });
+    }
+    const { auditDay } = require('../services/mlBillingAuditService');
+    const result = await auditDay({ store, date });
+    return res.json(result);
+  } catch (error) {
+    console.error('[ML Profit] Audit error:', error);
+    return res.status(500).json({ message: error.message || 'Erro na auditoria com o billing do ML.' });
+  }
+});
+
 // ── Debug: payloads brutos do ML para um pedido (validação de valores) ───────
 router.get('/debug-order', async (req, res) => {
   try {
