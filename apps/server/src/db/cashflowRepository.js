@@ -140,13 +140,13 @@ async function getEntries(year, month, boxId) {
   return result.rows.map(row => ({ ...row, amount: parseFloat(row.amount) }));
 }
 
-async function createEntry({ date, categoryId, description, type, amount, status, recurrenceId, createdBy, boxId }) {
+async function createEntry({ date, categoryId, description, type, amount, status, recurrenceId, recurrenceDate, createdBy, boxId }) {
   const result = await db.query(
-    `INSERT INTO cashflow_entries (date, category_id, description, type, amount, status, recurrence_id, created_by, box_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    `INSERT INTO cashflow_entries (date, category_id, description, type, amount, status, recurrence_id, recurrence_date, created_by, box_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
      RETURNING id, date, category_id AS "categoryId", description, type, amount, status,
                recurrence_id AS "recurrenceId", created_at AS "createdAt"`,
-    [date, categoryId, description, type, amount, status || 'pending', recurrenceId || null, createdBy, boxId]
+    [date, categoryId, description, type, amount, status || 'pending', recurrenceId || null, recurrenceDate || null, createdBy, boxId]
   );
   return { ...result.rows[0], amount: parseFloat(result.rows[0].amount) };
 }
@@ -463,8 +463,10 @@ async function generateRecurrenceEntries(year, month, createdBy, boxId) {
       if (recEnd && entryDate > recEnd) continue;
 
       const dateStr = entryDate.toISOString().slice(0, 10);
+      // Dedup pela ÂNCORA (recurrence_date), não pela data editável: mover o
+      // vencimento de um lançamento gerado não faz a geração recriá-lo.
       const exists = await db.query(
-        `SELECT id FROM cashflow_entries WHERE recurrence_id = $1 AND date = $2`,
+        `SELECT id FROM cashflow_entries WHERE recurrence_id = $1 AND recurrence_date = $2`,
         [rec.id, dateStr]
       );
       if (exists.rows.length === 0) {
@@ -477,6 +479,7 @@ async function generateRecurrenceEntries(year, month, createdBy, boxId) {
           amount: rec.amount,
           status: 'pending',
           recurrenceId: rec.id,
+          recurrenceDate: dateStr,
           createdBy,
           boxId
         });
@@ -487,8 +490,9 @@ async function generateRecurrenceEntries(year, month, createdBy, boxId) {
       while (current <= monthEnd) {
         if (current >= recStart && (!recEnd || current <= recEnd)) {
           const dateStr = current.toISOString().slice(0, 10);
+          // Dedup pela âncora (ver comentário no ramo mensal).
           const exists = await db.query(
-            `SELECT id FROM cashflow_entries WHERE recurrence_id = $1 AND date = $2`,
+            `SELECT id FROM cashflow_entries WHERE recurrence_id = $1 AND recurrence_date = $2`,
             [rec.id, dateStr]
           );
           if (exists.rows.length === 0) {
@@ -501,6 +505,7 @@ async function generateRecurrenceEntries(year, month, createdBy, boxId) {
               amount: rec.amount,
               status: 'pending',
               recurrenceId: rec.id,
+              recurrenceDate: dateStr,
               createdBy,
               boxId
             });
