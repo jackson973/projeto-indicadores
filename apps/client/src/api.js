@@ -1732,8 +1732,8 @@ export const fetchStockConsumption = async (from, to) => {
   return handleResponse(r);
 };
 
-export const fetchStockLowStock = async () => {
-  const r = await authFetch('/api/stock/reports/low-stock');
+export const fetchStockLowStock = async ({ full = false } = {}) => {
+  const r = await authFetch('/api/stock/reports/low-stock' + (full ? '?full=true' : ''));
   return handleResponse(r);
 };
 
@@ -1832,3 +1832,25 @@ export const auditMlProfit = async (store, date) =>
   handleResponse(await authFetch(
     `/api/ml-profit/audit?store=${encodeURIComponent(store)}&date=${encodeURIComponent(date)}`
   ));
+
+export const downloadStockLowStockPdf = async ({ full = false } = {}) => {
+  const response = await authFetch('/api/stock/reports/low-stock.pdf' + (full ? '?full=true' : ''));
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.error || payload.message || 'Erro ao gerar o PDF.');
+  }
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  link.download = `Estoque_Baixo_${pad(d.getDate())}-${pad(d.getMonth() + 1)}-${d.getFullYear()}.pdf`;
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  setTimeout(() => {
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  }, 2000);
+};

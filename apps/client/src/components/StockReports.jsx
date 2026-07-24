@@ -18,6 +18,7 @@ import {
   SimpleGrid,
   Spinner,
   Stat,
+  Switch,
   StatLabel,
   StatNumber,
   Table,
@@ -37,9 +38,11 @@ import {
   useBreakpointValue,
   useColorModeValue,
 } from "@chakra-ui/react";
-import { InfoIcon, SearchIcon } from "@chakra-ui/icons";
+import { DownloadIcon, InfoIcon, SearchIcon } from "@chakra-ui/icons";
 import useAppToast from "../hooks/useAppToast";
-import { fetchStockConsumption, fetchStockLowStock, fetchStockMovementsReport } from "../api";
+import {
+  fetchStockConsumption, fetchStockLowStock, fetchStockMovementsReport, downloadStockLowStockPdf,
+} from "../api";
 import { formatSaoPaulo } from "../utils/timezone";
 
 function toISO(d) {
@@ -121,7 +124,11 @@ function ConsumptionReport() {
   const [lowStock, setLowStock] = useState([]);
   const [loading, setLoading] = useState(true);
   const [sortBy, setSortBy] = useState("codigo");
+  const [exportingPdf, setExportingPdf] = useState(false);
+  // Grade completa: mostra todos os tamanhos dos produtos em alerta (verde = ok)
+  const [fullGrid, setFullGrid] = useState(() => localStorage.getItem("stockLowStockFullGrid") === "1");
   const toast = useAppToast();
+  const lowCount = lowStock.filter((v) => v.low !== false).length;
 
   // Agrupa o alerta por produto-pai, com os tamanhos na ordem da grade
   const SIZE_ORDER = ["PRE", "RN", "P", "M", "G", "GG"];
@@ -158,7 +165,7 @@ function ConsumptionReport() {
     try {
       const [rep, low] = await Promise.all([
         fetchStockConsumption(from, to),
-        fetchStockLowStock(),
+        fetchStockLowStock({ full: fullGrid }),
       ]);
       setReport(rep);
       setLowStock(low);
@@ -167,9 +174,9 @@ function ConsumptionReport() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, toast]);
+  }, [from, to, toast, fullGrid]);
 
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [fullGrid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Busca (código ou nome) + ordenação no cliente; a grade (RN, P, M, G, GG...) é sempre o desempate
   const sortedItems = useMemo(() => {
@@ -254,9 +261,9 @@ function ConsumptionReport() {
               <StatLabel fontSize="xs">Total de saídas</StatLabel>
               <StatNumber fontSize="lg">{report?.items?.reduce((s, i) => s + i.total_out, 0) ?? 0}</StatNumber>
             </Stat>
-            <Stat bg={lowStock.length ? lowBg : cardBg} borderWidth="1px" borderColor={lowStock.length ? "red.300" : border} borderRadius="lg" p={3}>
+            <Stat bg={lowCount ? lowBg : cardBg} borderWidth="1px" borderColor={lowCount ? "red.300" : border} borderRadius="lg" p={3}>
               <StatLabel fontSize="xs">Estoque baixo</StatLabel>
-              <StatNumber fontSize="lg" color={lowStock.length ? "red.500" : undefined}>{lowStock.length}</StatNumber>
+              <StatNumber fontSize="lg" color={lowCount ? "red.500" : undefined}>{lowCount}</StatNumber>
             </Stat>
           </SimpleGrid>
 
@@ -271,13 +278,39 @@ function ConsumptionReport() {
               }
             >
               <AccordionItem bg={lowBg} borderWidth="1px" borderColor="red.300" borderRadius="lg">
-                <AccordionButton _hover={{ bg: "transparent" }} px={4} py={3}>
-                  <Text flex="1" textAlign="left" fontWeight="bold" color="red.500">
-                    ⚠️ Produtos com estoque baixo
-                    <Badge ml={2} colorScheme="red" variant="solid">{lowStock.length}</Badge>
-                  </Text>
-                  <AccordionIcon color="red.500" />
-                </AccordionButton>
+                <Flex align="center">
+                  <AccordionButton _hover={{ bg: "transparent" }} px={4} py={3} flex="1">
+                    <Text flex="1" textAlign="left" fontWeight="bold" color="red.500">
+                      ⚠️ Produtos com estoque baixo
+                      <Badge ml={2} colorScheme="red" variant="solid">{lowCount}</Badge>
+                    </Text>
+                    <AccordionIcon color="red.500" />
+                  </AccordionButton>
+                  <FormControl display="flex" alignItems="center" w="auto" mr={3} flexShrink={0}>
+                    <FormLabel htmlFor="full-grid" mb="0" fontSize="xs" color={subtle} whiteSpace="nowrap">
+                      Grade completa
+                    </FormLabel>
+                    <Switch
+                      id="full-grid" size="sm" colorScheme="red" isChecked={fullGrid}
+                      onChange={(e) => {
+                        setFullGrid(e.target.checked);
+                        localStorage.setItem("stockLowStockFullGrid", e.target.checked ? "1" : "0");
+                      }}
+                    />
+                  </FormControl>
+                  <Button
+                    size="xs" mr={3} flexShrink={0} colorScheme="red" variant="outline"
+                    leftIcon={<DownloadIcon />} isLoading={exportingPdf}
+                    onClick={async () => {
+                      setExportingPdf(true);
+                      try { await downloadStockLowStockPdf({ full: fullGrid }); }
+                      catch (e) { toast({ status: "error", title: "Erro ao exportar PDF", description: e.message }); }
+                      finally { setExportingPdf(false); }
+                    }}
+                  >
+                    Exportar PDF
+                  </Button>
+                </Flex>
                 <AccordionPanel px={4} pb={4} pt={0}>
                   {/* Uma linha por produto-pai; tamanhos lado a lado com o saldo embaixo */}
                   <VStack spacing={2} align="stretch">
@@ -296,25 +329,28 @@ function ConsumptionReport() {
                           {g.product_codigo} · {g.descricao}
                         </Text>
                         <Flex gap={1.5} wrap="wrap" flexShrink={0}>
-                          {g.variants.map(v => (
-                            <VStack
-                              key={v.variant_id}
-                              spacing={0}
-                              px={2}
-                              py={0.5}
-                              borderWidth="1px"
-                              borderColor="red.300"
-                              borderRadius="md"
-                              bg={cardBg}
-                              minW="44px"
-                            >
-                              <Text fontSize="xs" fontWeight="bold">{v.tamanho}</Text>
-                              <Text fontSize="xs">
-                                <Text as="span" color="red.500" fontWeight="bold">{v.balance}</Text>
-                                <Text as="span" color={subtle}>/{v.min_stock}</Text>
-                              </Text>
-                            </VStack>
-                          ))}
+                          {g.variants.map(v => {
+                            const isLow = v.low !== false;
+                            return (
+                              <VStack
+                                key={v.variant_id}
+                                spacing={0}
+                                px={2}
+                                py={0.5}
+                                borderWidth="1px"
+                                borderColor={isLow ? "red.300" : "green.300"}
+                                borderRadius="md"
+                                bg={cardBg}
+                                minW="44px"
+                              >
+                                <Text fontSize="xs" fontWeight="bold">{v.tamanho}</Text>
+                                <Text fontSize="xs">
+                                  <Text as="span" color={isLow ? "red.500" : "green.600"} fontWeight="bold">{v.balance}</Text>
+                                  <Text as="span" color={subtle}>/{v.min_stock}</Text>
+                                </Text>
+                              </VStack>
+                            );
+                          })}
                         </Flex>
                       </Flex>
                     ))}

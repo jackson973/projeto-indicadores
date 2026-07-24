@@ -728,9 +728,28 @@ async function getConsumptionReport({ from, to } = {}) {
 }
 
 // Variantes com saldo no nível (ou abaixo) do mínimo
-async function getLowStock() {
+async function getLowStock({ fullGrid = false } = {}) {
+  if (fullGrid) {
+    // Grade COMPLETA dos produtos que têm pelo menos um tamanho em alerta;
+    // cada variante vem com a flag "low" para a tela/PDF colorir.
+    const { rows } = await pool.query(
+      `SELECT v.id AS variant_id, v.codigo AS variant_codigo, v.tamanho, v.balance, v.min_stock,
+              (v.min_stock > 0 AND v.balance <= v.min_stock) AS low,
+              p.id AS product_id, p.codigo AS product_codigo, p.descricao, p.image_url
+       FROM stock_variants v
+       JOIN stock_products p ON p.id = v.product_id
+       WHERE v.active = true AND p.active = true
+         AND p.id IN (
+           SELECT lv.product_id FROM stock_variants lv
+           WHERE lv.active = true AND lv.min_stock > 0 AND lv.balance <= lv.min_stock
+         )
+       ORDER BY p.codigo, v.sort_order, v.tamanho`
+    );
+    return rows;
+  }
   const { rows } = await pool.query(
     `SELECT v.id AS variant_id, v.codigo AS variant_codigo, v.tamanho, v.balance, v.min_stock,
+            true AS low,
             p.id AS product_id, p.codigo AS product_codigo, p.descricao, p.image_url
      FROM stock_variants v
      JOIN stock_products p ON p.id = v.product_id

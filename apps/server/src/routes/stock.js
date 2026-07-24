@@ -289,10 +289,119 @@ router.get('/reports/consumption', async (req, res) => {
   }
 });
 
-// GET /api/stock/reports/low-stock
+// GET /api/stock/reports/low-stock?full=true  (full = grade completa dos produtos em alerta)
 router.get('/reports/low-stock', async (req, res) => {
-  try { res.json(await repo.getLowStock()); }
+  try { res.json(await repo.getLowStock({ fullGrid: req.query.full === 'true' })); }
   catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// GET /api/stock/reports/low-stock.pdf
+// PDF do alerta, no mesmo layout da tela: uma linha por produto-pai com os
+// tamanhos lado a lado (ordem da grade) e saldo/mínimo em cada um.
+router.get('/reports/low-stock.pdf', async (req, res) => {
+  try {
+    const fullGrid = req.query.full === 'true';
+    const rows = await repo.getLowStock({ fullGrid });
+
+    const SIZE_ORDER = ['PRE', 'RN', 'P', 'M', 'G', 'GG'];
+    const sizeRank = (t) => {
+      const up = String(t || '').toUpperCase().trim();
+      const named = SIZE_ORDER.indexOf(up);
+      if (named >= 0) return named;
+      const n = parseInt(up, 10);
+      return Number.isNaN(n) ? 999 : SIZE_ORDER.length + n;
+    };
+    const byProd = new Map();
+    for (const v of rows) {
+      const g = byProd.get(v.product_codigo) ||
+        { codigo: v.product_codigo, descricao: v.descricao, variants: [] };
+      g.variants.push(v);
+      byProd.set(v.product_codigo, g);
+    }
+    const groups = [...byProd.values()]
+      .map(g => ({ ...g, variants: g.variants.sort((a, b) => sizeRank(a.tamanho) - sizeRank(b.tamanho)) }))
+      .sort((a, b) => String(a.codigo).localeCompare(String(b.codigo), 'pt-BR', { numeric: true }));
+
+    const PDFDocument = require('pdfkit');
+    const { getSaoPauloDate } = require('../lib/timezone');
+    const [y, m, d] = getSaoPauloDate().split('-');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Estoque_Baixo_${d}-${m}-${y}.pdf"`);
+
+    const doc = new PDFDocument({ size: 'A4', margins: { top: 40, bottom: 40, left: 40, right: 40 } });
+    doc.pipe(res);
+
+    const RED = '#C0392B';
+    const GREEN = '#1E7E34';
+    const GREY = '#6B7683';
+    const BORD = '#E0B4B4';
+    const BORD_OK = '#B7DFC0';
+    const LEFT = 40;
+    const RIGHT = 555;
+    const BOTTOM = 800;
+    const CHIP_W = 44;
+    const CHIP_H = 26;
+    const GAP = 5;
+
+    const lowCount = rows.filter((v) => v.low !== false).length;
+    doc.font('Helvetica-Bold').fontSize(16).fillColor(RED)
+      .text('Produtos com estoque baixo', LEFT, 40);
+    doc.font('Helvetica').fontSize(9).fillColor(GREY)
+      .text(
+        `Gerado em ${d}/${m}/${y} · ${groups.length} produtos, ${lowCount} tamanhos em alerta` +
+        (fullGrid ? ' · grade completa (verde = acima do mínimo)' : '') +
+        ' · valor = saldo/mínimo',
+        LEFT, doc.y + 2
+      );
+    let cy = doc.y + 12;
+
+    const chipsPerRow = Math.floor((RIGHT - LEFT) / (CHIP_W + GAP));
+
+    for (const g of groups) {
+      doc.font('Helvetica-Bold').fontSize(10);
+      const name = `${g.codigo} · ${g.descricao}`;
+      const nameH = doc.heightOfString(name, { width: RIGHT - LEFT });
+      const chipRows = Math.ceil(g.variants.length / chipsPerRow);
+      const blockH = nameH + 4 + chipRows * (CHIP_H + 4) + 10;
+      if (cy + blockH > BOTTOM) { doc.addPage(); cy = 40; }
+
+      doc.fillColor('#000000').text(name, LEFT, cy, { width: RIGHT - LEFT });
+      cy += nameH + 4;
+
+      let cx = LEFT;
+      for (const v of g.variants) {
+        if (cx + CHIP_W > RIGHT) { cx = LEFT; cy += CHIP_H + 4; }
+        const isLow = v.low !== false;
+        doc.lineWidth(0.7).strokeColor(isLow ? BORD : BORD_OK)
+          .roundedRect(cx, cy, CHIP_W, CHIP_H, 4).stroke();
+        doc.font('Helvetica-Bold').fontSize(8.5).fillColor('#000000')
+          .text(String(v.tamanho), cx + 1, cy + 4, { width: CHIP_W - 2, align: 'center', lineBreak: false });
+        const bal = String(v.balance);
+        const min = `/${v.min_stock}`;
+        doc.font('Helvetica-Bold').fontSize(8.5);
+        const wBal = doc.widthOfString(bal);
+        doc.font('Helvetica').fontSize(8.5);
+        const wMin = doc.widthOfString(min);
+        const sx = cx + (CHIP_W - (wBal + wMin)) / 2;
+        doc.font('Helvetica-Bold').fillColor(isLow ? RED : GREEN).text(bal, sx, cy + 14, { lineBreak: false });
+        doc.font('Helvetica').fillColor(GREY).text(min, sx + wBal, cy + 14, { lineBreak: false });
+        cx += CHIP_W + GAP;
+      }
+      cy += CHIP_H + 10;
+      doc.lineWidth(0.4).strokeColor('#F0D8D8').moveTo(LEFT, cy - 5).lineTo(RIGHT, cy - 5).stroke();
+    }
+
+    if (!groups.length) {
+      doc.font('Helvetica').fontSize(11).fillColor(GREY)
+        .text('Nenhum produto abaixo do estoque mínimo.', LEFT, cy);
+    }
+
+    doc.end();
+  } catch (err) {
+    console.error('stock/reports/low-stock.pdf error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // GET /api/stock/reports/movements?from=&to=&tipo=&product_codigo=&tamanho=&q=&limit=
