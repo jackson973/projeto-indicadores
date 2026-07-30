@@ -1319,6 +1319,21 @@ export const syncOrderCustomers = async (sql) => {
   return handleResponse(r);
 };
 
+export const fetchCustomersRegistry = async (params = {}) => {
+  const q = new URLSearchParams();
+  if (params.search) q.set('search', params.search);
+  if (params.cidade) q.set('cidade', params.cidade);
+  if (params.uf)     q.set('uf', params.uf);
+  if (params.sort)   q.set('sort', params.sort);
+  const r = await authFetch(`/api/orders/customers/registry?${q}`);
+  return handleResponse(r);
+};
+
+export const syncCustomersRegistry = async () => {
+  const r = await authFetch('/api/orders/customers/registry/sync', { method: 'POST' });
+  return handleResponse(r);
+};
+
 export const fetchOrders = async (params = {}) => {
   const q = new URLSearchParams();
   if (params.status) q.set('status', params.status);

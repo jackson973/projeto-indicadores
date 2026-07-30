@@ -178,6 +178,117 @@ async function upsertCustomers(customers) {
   }
 }
 
+// ─── Sisplan Customers (cadastro completo) ───────────────────────────────────
+
+async function upsertSisplanCustomers(customers) {
+  if (!customers.length) return 0;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let count = 0;
+    for (const c of customers) {
+      await client.query(
+        `INSERT INTO sisplan_customers (
+           codcli, company_name, fantasy_name, cnpj, customer_category, customer_type,
+           cep, street, address_number, neighborhood,
+           billing_cep, billing_street, billing_neighborhood,
+           state_inscription, credit_limit, city_id, uf, city,
+           is_no_tax, active, suframa, activity_id, is_final_customer, representative_id,
+           ddd_fone, telefone, fone_compl, created_erp, synced_at
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,NOW())
+         ON CONFLICT (codcli) DO UPDATE SET
+           company_name=$2, fantasy_name=$3, cnpj=$4, customer_category=$5, customer_type=$6,
+           cep=$7, street=$8, address_number=$9, neighborhood=$10,
+           billing_cep=$11, billing_street=$12, billing_neighborhood=$13,
+           state_inscription=$14, credit_limit=$15, city_id=$16, uf=$17, city=$18,
+           is_no_tax=$19, active=$20, suframa=$21, activity_id=$22, is_final_customer=$23, representative_id=$24,
+           ddd_fone=$25, telefone=$26, fone_compl=$27, created_erp=$28, synced_at=NOW()`,
+        [
+          c.codcli, c.company_name, c.fantasy_name, c.cnpj, c.customer_category, c.customer_type,
+          c.cep, c.street, c.address_number, c.neighborhood,
+          c.billing_cep, c.billing_street, c.billing_neighborhood,
+          c.state_inscription, c.credit_limit, c.city_id, c.uf, c.city,
+          c.is_no_tax, c.active, c.suframa, c.activity_id, c.is_final_customer, c.representative_id,
+          c.ddd_fone, c.telefone, c.fone_compl, c.created_erp,
+        ]
+      );
+      count++;
+    }
+    await client.query('COMMIT');
+    return count;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+async function updateSisplanCustomersLastOrder(rows) {
+  if (!rows.length) return 0;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    let count = 0;
+    for (const r of rows) {
+      const res = await client.query(
+        `UPDATE sisplan_customers
+            SET last_order_numero=$2, last_order_date=$3, last_order_value=$4
+          WHERE codcli=$1`,
+        [r.codcli, r.numero, r.data, r.valor]
+      );
+      count += res.rowCount;
+    }
+    await client.query('COMMIT');
+    return count;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+const SISPLAN_CUSTOMERS_SORT = {
+  codigo:        `NULLIF(regexp_replace(codcli, '\\D', '', 'g'), '')::BIGINT NULLS LAST, codcli`,
+  razao:         `company_name NULLS LAST`,
+  fantasia:      `fantasy_name NULLS LAST`,
+  ultimo_pedido: `last_order_date DESC NULLS LAST`,
+};
+
+async function getSisplanCustomers({ search, cidade, uf, sort } = {}) {
+  const conditions = [];
+  const params = [];
+
+  if (search && search.trim()) {
+    params.push(`%${search.trim()}%`);
+    const n = params.length;
+    conditions.push(`(
+      COALESCE(codcli,'') ILIKE $${n} OR
+      COALESCE(company_name,'') ILIKE $${n} OR
+      COALESCE(fantasy_name,'') ILIKE $${n} OR
+      COALESCE(cnpj,'') ILIKE $${n}
+    )`);
+  }
+  if (cidade && cidade.trim()) {
+    params.push(`%${cidade.trim()}%`);
+    conditions.push(`COALESCE(city,'') ILIKE $${params.length}`);
+  }
+  if (uf && uf.trim()) {
+    params.push(uf.trim().toUpperCase());
+    conditions.push(`UPPER(COALESCE(uf,'')) = $${params.length}`);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  const orderBy = SISPLAN_CUSTOMERS_SORT[sort] || SISPLAN_CUSTOMERS_SORT.codigo;
+
+  const { rows } = await pool.query(
+    `SELECT * FROM sisplan_customers ${where} ORDER BY ${orderBy} LIMIT 5000`,
+    params
+  );
+  return rows;
+}
+
 // ─── Orders ──────────────────────────────────────────────────────────────────
 
 async function getOrders({ status, type, search, limit = 50 } = {}) {
@@ -598,6 +709,9 @@ module.exports = {
   linkCatalogProductGroup,
   getCustomers,
   upsertCustomers,
+  upsertSisplanCustomers,
+  updateSisplanCustomersLastOrder,
+  getSisplanCustomers,
   getOrders,
   getOrderById,
   createOrder,

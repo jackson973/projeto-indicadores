@@ -75,6 +75,7 @@ import OrderProductsConfig from "./components/OrderProductsConfig";
 import PaymentConditionsConfig from "./components/PaymentConditionsConfig";
 import NewOrder from "./components/NewOrder";
 import OrdersList from "./components/OrdersList";
+import OrdersCustomers from "./components/OrdersCustomers";
 import ProductDashboard from "./components/ProductDashboard";
 import ProductGroups from "./components/ProductGroups";
 import StockProductsManagement from "./components/StockProductsManagement";
@@ -535,6 +536,7 @@ const App = () => {
       submenu: [
         { label: "Novo Pedido", view: "orders-new" },
         { label: "Meus Pedidos", view: "orders-list" },
+        { label: "Clientes", view: "orders-customers" },
         { label: "Config Produtos",  view: "orders-products",    show: isAdmin },
         { label: "Cond. Pagamento",  view: "orders-conditions",  show: isAdmin }
       ].filter(s => s.show !== false)
@@ -1050,6 +1052,10 @@ const App = () => {
 
         {activeView === "orders-list" && (
           <OrdersList />
+        )}
+
+        {activeView === "orders-customers" && (
+          <OrdersCustomers />
         )}
 
         {activeView === "orders-products" && isAdmin && (

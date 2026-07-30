@@ -289,6 +289,177 @@ router.post('/customers/sync', requireAdmin, async (req, res) => {
   }
 });
 
+// ─── Clientes: cadastro completo do Sisplan ──────────────────────────────────
+
+// GET /api/orders/customers/registry — listagem com filtros e ordenação
+router.get('/customers/registry', async (req, res) => {
+  try {
+    const customers = await repo.getSisplanCustomers({
+      search: req.query.search,
+      cidade: req.query.cidade,
+      uf: req.query.uf,
+      sort: req.query.sort,
+    });
+    res.json(customers);
+  } catch (err) {
+    console.error('orders/customers/registry GET error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+const CUSTOMERS_REGISTRY_SQL = `
+  SELECT
+    ENT.CEP AS "CEP"
+  , ENT.CODCLI AS "idERP"
+  , ENT.CNPJ AS "CNPJOrCPF"
+  , ENT.ENDERECO AS "street"
+  , 'A' AS "customerCategory"
+  , ENT.NOME AS "companyName"
+  , ENT.CEP_COB AS "billingCEP"
+  , ENT.BAIRRO AS "neighborhood"
+  , ENT.DATA_CAD AS "createdERP"
+  , ENT.NUMERO AS "addressNumber"
+  , ENT.END_COB AS "billingStreet"
+  , ENT.INSCRICAO AS "stateInscription"
+  , ENT.CREDITO AS "creditLimitApproved"
+  , ENT.BAIRRO_COB AS "billingNeighborhood"
+  , ENT.DDD_FONE AS "dddFone"
+  , ENT.TELEFONE AS "telefone"
+  , ENT.FONE_COMPL AS "foneCompl"
+  , CID.CODIGO AS "id_city"
+  , CID.COD_UF AS "UF"
+  , CID.NOME AS "CITY"
+  , IIF(ENT.FANTASIA = '',ENT.NOME,ENT.FANTASIA) AS "fantasyName"
+  , (CASE ENT.INSCRICAO WHEN 'ISENTO' THEN '1' ELSE '2' END) AS "isNoTax"
+  , (CASE ENT.ATIVO WHEN 'S' THEN '1' ELSE '2' END) AS "financialSituation"
+  , CASE WHEN ENT.SUFRAMA IS NULL THEN '' ELSE ENT.SUFRAMA END AS "idSUFRAMA"
+  , CASE WHEN SIT.CODIGO IS NULL THEN '00' ELSE SIT.CODIGO END AS "idActivity"
+  , (CASE ENT.CONS_FINAL WHEN 'NAO' THEN '2' ELSE '1' END) AS "isFinalCustomer"
+  , CASE WHEN ENT.CODREP IS NULL THEN '' ELSE ENT.CODREP END AS "idRepresentative"
+  , CASE WHEN ENT.TIPO_ENTIDADE LIKE '%C%' THEN 'C' ELSE ENT.TIPO_ENTIDADE END AS "customerType"
+ FROM ENTIDADE_001 ENT
+LEFT JOIN SITCLI_001 SIT ON SIT.CODIGO = ENT.SIT_CLI
+LEFT JOIN REPRESEN_001 REP ON REP.CODREP = ENT.CODREP
+LEFT JOIN CADCEP_001 CEP ON CEP.CEP = ENT.CEP
+LEFT JOIN CIDADE CID ON CID.CODIGO = CEP.CODMUN
+GROUP BY
+    ENT.CEP
+  , ENT.CNPJ
+  , ENT.NOME
+  , ENT.ATIVO
+  , ENT.NUMERO
+  , REP.CODREP
+  , ENT.CODCLI
+  , SIT.CODIGO
+  , ENT.BAIRRO
+  , ENT.CODREP
+  , ENT.CREDITO
+  , ENT.END_COB
+  , ENT.CEP_COB
+  , ENT.SUFRAMA
+  , ENT.FANTASIA
+  , ENT.ENDERECO
+  , ENT.DATA_CAD
+  , ENT.INSCRICAO
+  , ENT.BAIRRO_COB
+  , ENT.CONS_FINAL
+  , ENT.CLASSIFICA
+  , ENT.TIPO_ENTIDADE
+  , ENT.DDD_FONE
+  , ENT.TELEFONE
+  , ENT.FONE_COMPL
+  , CID.CODIGO
+  , CID.COD_UF
+  , CID.NOME
+`;
+
+// Último pedido de cada cliente (data + valor total do pedido)
+const CUSTOMERS_LAST_ORDER_SQL = `
+  SELECT
+    ped.CODCLI AS "codcli",
+    ped.NUMERO AS "numero",
+    ped.HR_EMISSAO AS "data",
+    SUM((itens.QTDE + itens.QTDE_F - itens.QTDE_CANC) * itens.PRECO) AS "valor"
+  FROM PEDIDO_001 ped
+  INNER JOIN PED_ITEN_001 itens ON itens.NUMERO = ped.NUMERO
+  WHERE ped.HR_EMISSAO = (
+    SELECT MAX(p2.HR_EMISSAO) FROM PEDIDO_001 p2 WHERE p2.CODCLI = ped.CODCLI
+  )
+  GROUP BY ped.CODCLI, ped.NUMERO, ped.HR_EMISSAO
+`;
+
+// POST /api/orders/customers/registry/sync — sincroniza cadastro completo do Sisplan
+router.post('/customers/registry/sync', requireAdmin, async (req, res) => {
+  try {
+    const settings = await sisplanRepo.getSettings();
+    if (!settings) return res.status(400).json({ error: 'Sisplan não configurado' });
+
+    const fbOptions = getFirebirdOptions(settings);
+    const str = (v) => (v === null || v === undefined) ? '' : String(v).trim();
+
+    const rows = await queryFirebird(fbOptions, CUSTOMERS_REGISTRY_SQL);
+    const customers = rows.map(r => ({
+      codcli:              str(r.idERP),
+      company_name:        str(r.companyName),
+      fantasy_name:        str(r.fantasyName),
+      cnpj:                str(r.CNPJOrCPF),
+      customer_category:   str(r.customerCategory),
+      customer_type:       str(r.customerType),
+      cep:                 str(r.CEP),
+      street:              str(r.street),
+      address_number:      str(r.addressNumber),
+      neighborhood:        str(r.neighborhood),
+      billing_cep:         str(r.billingCEP),
+      billing_street:      str(r.billingStreet),
+      billing_neighborhood: str(r.billingNeighborhood),
+      state_inscription:   str(r.stateInscription),
+      credit_limit:        Number(r.creditLimitApproved) || 0,
+      city_id:             str(r.id_city),
+      uf:                  str(r.UF) || null,
+      city:                str(r.CITY) || null,
+      is_no_tax:           str(r.isNoTax) === '1',
+      active:              str(r.financialSituation) === '1',
+      suframa:             str(r.idSUFRAMA),
+      activity_id:         str(r.idActivity),
+      is_final_customer:   str(r.isFinalCustomer) === '1',
+      representative_id:   str(r.idRepresentative),
+      ddd_fone:            str(r.dddFone),
+      telefone:            str(r.telefone),
+      fone_compl:          str(r.foneCompl),
+      created_erp:         r.createdERP instanceof Date ? r.createdERP : null,
+    })).filter(c => c.codcli);
+
+    const count = await repo.upsertSisplanCustomers(customers);
+
+    // Último pedido por cliente (não bloqueia a sync do cadastro se falhar)
+    let lastOrders = 0;
+    try {
+      const orderRows = await queryFirebird(fbOptions, CUSTOMERS_LAST_ORDER_SQL);
+      const byClient = {};
+      for (const r of orderRows) {
+        const codcli = str(r.codcli);
+        if (!codcli) continue;
+        const current = byClient[codcli];
+        const data = r.data instanceof Date ? r.data : null;
+        const better = !current
+          || (data && (!current.data || data > current.data))
+          || (data && current.data && data.getTime() === current.data.getTime() && str(r.numero) > current.numero);
+        if (better) {
+          byClient[codcli] = { codcli, numero: str(r.numero), data, valor: Number(r.valor) || 0 };
+        }
+      }
+      lastOrders = await repo.updateSisplanCustomersLastOrder(Object.values(byClient));
+    } catch (err) {
+      console.error('orders/customers/registry/sync last-order error:', err.message);
+    }
+
+    res.json({ ok: true, count, lastOrders });
+  } catch (err) {
+    console.error('orders/customers/registry/sync error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Orders ──────────────────────────────────────────────────────────────────
 
 // Forçar sincronização de pedidos do ERP (sync reversa + detecção de deletados)
