@@ -1325,6 +1325,7 @@ export const fetchCustomersRegistry = async (params = {}) => {
   if (params.cidade) q.set('cidade', params.cidade);
   if (params.uf)     q.set('uf', params.uf);
   if (params.sort)   q.set('sort', params.sort);
+  if (params.period) q.set('period', params.period);
   const r = await authFetch(`/api/orders/customers/registry?${q}`);
   return handleResponse(r);
 };

@@ -299,6 +299,7 @@ router.get('/customers/registry', async (req, res) => {
       cidade: req.query.cidade,
       uf: req.query.uf,
       sort: req.query.sort,
+      period: req.query.period,
     });
     res.json(customers);
   } catch (err) {

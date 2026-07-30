@@ -249,6 +249,18 @@ async function updateSisplanCustomersLastOrder(rows) {
   }
 }
 
+const SISPLAN_CUSTOMERS_PERIOD = {
+  hoje:        `last_order_date >= CURRENT_DATE`,
+  '7d':        `last_order_date >= CURRENT_DATE - INTERVAL '7 days'`,
+  '14d':       `last_order_date >= CURRENT_DATE - INTERVAL '14 days'`,
+  '30d':       `last_order_date >= CURRENT_DATE - INTERVAL '30 days'`,
+  '3m':        `last_order_date >= CURRENT_DATE - INTERVAL '3 months'`,
+  '6m':        `last_order_date >= CURRENT_DATE - INTERVAL '6 months'`,
+  '1a':        `last_order_date >= CURRENT_DATE - INTERVAL '1 year'`,
+  mais_1a:     `last_order_date < CURRENT_DATE - INTERVAL '1 year'`,
+  sem_pedidos: `last_order_date IS NULL`,
+};
+
 const SISPLAN_CUSTOMERS_SORT = {
   codigo:        `NULLIF(regexp_replace(codcli, '\\D', '', 'g'), '')::BIGINT NULLS LAST, codcli`,
   razao:         `company_name NULLS LAST`,
@@ -256,9 +268,13 @@ const SISPLAN_CUSTOMERS_SORT = {
   ultimo_pedido: `last_order_date DESC NULLS LAST`,
 };
 
-async function getSisplanCustomers({ search, cidade, uf, sort } = {}) {
+async function getSisplanCustomers({ search, cidade, uf, sort, period } = {}) {
   const conditions = [];
   const params = [];
+
+  if (period && SISPLAN_CUSTOMERS_PERIOD[period]) {
+    conditions.push(SISPLAN_CUSTOMERS_PERIOD[period]);
+  }
 
   if (search && search.trim()) {
     params.push(`%${search.trim()}%`);

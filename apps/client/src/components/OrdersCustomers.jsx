@@ -31,6 +31,18 @@ const UFS = [
   "PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO",
 ];
 
+const PERIOD_OPTIONS = [
+  { value: "hoje",        label: "Hoje" },
+  { value: "7d",          label: "7 dias" },
+  { value: "14d",         label: "14 dias" },
+  { value: "30d",         label: "30 dias" },
+  { value: "3m",          label: "3 meses" },
+  { value: "6m",          label: "6 meses" },
+  { value: "1a",          label: "1 ano" },
+  { value: "mais_1a",     label: "+1 ano" },
+  { value: "sem_pedidos", label: "Sem pedidos" },
+];
+
 const SORT_OPTIONS = [
   { value: "codigo",        label: "Código" },
   { value: "razao",         label: "Razão Social" },
@@ -65,10 +77,12 @@ export default function OrdersCustomers() {
   const [cidade, setCidade] = useState("");
   const [uf, setUf] = useState("");
   const [sort, setSort] = useState("codigo");
+  const [period, setPeriod] = useState("");
   const debounceRef = useRef(null);
 
   const headerBg = useColorModeValue("gray.50", "gray.700");
   const rowHover = useColorModeValue("gray.50", "gray.700");
+  const pillBg = useColorModeValue("gray.100", "gray.700");
 
   const load = useCallback(async (params) => {
     setLoading(true);
@@ -85,10 +99,10 @@ export default function OrdersCustomers() {
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      load({ search, cidade, uf, sort });
+      load({ search, cidade, uf, sort, period });
     }, 400);
     return () => clearTimeout(debounceRef.current);
-  }, [search, cidade, uf, sort, load]);
+  }, [search, cidade, uf, sort, period, load]);
 
   const handleSync = async () => {
     setSyncing(true);
@@ -107,7 +121,7 @@ export default function OrdersCustomers() {
           duration: 8000,
         });
       }
-      await load({ search, cidade, uf, sort });
+      await load({ search, cidade, uf, sort, period });
     } catch (err) {
       toast({ title: "Erro na sincronização", description: err.message, status: "error" });
     } finally {
@@ -142,6 +156,7 @@ export default function OrdersCustomers() {
       search && `Busca: ${search}`,
       cidade && `Cidade: ${cidade}`,
       uf && `UF: ${uf}`,
+      period && `Período: ${PERIOD_OPTIONS.find((o) => o.value === period)?.label || period}`,
       `Ordenação: ${SORT_OPTIONS.find((o) => o.value === sort)?.label || sort}`,
     ].filter(Boolean).join(" · ");
     doc.text(`${customers.length} cliente(s) · ${filters} · Gerado em ${generatedAt}`, M, y);
@@ -233,6 +248,21 @@ export default function OrdersCustomers() {
             <option key={o.value} value={o.value}>Ordenar por: {o.label}</option>
           ))}
         </Select>
+      </Flex>
+
+      <Flex bg={pillBg} borderRadius="lg" p={1} gap={1} wrap="wrap" w="fit-content" mb={4}>
+        {PERIOD_OPTIONS.map((p) => (
+          <Button
+            key={p.value}
+            size="sm"
+            borderRadius="md"
+            variant={period === p.value ? "solid" : "ghost"}
+            colorScheme={period === p.value ? "blue" : "gray"}
+            onClick={() => setPeriod(period === p.value ? "" : p.value)}
+          >
+            {p.label}
+          </Button>
+        ))}
       </Flex>
 
       {loading ? (
