@@ -96,9 +96,17 @@ export default function OrdersCustomers() {
       const result = await syncCustomersRegistry();
       toast({
         title: "Clientes sincronizados",
-        description: `${result.count} cliente(s) atualizados do Sisplan.`,
+        description: `${result.count} cliente(s) atualizados · ${result.lastOrders || 0} com último pedido.`,
         status: "success",
       });
+      if (result.lastOrderError) {
+        toast({
+          title: "Último pedido não sincronizado",
+          description: result.lastOrderError,
+          status: "warning",
+          duration: 8000,
+        });
+      }
       await load({ search, cidade, uf, sort });
     } catch (err) {
       toast({ title: "Erro na sincronização", description: err.message, status: "error" });

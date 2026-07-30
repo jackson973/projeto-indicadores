@@ -1199,6 +1199,11 @@ const SisplanSettings = () => {
                     {customersSyncResult.lastOrders > 0 && ` · ${customersSyncResult.lastOrders} com último pedido atualizado`}
                   </Text>
                 )}
+                {customersSyncResult?.lastOrderError && (
+                  <Text fontSize="xs" color="orange.400" mt={1}>
+                    Último pedido não sincronizado: {customersSyncResult.lastOrderError}
+                  </Text>
+                )}
               </Box>
             </VStack>
           </AccordionPanel>

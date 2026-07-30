@@ -374,18 +374,19 @@ GROUP BY
   , CID.NOME
 `;
 
-// Último pedido de cada cliente (data + valor total do pedido)
+// Todos os pedidos com total por pedido — o último de cada cliente é escolhido no JS.
+// CASTs evitam overflow aritmético do Firebird; COALESCE cobre campos nulos.
 const CUSTOMERS_LAST_ORDER_SQL = `
   SELECT
     ped.CODCLI AS "codcli",
     ped.NUMERO AS "numero",
     ped.HR_EMISSAO AS "data",
-    SUM((itens.QTDE + itens.QTDE_F - itens.QTDE_CANC) * itens.PRECO) AS "valor"
+    SUM(
+      CAST(COALESCE(itens.QTDE,0) + COALESCE(itens.QTDE_F,0) - COALESCE(itens.QTDE_CANC,0) AS NUMERIC(14,2))
+      * CAST(COALESCE(itens.PRECO,0) AS NUMERIC(14,2))
+    ) AS "valor"
   FROM PEDIDO_001 ped
   INNER JOIN PED_ITEN_001 itens ON itens.NUMERO = ped.NUMERO
-  WHERE ped.HR_EMISSAO = (
-    SELECT MAX(p2.HR_EMISSAO) FROM PEDIDO_001 p2 WHERE p2.CODCLI = ped.CODCLI
-  )
   GROUP BY ped.CODCLI, ped.NUMERO, ped.HR_EMISSAO
 `;
 
@@ -434,6 +435,7 @@ router.post('/customers/registry/sync', requireAdmin, async (req, res) => {
 
     // Último pedido por cliente (não bloqueia a sync do cadastro se falhar)
     let lastOrders = 0;
+    let lastOrderError = null;
     try {
       const orderRows = await queryFirebird(fbOptions, CUSTOMERS_LAST_ORDER_SQL);
       const byClient = {};
@@ -451,10 +453,11 @@ router.post('/customers/registry/sync', requireAdmin, async (req, res) => {
       }
       lastOrders = await repo.updateSisplanCustomersLastOrder(Object.values(byClient));
     } catch (err) {
-      console.error('orders/customers/registry/sync last-order error:', err.message);
+      console.error('orders/customers/registry/sync last-order error:', err);
+      lastOrderError = err.message;
     }
 
-    res.json({ ok: true, count, lastOrders });
+    res.json({ ok: true, count, lastOrders, lastOrderError });
   } catch (err) {
     console.error('orders/customers/registry/sync error:', err);
     res.status(500).json({ error: err.message });
