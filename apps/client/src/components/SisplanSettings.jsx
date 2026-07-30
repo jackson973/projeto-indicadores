@@ -40,7 +40,8 @@ import {
   triggerSisplanNfSync,
   triggerOfSync,
   triggerSisplanProductSync,
-  triggerSisplanOrderSync
+  triggerSisplanOrderSync,
+  syncCustomersRegistry
 } from "../api";
 import useAppToast from "../hooks/useAppToast";
 
@@ -159,6 +160,8 @@ const SisplanSettings = () => {
   const [syncingOf, setSyncingOf] = useState(false);
   const [syncingProduct, setSyncingProduct] = useState(false);
   const [syncingOrders, setSyncingOrders] = useState(false);
+  const [syncingCustomers, setSyncingCustomers] = useState(false);
+  const [customersSyncResult, setCustomersSyncResult] = useState(null);
   const [ofQueryColumns, setOfQueryColumns] = useState([]);
   const [ofPreviewRows, setOfPreviewRows] = useState([]);
   const [productQueryColumns, setProductQueryColumns] = useState([]);
@@ -441,6 +444,19 @@ const SisplanSettings = () => {
       toast({  title: err.message, status: "error", duration: 5000 });
     } finally {
       setSyncingProduct(false);
+    }
+  };
+
+  const handleCustomersSync = async () => {
+    setSyncingCustomers(true);
+    try {
+      const result = await syncCustomersRegistry();
+      setCustomersSyncResult(result);
+      toast({ title: `${result.count} cliente(s) sincronizados do ERP`, status: "success", duration: 4000 });
+    } catch (err) {
+      toast({ title: err.message, status: "error", duration: 5000 });
+    } finally {
+      setSyncingCustomers(false);
     }
   };
 
@@ -1151,7 +1167,44 @@ const SisplanSettings = () => {
           </AccordionPanel>
         </AccordionItem>
 
-        {/* 6. Sync Reversa de Pedidos */}
+        {/* 6. Clientes */}
+        <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
+          <AccordionButton py={3} _expanded={{ bg: refBg }}>
+            <Box flex="1" textAlign="left">
+              <Text fontWeight="semibold">Clientes</Text>
+            </Box>
+            <AccordionIcon />
+          </AccordionButton>
+          <AccordionPanel pb={4}>
+            <VStack spacing={3} align="stretch">
+              <Text fontSize="sm" color="gray.500">
+                Importa o cadastro completo de clientes do ERP (ENTIDADE_001, tipo "C"): endereço,
+                cidade/UF, telefone e situação, além da data e valor do último pedido de cada cliente.
+                Os dados alimentam a aba Pedidos → Clientes.
+              </Text>
+              <Box>
+                <Button
+                  size="sm"
+                  colorScheme="teal"
+                  variant="outline"
+                  isLoading={syncingCustomers}
+                  loadingText="Sincronizando..."
+                  onClick={handleCustomersSync}
+                >
+                  Sincronizar Clientes Agora
+                </Button>
+                {customersSyncResult && (
+                  <Text fontSize="xs" color="gray.500" mt={2}>
+                    {customersSyncResult.count} cliente(s) sincronizados
+                    {customersSyncResult.lastOrders > 0 && ` · ${customersSyncResult.lastOrders} com último pedido atualizado`}
+                  </Text>
+                )}
+              </Box>
+            </VStack>
+          </AccordionPanel>
+        </AccordionItem>
+
+        {/* 7. Sync Reversa de Pedidos */}
         <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
           <AccordionButton py={3} _expanded={{ bg: refBg }}>
             <Box flex="1" textAlign="left">
@@ -1181,7 +1234,7 @@ const SisplanSettings = () => {
           </AccordionPanel>
         </AccordionItem>
 
-        {/* 7. Agendamento (ultimo) */}
+        {/* 8. Agendamento (ultimo) */}
         <AccordionItem border="1px solid" borderColor={borderColor} borderRadius="md" mb={3}>
           <AccordionButton py={3} _expanded={{ bg: refBg }}>
             <Box flex="1" textAlign="left">
