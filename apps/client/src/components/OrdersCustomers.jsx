@@ -18,9 +18,12 @@ import {
   Th,
   Thead,
   Tr,
+  Link,
+  VStack,
+  useBreakpointValue,
   useColorModeValue,
 } from "@chakra-ui/react";
-import { SearchIcon, DownloadIcon, RepeatIcon } from "@chakra-ui/icons";
+import { SearchIcon, DownloadIcon, RepeatIcon, PhoneIcon } from "@chakra-ui/icons";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { fetchCustomersRegistry, syncCustomersRegistry } from "../api";
@@ -60,6 +63,11 @@ const fmtDate = (iso) => {
   return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 };
 
+const phoneHref = (c) => {
+  const digits = `${c.ddd_fone || ""}${c.telefone || ""}`.replace(/\D/g, "");
+  return digits.length >= 8 ? `tel:${digits}` : null;
+};
+
 const fmtPhone = (c) => {
   const ddd = (c.ddd_fone || "").trim();
   const fone = (c.telefone || "").trim();
@@ -83,6 +91,9 @@ export default function OrdersCustomers() {
   const headerBg = useColorModeValue("gray.50", "gray.700");
   const rowHover = useColorModeValue("gray.50", "gray.700");
   const pillBg = useColorModeValue("gray.100", "gray.700");
+  const cardBg = useColorModeValue("white", "gray.800");
+  const cardBorder = useColorModeValue("gray.200", "gray.600");
+  const isMobile = useBreakpointValue({ base: true, md: false });
 
   const load = useCallback(async (params) => {
     setLoading(true);
@@ -221,7 +232,7 @@ export default function OrdersCustomers() {
       </Flex>
 
       <Flex gap={2} mb={4} wrap="wrap">
-        <InputGroup maxW="320px" size="sm">
+        <InputGroup w={{ base: "100%", md: "320px" }} size="sm">
           <InputLeftElement pointerEvents="none">
             <SearchIcon color="gray.400" />
           </InputLeftElement>
@@ -233,17 +244,28 @@ export default function OrdersCustomers() {
         </InputGroup>
         <Input
           size="sm"
-          maxW="200px"
+          w={{ base: "calc(60% - 4px)", md: "200px" }}
           placeholder="Cidade"
           value={cidade}
           onChange={(e) => setCidade(e.target.value)}
         />
-        <Select size="sm" maxW="100px" placeholder="UF" value={uf} onChange={(e) => setUf(e.target.value)}>
+        <Select
+          size="sm"
+          w={{ base: "calc(40% - 4px)", md: "100px" }}
+          placeholder="UF"
+          value={uf}
+          onChange={(e) => setUf(e.target.value)}
+        >
           {UFS.map((u) => (
             <option key={u} value={u}>{u}</option>
           ))}
         </Select>
-        <Select size="sm" maxW="220px" value={sort} onChange={(e) => setSort(e.target.value)}>
+        <Select
+          size="sm"
+          w={{ base: "100%", md: "220px" }}
+          value={sort}
+          onChange={(e) => setSort(e.target.value)}
+        >
           {SORT_OPTIONS.map((o) => (
             <option key={o.value} value={o.value}>Ordenar por: {o.label}</option>
           ))}
@@ -275,6 +297,56 @@ export default function OrdersCustomers() {
             Nenhum cliente encontrado. Use "Sincronizar Sisplan" para importar o cadastro.
           </Text>
         </Box>
+      ) : isMobile ? (
+        <VStack spacing={2} align="stretch">
+          {customers.map((c) => (
+            <Box
+              key={c.id}
+              bg={cardBg}
+              borderWidth="1px"
+              borderColor={cardBorder}
+              borderRadius="lg"
+              p={3}
+            >
+              <Flex justify="space-between" align="start" gap={2}>
+                <Box minW={0}>
+                  <Text fontSize="sm" fontWeight="semibold" noOfLines={2}>
+                    {c.codcli} · {c.company_name || c.fantasy_name}
+                  </Text>
+                  {c.fantasy_name && c.fantasy_name !== c.company_name && (
+                    <Text fontSize="xs" color="gray.500" noOfLines={1}>
+                      {c.fantasy_name}
+                    </Text>
+                  )}
+                </Box>
+                {c.uf && <Badge flexShrink={0}>{c.uf}</Badge>}
+              </Flex>
+              <Text fontSize="xs" color="gray.500" mt={1}>
+                {c.city || "Cidade não informada"}
+              </Text>
+              <Flex justify="space-between" align="end" mt={2} gap={2}>
+                <Box>
+                  <Text fontSize="xs" color="gray.500">Último pedido</Text>
+                  <Text fontSize="sm">
+                    {fmtDate(c.last_order_date)}
+                    {c.last_order_date && (
+                      <Text as="span" fontWeight="medium"> · R$ {fmtBRL(c.last_order_value)}</Text>
+                    )}
+                  </Text>
+                </Box>
+                {phoneHref(c) ? (
+                  <Link href={phoneHref(c)} flexShrink={0}>
+                    <Button size="xs" leftIcon={<PhoneIcon />} variant="outline" colorScheme="blue">
+                      {fmtPhone(c)}
+                    </Button>
+                  </Link>
+                ) : (
+                  <Text fontSize="xs" color="gray.500" flexShrink={0}>{fmtPhone(c)}</Text>
+                )}
+              </Flex>
+            </Box>
+          ))}
+        </VStack>
       ) : (
         <Box overflowX="auto" borderWidth="1px" borderRadius="md">
           <Table size="sm" variant="simple">
