@@ -642,7 +642,13 @@ async function findPrice(codcli, productCode, part, date, etapa, tamanho) {
   );
 
   if (priceResult.rows.length === 0) {
-    console.log(`[findPrice] No price found for codcli="${codcli}", group="${groupName}"(${groupId}), part="${part}", etapa="${etapa}", tamanho="${tamanho}", date="${date}"`);
+    // Loga uma vez por combinação — sem isso o log inunda (uma linha por tamanho × item)
+    if (!findPrice._warnedPrice) findPrice._warnedPrice = new Set();
+    const priceWarnKey = `${codcli}|${groupId}|${part}|${etapa}|${tamanho}`;
+    if (!findPrice._warnedPrice.has(priceWarnKey)) {
+      findPrice._warnedPrice.add(priceWarnKey);
+      console.log(`[findPrice] No price found for codcli="${codcli}", group="${groupName}"(${groupId}), part="${part}", etapa="${etapa}", tamanho="${tamanho}", date="${date}"`);
+    }
     return {
       price: null, source: 'no_price', groupId, groupName,
       error: `Sem preco vigente para grupo "${groupName}", parte "${part || 'todas'}", tamanho "${tamanho || 'todos'}" na data ${date}`

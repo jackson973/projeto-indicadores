@@ -1,4 +1,6 @@
 const cron = require('node-cron');
+const path = require('path');
+const { fork } = require('child_process');
 const Firebird = require('node-firebird');
 const { XdrReader, BlrReader } = require('node-firebird/lib/wire/serialize');
 const db = require('../db/connection');
@@ -394,16 +396,36 @@ function mapOfRow(row, columnMapping) {
 
 let ofSyncRunning = false;
 
+// Roda a sync de OFs num processo filho: as 200k+ linhas elevavam o RSS da API
+// acima de 1GB (V8 não devolve heap ao SO), derrubando o processo no limite do
+// PM2. No worker, a memória é devolvida integralmente quando ele termina.
 async function runOfSync() {
-  slog('[Sisplan OF Sync] Starting OF sync...');
-
-  // Trava: uma sync de OF por vez. Execuções em sequência (ciclo de 5 min +
-  // botão manual) somam picos de memória antes de o V8 devolver ao sistema.
   if (ofSyncRunning) {
     console.log('[Sisplan OF Sync] Sync já em andamento — ignorando nova execução.');
     return { success: false, message: 'Sync de OFs já em andamento.' };
   }
   ofSyncRunning = true;
+
+  try {
+    return await new Promise((resolve) => {
+      const worker = fork(path.join(__dirname, 'ofSyncWorker.js'));
+      let result = null;
+      worker.on('message', (msg) => { result = msg; });
+      worker.on('error', (err) => {
+        console.error('[Sisplan OF Sync] Worker error:', err.message);
+        resolve({ success: false, message: err.message });
+      });
+      worker.on('exit', (code) => {
+        resolve(result || { success: false, message: `Worker de OF sync terminou sem resultado (código ${code}).` });
+      });
+    });
+  } finally {
+    ofSyncRunning = false;
+  }
+}
+
+async function runOfSyncInProcess() {
+  slog('[Sisplan OF Sync] Starting OF sync...');
 
   try {
     const settings = await sisplanRepo.getSettings();
@@ -477,8 +499,6 @@ async function runOfSync() {
     serr('[Sisplan OF Sync] Error:', message);
     await sisplanRepo.updateOfSyncStatus('error', message, 0);
     return { success: false, message };
-  } finally {
-    ofSyncRunning = false;
   }
 }
 
@@ -667,6 +687,7 @@ module.exports = {
   runSync,
   runNfSync,
   runOfSync,
+  runOfSyncInProcess,
   runProductSync,
   testFirebirdConnection,
   queryFirebird,
