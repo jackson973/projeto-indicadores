@@ -45,7 +45,9 @@ async function batchUpsertOfs(ofsData) {
   // quantidade. Agora somamos a quantidade conferida (fac_quant) e mantemos a maior
   // quantidade original (fac_qt_orig é a da OF, igual em todos os movimentos — não soma).
   const deduped = new Map();
-  ofsData.forEach((of) => {
+  for (let i = 0; i < ofsData.length; i++) {
+    const of = ofsData[i];
+    ofsData[i] = null; // libera a linha consumida — o array de entrada pode ter 200k+ itens
     const key = `${of.facNumero}|${of.facCodsetor || ''}|${of.facCodigoProduto || ''}|${of.facCor || ''}|${of.facParte || ''}|${of.facTam || ''}|${of.facCodcli || ''}`;
     const existing = deduped.get(key);
     if (existing) {
@@ -60,7 +62,7 @@ async function batchUpsertOfs(ofsData) {
     } else {
       deduped.set(key, { ...of });
     }
-  });
+  }
 
   const uniqueData = Array.from(deduped.values());
   let totalInserted = 0;

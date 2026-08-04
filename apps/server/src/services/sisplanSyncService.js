@@ -55,6 +55,14 @@ function resolveBlobValue(blobFn, transaction) {
 }
 
 async function resolveRowBlobs(row, transaction) {
+  // Sem BLOBs na linha, devolve o próprio objeto — evita duplicar em memória
+  // resultados grandes (a sync de OFs passa de 200 mil linhas).
+  let hasBlob = false;
+  for (const key in row) {
+    if (typeof row[key] === 'function') { hasBlob = true; break; }
+  }
+  if (!hasBlob) return row;
+
   const resolved = {};
   for (const [key, value] of Object.entries(row)) {
     if (typeof value === 'function') {
@@ -91,12 +99,11 @@ function queryFirebird(options, sql) {
 
           try {
             const rows = result || [];
-            const resolved = [];
-            for (const row of rows) {
-              resolved.push(await resolveRowBlobs(row, transaction));
+            for (let i = 0; i < rows.length; i++) {
+              rows[i] = await resolveRowBlobs(rows[i], transaction);
             }
             transaction.commit(() => db.detach());
-            resolve(resolved);
+            resolve(rows);
           } catch (blobErr) {
             console.error('[Firebird BLOB] Error resolving blobs:', blobErr.message);
             transaction.rollback(() => db.detach());
@@ -387,9 +394,15 @@ async function runOfSync() {
     }
 
     const columnMapping = settings.ofColumnMapping || {};
-    const mappedRows = rows.map(row => mapOfRow(row, columnMapping));
-
-    const validRows = mappedRows.filter(r => r.facNumero);
+    // Mapeia liberando as linhas brutas conforme avança — sem isso o processo
+    // segura duas cópias completas do resultado e estoura o limite do PM2.
+    const validRows = [];
+    for (let i = 0; i < rows.length; i++) {
+      const mapped = mapOfRow(rows[i], columnMapping);
+      rows[i] = null;
+      if (mapped.facNumero) validRows.push(mapped);
+    }
+    rows.length = 0;
     console.log(`[Sisplan OF Sync] ${validRows.length} valid rows after mapping`);
 
     const { inserted, updated } = await terceirosRepo.batchUpsertOfs(validRows);
