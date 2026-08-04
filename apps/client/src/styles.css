@@ -72,3 +72,19 @@ body {
 .card-highlight-pulse {
   animation: subtlePulse 4s ease-in-out infinite;
 }
+
+/* ─── Tabelas: cabeçalho fixo, dados rolam ───────────────────────────────────
+   Regra global do sistema: toda tabela rola dentro do próprio contêiner e o
+   thead permanece visível. `:where()` zera a especificidade, então componentes
+   que definem maxH/overflow próprios continuam valendo. */
+:where(div:has(> table.chakra-table)) {
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+}
+
+table.chakra-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: var(--chakra-colors-chakra-subtle-bg);
+}
