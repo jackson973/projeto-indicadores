@@ -115,6 +115,39 @@ function queryFirebird(options, sql) {
   });
 }
 
+// Lê o resultado em streaming (linha a linha), sem materializar o array completo.
+// Uso obrigatório para resultados grandes (ex.: OFs, 200k+ linhas). Campos BLOB
+// não são suportados neste modo e chegam como null.
+function queryFirebirdSequential(options, sql, onRow) {
+  return new Promise((resolve, reject) => {
+    Firebird.attach(options, (err, db) => {
+      if (err) return reject(err);
+
+      let count = 0;
+      let hookError = null;
+
+      db.sequentially(sql, [], (row) => {
+        if (hookError) return;
+        count++;
+        // BLOBs viriam como funções — anula para não vazar para o processamento
+        for (const key in row) {
+          if (typeof row[key] === 'function') row[key] = null;
+        }
+        try {
+          onRow(row);
+        } catch (e) {
+          hookError = e;
+        }
+      }, (err) => {
+        db.detach();
+        if (err) return reject(err);
+        if (hookError) return reject(hookError);
+        resolve(count);
+      });
+    });
+  });
+}
+
 function testFirebirdConnection(options) {
   return new Promise((resolve, reject) => {
     Firebird.attach(options, (err, db) => {
@@ -384,34 +417,35 @@ async function runOfSync() {
     };
 
     slog('[Sisplan OF Sync] Connecting to Firebird...');
-    const rows = await queryFirebird(fbOptions, settings.ofSqlQuery);
 
-    console.log(`[Sisplan OF Sync] Query returned ${rows.length} rows`);
+    // Streaming: cada linha é mapeada e agregada no Map de itens únicos na hora,
+    // sem nunca materializar as 200k+ linhas — memória proporcional só aos itens
+    // únicos de OF, não ao total de movimentos.
+    const columnMapping = settings.ofColumnMapping || {};
+    const deduped = new Map();
+    let validCount = 0;
 
-    if (!rows.length) {
+    const totalRows = await queryFirebirdSequential(fbOptions, settings.ofSqlQuery, (row) => {
+      const mapped = mapOfRow(row, columnMapping);
+      if (!mapped.facNumero) return;
+      validCount++;
+      terceirosRepo.aggregateOfInto(deduped, mapped);
+    });
+
+    console.log(`[Sisplan OF Sync] Streamed ${totalRows} rows, ${validCount} valid, ${deduped.size} unique OF items`);
+
+    if (!totalRows) {
       await sisplanRepo.updateOfSyncStatus('success', 'Nenhum registro encontrado.', 0);
       return { success: true, message: 'Nenhum registro encontrado.', rows: 0 };
     }
 
-    const columnMapping = settings.ofColumnMapping || {};
-    // Mapeia liberando as linhas brutas conforme avança — sem isso o processo
-    // segura duas cópias completas do resultado e estoura o limite do PM2.
-    const validRows = [];
-    for (let i = 0; i < rows.length; i++) {
-      const mapped = mapOfRow(rows[i], columnMapping);
-      rows[i] = null;
-      if (mapped.facNumero) validRows.push(mapped);
-    }
-    rows.length = 0;
-    console.log(`[Sisplan OF Sync] ${validRows.length} valid rows after mapping`);
-
-    const { inserted, updated } = await terceirosRepo.batchUpsertOfs(validRows);
+    const { inserted, updated } = await terceirosRepo.upsertAggregatedOfs(deduped);
 
     const message = `Sincronizado: ${inserted} inseridos, ${updated} atualizados.`;
     console.log(`[Sisplan OF Sync] ${message}`);
-    await sisplanRepo.updateOfSyncStatus('success', message, validRows.length);
+    await sisplanRepo.updateOfSyncStatus('success', message, validCount);
 
-    return { success: true, message, rows: validRows.length, inserted, updated };
+    return { success: true, message, rows: validCount, inserted, updated };
   } catch (error) {
     const message = error.message || 'Erro desconhecido';
     serr('[Sisplan OF Sync] Error:', message);

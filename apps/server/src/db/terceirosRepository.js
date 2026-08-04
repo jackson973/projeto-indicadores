@@ -48,22 +48,32 @@ async function batchUpsertOfs(ofsData) {
   for (let i = 0; i < ofsData.length; i++) {
     const of = ofsData[i];
     ofsData[i] = null; // libera a linha consumida — o array de entrada pode ter 200k+ itens
-    const key = `${of.facNumero}|${of.facCodsetor || ''}|${of.facCodigoProduto || ''}|${of.facCor || ''}|${of.facParte || ''}|${of.facTam || ''}|${of.facCodcli || ''}`;
-    const existing = deduped.get(key);
-    if (existing) {
-      existing.facQuant = (parseFloat(existing.facQuant) || 0) + (parseFloat(of.facQuant) || 0);
-      existing.facQtOrig = Math.max(parseFloat(existing.facQtOrig) || 0, parseFloat(of.facQtOrig) || 0);
-      // Mantém a referência mais recente (lançamento/datas) para exibição.
-      if ((of.facDtLan || '') > (existing.facDtLan || '')) {
-        existing.facDtLan = of.facDtLan;
-        existing.facLancto = of.facLancto;
-        existing.facDtPrevRet = of.facDtPrevRet;
-      }
-    } else {
-      deduped.set(key, { ...of });
-    }
+    aggregateOfInto(deduped, of);
   }
 
+  return upsertAggregatedOfs(deduped);
+}
+
+// Agrega um movimento no Map de itens únicos (usado também pela sync em streaming,
+// que alimenta o Map linha a linha sem materializar o resultado completo).
+function aggregateOfInto(deduped, of) {
+  const key = `${of.facNumero}|${of.facCodsetor || ''}|${of.facCodigoProduto || ''}|${of.facCor || ''}|${of.facParte || ''}|${of.facTam || ''}|${of.facCodcli || ''}`;
+  const existing = deduped.get(key);
+  if (existing) {
+    existing.facQuant = (parseFloat(existing.facQuant) || 0) + (parseFloat(of.facQuant) || 0);
+    existing.facQtOrig = Math.max(parseFloat(existing.facQtOrig) || 0, parseFloat(of.facQtOrig) || 0);
+    // Mantém a referência mais recente (lançamento/datas) para exibição.
+    if ((of.facDtLan || '') > (existing.facDtLan || '')) {
+      existing.facDtLan = of.facDtLan;
+      existing.facLancto = of.facLancto;
+      existing.facDtPrevRet = of.facDtPrevRet;
+    }
+  } else {
+    deduped.set(key, { ...of });
+  }
+}
+
+async function upsertAggregatedOfs(deduped) {
   const uniqueData = Array.from(deduped.values());
   let totalInserted = 0;
   let totalUpdated = 0;
@@ -1724,6 +1734,8 @@ async function getOFRastreio(ofNumero) {
 module.exports = {
   // OFs
   batchUpsertOfs,
+  aggregateOfInto,
+  upsertAggregatedOfs,
   getOfs,
   getDistinctSuppliers,
   getDistinctProducts,
