@@ -392,8 +392,18 @@ function mapOfRow(row, columnMapping) {
   };
 }
 
+let ofSyncRunning = false;
+
 async function runOfSync() {
   slog('[Sisplan OF Sync] Starting OF sync...');
+
+  // Trava: uma sync de OF por vez. Execuções em sequência (ciclo de 5 min +
+  // botão manual) somam picos de memória antes de o V8 devolver ao sistema.
+  if (ofSyncRunning) {
+    console.log('[Sisplan OF Sync] Sync já em andamento — ignorando nova execução.');
+    return { success: false, message: 'Sync de OFs já em andamento.' };
+  }
+  ofSyncRunning = true;
 
   try {
     const settings = await sisplanRepo.getSettings();
@@ -454,9 +464,11 @@ async function runOfSync() {
     }
 
     const { inserted, updated } = await terceirosRepo.upsertAggregatedOfs(deduped);
+    deduped.clear();
 
+    const rssMb = Math.round(process.memoryUsage().rss / 1048576);
     const message = `Sincronizado: ${inserted} inseridos, ${updated} atualizados.`;
-    console.log(`[Sisplan OF Sync] ${message}`);
+    console.log(`[Sisplan OF Sync] ${message} (RSS: ${rssMb}MB)`);
     await sisplanRepo.updateOfSyncStatus('success', message, validCount);
 
     return { success: true, message, rows: validCount, inserted, updated };
@@ -465,6 +477,8 @@ async function runOfSync() {
     serr('[Sisplan OF Sync] Error:', message);
     await sisplanRepo.updateOfSyncStatus('error', message, 0);
     return { success: false, message };
+  } finally {
+    ofSyncRunning = false;
   }
 }
 
