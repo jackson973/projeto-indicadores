@@ -425,12 +425,26 @@ async function runOfSync() {
     const deduped = new Map();
     let validCount = 0;
 
+    // Interning: campos como cliente, setor, cor e descrição repetem o mesmo texto
+    // em milhares de linhas; guardar uma única referência por valor reduz muito a
+    // memória do Map (quase todos os 200k+ movimentos viram itens únicos).
+    const internCache = new Map();
+    const intern = (v) => {
+      if (typeof v !== 'string' || !v) return v;
+      const cached = internCache.get(v);
+      if (cached !== undefined) return cached;
+      internCache.set(v, v);
+      return v;
+    };
+
     const totalRows = await queryFirebirdSequential(fbOptions, settings.ofSqlQuery, (row) => {
       const mapped = mapOfRow(row, columnMapping);
       if (!mapped.facNumero) return;
+      for (const k in mapped) mapped[k] = intern(mapped[k]);
       validCount++;
       terceirosRepo.aggregateOfInto(deduped, mapped);
     });
+    internCache.clear();
 
     console.log(`[Sisplan OF Sync] Streamed ${totalRows} rows, ${validCount} valid, ${deduped.size} unique OF items`);
 
