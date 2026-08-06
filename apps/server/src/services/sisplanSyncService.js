@@ -1,7 +1,6 @@
 const cron = require('node-cron');
-const path = require('path');
-const { fork } = require('child_process');
 const Firebird = require('node-firebird');
+const { runInWorker } = require('./syncWorkerRunner');
 const { XdrReader, BlrReader } = require('node-firebird/lib/wire/serialize');
 const db = require('../db/connection');
 const sisplanRepo = require('../db/sisplanRepository');
@@ -207,7 +206,9 @@ function mapRow(row, columnMapping) {
   };
 }
 
-async function runSync() {
+const runSync = () => runInWorker('sisplan-sales');
+
+async function runSyncInProcess() {
   slog('[Sisplan Sync] Starting sync...');
 
   try {
@@ -289,7 +290,9 @@ function mapNfRow(row, columnMapping) {
   };
 }
 
-async function runNfSync() {
+const runNfSync = () => runInWorker('sisplan-nf');
+
+async function runNfSyncInProcess() {
   slog('[Sisplan NF Sync] Starting NF sync...');
 
   try {
@@ -394,35 +397,8 @@ function mapOfRow(row, columnMapping) {
   };
 }
 
-let ofSyncRunning = false;
-
-// Roda a sync de OFs num processo filho: as 200k+ linhas elevavam o RSS da API
-// acima de 1GB (V8 não devolve heap ao SO), derrubando o processo no limite do
-// PM2. No worker, a memória é devolvida integralmente quando ele termina.
-async function runOfSync() {
-  if (ofSyncRunning) {
-    console.log('[Sisplan OF Sync] Sync já em andamento — ignorando nova execução.');
-    return { success: false, message: 'Sync de OFs já em andamento.' };
-  }
-  ofSyncRunning = true;
-
-  try {
-    return await new Promise((resolve) => {
-      const worker = fork(path.join(__dirname, 'ofSyncWorker.js'));
-      let result = null;
-      worker.on('message', (msg) => { result = msg; });
-      worker.on('error', (err) => {
-        console.error('[Sisplan OF Sync] Worker error:', err.message);
-        resolve({ success: false, message: err.message });
-      });
-      worker.on('exit', (code) => {
-        resolve(result || { success: false, message: `Worker de OF sync terminou sem resultado (código ${code}).` });
-      });
-    });
-  } finally {
-    ofSyncRunning = false;
-  }
-}
+// Versão pública: roda num processo filho (memória devolvida ao SO ao final).
+const runOfSync = () => runInWorker('sisplan-of');
 
 async function runOfSyncInProcess() {
   slog('[Sisplan OF Sync] Starting OF sync...');
@@ -558,7 +534,9 @@ async function batchUpsertSisplanProducts(products) {
   return { inserted, updated };
 }
 
-async function runProductSync() {
+const runProductSync = () => runInWorker('sisplan-products');
+
+async function runProductSyncInProcess() {
   slog('[Sisplan Product Sync] Starting...');
 
   try {
@@ -632,20 +610,9 @@ async function startSisplanSyncScheduler() {
     const interval = settings.syncIntervalMinutes || 5;
     const schedule = `*/${interval} * * * *`;
 
-    const { syncOrdersFromERP } = require('./sisplanOrderIntegrationService');
-
     currentJob = cron.schedule(schedule, async () => {
-      console.log('[Sisplan Sync] Iniciando ciclo de sincronização...');
-      await runSync();
-      await runNfSync();
-      await runOfSync();
-      await runProductSync();
-      try {
-        await syncOrdersFromERP();
-      } catch (err) {
-        console.error('[Sisplan Order Sync] Erro no scheduler:', err.message);
-      }
-      console.log('[Sisplan Sync] Ciclo de sincronização finalizado.');
+      // Ciclo inteiro roda num único processo filho (ver syncWorker.js)
+      await runInWorker('sisplan-cycle');
     }, {
       scheduled: true,
       timezone: 'America/Sao_Paulo',
@@ -687,7 +654,10 @@ module.exports = {
   runSync,
   runNfSync,
   runOfSync,
+  runSyncInProcess,
+  runNfSyncInProcess,
   runOfSyncInProcess,
+  runProductSyncInProcess,
   runProductSync,
   testFirebirdConnection,
   queryFirebird,

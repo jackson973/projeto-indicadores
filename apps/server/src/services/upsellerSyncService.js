@@ -4,6 +4,7 @@ const db = require('../db/connection');
 const upsellerRepo = require('../db/upsellerRepository');
 const salesRepo = require('../db/salesRepository');
 const { getSaoPauloDate } = require('../lib/timezone');
+const { runInWorker } = require('./syncWorkerRunner');
 
 let currentJob = null;
 let isSyncing = false;
@@ -518,7 +519,11 @@ function mapOrdersToSales(orders) {
 
 // ─── SYNC ───────────────────────────────────────────────────────────────────
 
-async function runSync() {
+// Versão pública: roda num processo filho — o Puppeteer do login e a paginação
+// de pedidos não incham a memória da API (ver syncWorkerRunner).
+const runSync = () => runInWorker('upseller-sync');
+
+async function runSyncInProcess() {
   if (isSyncing) {
     console.log('[UpSeller] Sync already in progress, skipping');
     return { success: false, message: 'Sincronização já em andamento.' };
@@ -641,5 +646,6 @@ module.exports = {
   stopUpsellerSyncScheduler,
   restartUpsellerSyncScheduler,
   runSync,
+  runSyncInProcess,
   getOrCreateSession,
 };
