@@ -348,7 +348,7 @@ export default function OrdersCustomers() {
           ))}
         </VStack>
       ) : (
-        <Box overflowX="auto" borderWidth="1px" borderRadius="md">
+        <Box overflowX="auto" overflowY="auto" maxH="max(320px, calc(100vh - 300px))" borderWidth="1px" borderRadius="md">
           <Table size="sm" variant="simple">
             <Thead bg={headerBg}>
               <Tr>

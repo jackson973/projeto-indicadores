@@ -74,26 +74,12 @@ body {
 }
 
 /* ─── Tabelas: cabeçalho fixo, dados rolam ───────────────────────────────────
-   Regra global do sistema: toda tabela rola dentro do próprio contêiner e o
-   thead permanece visível. `:where()` zera a especificidade, então componentes
-   que definem maxH/overflow próprios continuam valendo.
-   `:only-child` restringe a divs que são apenas o invólucro da tabela — painéis
-   com cabeçalho/rodapé junto da tabela não podem virar caixa de rolagem (o
-   rodapé ficava preso e sumia da tela). O max() garante altura mínima útil em
-   telas baixas ou com zoom. */
-:where(div:has(> table.chakra-table:only-child)) {
-  max-height: max(320px, calc(100vh - 180px));
-  overflow-y: auto;
-}
-
-/* O TableContainer do Chakra define overflow-y: hidden na própria classe, que
-   vence a regra acima (especificidade zero) — a tabela ficava cortada sem
-   nenhuma barra de rolagem. Aqui a especificidade é maior que a da classe
-   emotion, garantindo a rolagem vertical interna também nesses contêineres. */
-.chakra-table__container:has(> table.chakra-table:only-child) {
-  overflow-y: auto;
-}
-
+   O thead é sticky em todo o sistema. Ele só tem efeito quando o contêiner da
+   tabela rola verticalmente — para ativar numa tela, dê ao Box que embrulha a
+   tabela um maxH + overflowY="auto" (ver aba Pedidos → Clientes). Impor altura
+   via CSS global quebrou layouts (TableContainer tem overflow-y: hidden
+   próprio, painéis com rodapé viravam caixa de rolagem), então a rolagem
+   interna é opt-in por tela. */
 table.chakra-table thead th {
   position: sticky;
   top: 0;
