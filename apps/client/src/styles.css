@@ -76,9 +76,13 @@ body {
 /* ─── Tabelas: cabeçalho fixo, dados rolam ───────────────────────────────────
    Regra global do sistema: toda tabela rola dentro do próprio contêiner e o
    thead permanece visível. `:where()` zera a especificidade, então componentes
-   que definem maxH/overflow próprios continuam valendo. */
-:where(div:has(> table.chakra-table)) {
-  max-height: calc(100vh - 180px);
+   que definem maxH/overflow próprios continuam valendo.
+   `:only-child` restringe a divs que são apenas o invólucro da tabela — painéis
+   com cabeçalho/rodapé junto da tabela não podem virar caixa de rolagem (o
+   rodapé ficava preso e sumia da tela). O max() garante altura mínima útil em
+   telas baixas ou com zoom. */
+:where(div:has(> table.chakra-table:only-child)) {
+  max-height: max(320px, calc(100vh - 180px));
   overflow-y: auto;
 }
 
