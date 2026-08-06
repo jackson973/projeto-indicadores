@@ -86,6 +86,14 @@ body {
   overflow-y: auto;
 }
 
+/* O TableContainer do Chakra define overflow-y: hidden na própria classe, que
+   vence a regra acima (especificidade zero) — a tabela ficava cortada sem
+   nenhuma barra de rolagem. Aqui a especificidade é maior que a da classe
+   emotion, garantindo a rolagem vertical interna também nesses contêineres. */
+.chakra-table__container:has(> table.chakra-table:only-child) {
+  overflow-y: auto;
+}
+
 table.chakra-table thead th {
   position: sticky;
   top: 0;
