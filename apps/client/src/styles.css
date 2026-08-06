@@ -86,3 +86,13 @@ table.chakra-table thead th {
   z-index: 2;
   background-color: var(--chakra-colors-chakra-subtle-bg);
 }
+
+/* ─── Recharts: tooltip legível no modo escuro ───────────────────────────────
+   O tooltip padrão do Recharts força fundo branco via estilo inline, mas o
+   texto do label herda a cor do tema — no dark mode ficava claro sobre branco.
+   !important é necessário para vencer o estilo inline; escopo restrito ao
+   modo escuro e à classe do tooltip. */
+.chakra-ui-dark .recharts-default-tooltip {
+  background-color: var(--chakra-colors-gray-700) !important;
+  border-color: var(--chakra-colors-gray-600) !important;
+}
