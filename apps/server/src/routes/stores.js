@@ -234,6 +234,24 @@ router.post('/:id/oauth/exchange', async (req, res) => {
       return res.status(400).json({ message: msg });
     }
 
+    // Mesma conta ML já conectada em outra loja? Autorizar de novo faria o ML
+    // revogar os tokens da loja existente (uma autorização por app+usuário) —
+    // as duas ficariam quebradas sem o usuário entender o motivo.
+    if (tokenData.user_id) {
+      const all = await repo.listStores();
+      const conflict = all.find(s =>
+        s.id !== store.id &&
+        s.platform === 'mercadolivre' &&
+        String(s.platform_user_id || '') === String(tokenData.user_id)
+      );
+      if (conflict) {
+        return res.status(400).json({
+          message: `Este código pertence à mesma conta do Mercado Livre já conectada na loja "${conflict.name}". ` +
+            `Autorizar aqui desconectaria a outra loja. Saia da conta ML no navegador, entre na conta correta e gere um novo código.`,
+        });
+      }
+    }
+
     // Calculate expiry (ML access token lasts 6h)
     const expiresAt = new Date(Date.now() + (tokenData.expires_in || 21600) * 1000);
 
