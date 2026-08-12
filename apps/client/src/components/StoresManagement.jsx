@@ -446,7 +446,7 @@ export default function StoresManagement() {
     try {
       const result = await exchangeStoreOAuthCode(oauthStore.id, oauthCode.trim());
       setStores((s) => s.map((st) => (st.id === result.store.id ? result.store : st)));
-      toast({  title: result.message, status: "success", duration: 6000 });
+      toast({  title: result.message, status: result.warning ? "warning" : "success", duration: result.warning ? 12000 : 6000 });
       oauthModal.onClose();
     } catch (err) {
       toast({  title: err.message, status: "error", duration: 6000 });

@@ -266,6 +266,18 @@ router.post('/:id/oauth/exchange', async (req, res) => {
       await repo.updateStore(store.id, { platform_user_id: String(tokenData.user_id) });
     }
 
+    // Sem refresh_token a conexão expira em 6h — quase sempre é o scope
+    // offline_access desabilitado no aplicativo do ML DevCenter.
+    if (!tokenData.refresh_token) {
+      return res.json({
+        success: true,
+        warning: true,
+        message: 'Autorizado, mas o Mercado Livre NÃO devolveu refresh token — a conexão vai expirar em ~6 horas. ' +
+          'Habilite o scope "offline_access" no aplicativo (DevCenter do ML) e autorize novamente.',
+        store: updated,
+      });
+    }
+
     return res.json({
       success: true,
       message: 'Autorização concluída! Clique em "Testar" para verificar a conexão.',

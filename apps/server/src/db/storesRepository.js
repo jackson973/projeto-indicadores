@@ -117,9 +117,13 @@ async function updateStoreSync(id, { status, platform_seller_name, platform_user
 }
 
 async function updateStoreTokens(id, { access_token, refresh_token, token_expires_at }) {
+  // COALESCE: nunca apagar um refresh_token existente por falta de um novo —
+  // sem ele a conexão morre em 6h ("no refresh_token — user must re-authorize").
   const result = await db.query(
     `UPDATE stores
-     SET access_token_enc = $1, refresh_token_enc = $2, token_expires_at = $3, status = 'connected'
+     SET access_token_enc = $1,
+         refresh_token_enc = COALESCE($2, refresh_token_enc),
+         token_expires_at = $3, status = 'connected'
      WHERE id = $4
      RETURNING *`,
     [
