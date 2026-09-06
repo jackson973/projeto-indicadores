@@ -1880,3 +1880,19 @@ export const updateApiClient = async (id, data) => handleResponse(await authFetc
 export const rotateApiClientKey = async (id) => handleResponse(await authFetch(`/api/api-clients/${id}/rotate`, { method: 'POST' }));
 export const deleteApiClient = async (id) => handleResponse(await authFetch(`/api/api-clients/${id}`, { method: 'DELETE' }));
 export const fetchApiClientLogs = async (id, limit = 100) => handleResponse(await authFetch(`/api/api-clients/${id}/logs?limit=${limit}`));
+export const downloadApiDocsPdf = async (baseUrl) => {
+  const response = await authFetch(`/api/api-clients/docs.pdf?base_url=${encodeURIComponent(baseUrl || '')}`);
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.message || 'Erro ao gerar o PDF.');
+  }
+  const blob = await response.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = 'Documentacao_API_externa.pdf';
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+};

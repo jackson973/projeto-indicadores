@@ -15,6 +15,7 @@ consumam dados do sistema por HTTP, com credencial própria e escopo por rota.
 | Rotas públicas | `apps/server/src/routes/publicApi.js` | Router montado em `/api/v1` |
 | Rotas de administração | `apps/server/src/routes/apiClients.js` | `/api/api-clients` (exige módulo `configuracoes`) |
 | Tela | `apps/client/src/components/ApiSettings.jsx` | Credenciais + Documentação (menu Configurações → API externa) |
+| PDF da documentação | `apps/server/src/services/apiDocsPdf.js` | `GET /api/api-clients/docs.pdf?base_url=` (pdfkit, gerado do registro de rotas; botão "Baixar PDF" na aba Documentação) |
 | Testes | `apps/server/test/apiModule.test.js` | Chaves, escopos, rate limit, middleware |
 
 `routes/anuncios.js` foi refatorado: a lógica do `GET /api/anuncios` virou `buildAnunciosReport(store_id)`
@@ -52,7 +53,7 @@ consumam dados do sistema por HTTP, com credencial própria e escopo por rota.
 
 ## Como adicionar uma rota nova
 
-1. Adicionar o endpoint (e, se for recurso novo, o escopo) em `routeRegistry.js` — a tela e a documentação atualizam sozinhas.
+1. Adicionar o endpoint (e, se for recurso novo, o escopo) em `routeRegistry.js` — a tela, a documentação e o PDF atualizam sozinhos.
 2. Implementar o handler em `publicApi.js` com `requireScope('<escopo>')` e `wrap(...)`.
 3. Se precisar de SQL, colocar em `apiDataRepository.js`.
 4. Rotas específicas devem vir antes das rotas com parâmetro (`/orders/internal` antes de `/orders/:orderId`).

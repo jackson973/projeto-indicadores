@@ -8,7 +8,7 @@ import {
 import useAppToast from "../hooks/useAppToast";
 import {
   fetchApiRoutes, fetchApiClients, createApiClient, updateApiClient,
-  rotateApiClientKey, deleteApiClient, fetchApiClientLogs,
+  rotateApiClientKey, deleteApiClient, fetchApiClientLogs, downloadApiDocsPdf,
 } from "../api";
 
 const EMPTY_DRAFT = { name: "", description: "", scopes: [], rate_limit_per_min: 120, expires_at: "", active: true };
@@ -59,6 +59,7 @@ export default function ApiSettings() {
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const logsModal = useDisclosure();
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const baseUrl = useMemo(() => `${window.location.origin}${registry.base || "/api/v1"}`, [registry.base]);
   const scopeLabel = useCallback((k) => (k === "*" ? "Todas as rotas" : registry.scopes.find((s) => s.key === k)?.label || k), [registry.scopes]);
@@ -169,6 +170,13 @@ export default function ApiSettings() {
     finally { setLogsLoading(false); }
   };
 
+  const downloadPdf = async () => {
+    setPdfLoading(true);
+    try { await downloadApiDocsPdf(baseUrl); }
+    catch (e) { toast({ status: "error", title: "Erro ao gerar PDF", description: e.message }); }
+    finally { setPdfLoading(false); }
+  };
+
   const copy = async (text, label = "Copiado") => {
     const ok = await copyText(text);
     toast({ status: ok ? "success" : "error", title: ok ? label : "Não foi possível copiar" });
@@ -270,6 +278,12 @@ export default function ApiSettings() {
 
           {/* ── Documentação ────────────────────────────────────────────── */}
           <TabPanel px={0}>
+            <Flex mb={3} align="center">
+              <Text fontWeight="semibold">Referência das rotas</Text>
+              <Button size="sm" colorScheme="blue" variant="outline" ml="auto" onClick={downloadPdf} isLoading={pdfLoading} loadingText="Gerando…">
+                Baixar PDF
+              </Button>
+            </Flex>
             <Docs registry={registry} baseUrl={baseUrl} curlFor={curlFor} copy={copy} subtle={subtle} border={border} cardBg={cardBg} codeBg={codeBg} />
           </TabPanel>
         </TabPanels>

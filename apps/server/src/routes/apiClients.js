@@ -36,6 +36,23 @@ function validateScopes(scopes) {
 // Rotas disponíveis (para a tela montar os checkboxes e a documentação)
 router.get('/routes', (_req, res) => res.json({ base: API_BASE, scopes: SCOPES }));
 
+// PDF da documentação (gerado do registro de rotas)
+router.get('/docs.pdf', (req, res) => {
+  try {
+    const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').toString().split(',')[0];
+    const host = req.headers['x-forwarded-host'] || req.headers.host || '';
+    const fallback = host ? `${proto}://${host}${API_BASE}` : API_BASE;
+    const baseUrl = String(req.query.base_url || fallback).slice(0, 300);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'attachment; filename="Documentacao_API_externa.pdf"');
+    const { createApiDocsPdf } = require('../services/apiDocsPdf');
+    createApiDocsPdf({ baseUrl }).pipe(res);
+  } catch (err) {
+    console.error('[API Clients] docs pdf error:', err);
+    res.status(500).json({ message: 'Erro ao gerar o PDF da documentação.' });
+  }
+});
+
 router.get('/', async (_req, res) => {
   try {
     const [clients, usage] = await Promise.all([repo.listClients(), repo.usageSummary({ days: 7 })]);
