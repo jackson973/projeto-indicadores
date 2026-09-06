@@ -24,6 +24,8 @@ const costRouter = require("./routes/cost");
 const accessRouter = require("./routes/access");
 const purchasesRouter = require("./routes/purchases");
 const mlProfitRouter = require("./routes/mlProfit");
+const apiClientsRouter = require("./routes/apiClients");
+const publicApiRouter = require("./routes/publicApi");
 const path = require("path");
 const { authenticate, requireModule } = require("./middleware/auth");
 
@@ -127,6 +129,9 @@ async function start() {
   app.use("/api/access", accessRouter);
   app.use("/api/purchases", purchasesRouter);
   app.use("/api/ml-profit", mlProfitRouter);
+  // Módulo de API externa: credenciais (admin) + rotas públicas por chave (/api/v1)
+  app.use("/api/api-clients", apiClientsRouter);
+  app.use("/api/v1", publicApiRouter);
   app.use("/api", authenticate, apiRouter);
 
   // Serve uploaded files (logos, etc)

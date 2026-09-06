@@ -1870,3 +1870,13 @@ export const downloadStockLowStockPdf = async ({ full = false } = {}) => {
     URL.revokeObjectURL(blobUrl);
   }, 2000);
 };
+
+// ── Módulo de API externa (Configurações → API) ─────────────────────────────
+const jsonOpts = (method, body) => ({ method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+export const fetchApiRoutes = async () => handleResponse(await authFetch('/api/api-clients/routes'));
+export const fetchApiClients = async () => handleResponse(await authFetch('/api/api-clients'));
+export const createApiClient = async (data) => handleResponse(await authFetch('/api/api-clients', jsonOpts('POST', data)));
+export const updateApiClient = async (id, data) => handleResponse(await authFetch(`/api/api-clients/${id}`, jsonOpts('PUT', data)));
+export const rotateApiClientKey = async (id) => handleResponse(await authFetch(`/api/api-clients/${id}/rotate`, { method: 'POST' }));
+export const deleteApiClient = async (id) => handleResponse(await authFetch(`/api/api-clients/${id}`, { method: 'DELETE' }));
+export const fetchApiClientLogs = async (id, limit = 100) => handleResponse(await authFetch(`/api/api-clients/${id}/logs?limit=${limit}`));

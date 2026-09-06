@@ -10,15 +10,25 @@ router.use(authenticate, requireAdmin);
 
 // ── GET /api/anuncios?store_id=X ──────────────────────────────────────────────
 
-router.get('/', async (req, res) => {
-  const { store_id } = req.query;
-  if (!store_id) return res.status(400).json({ message: 'store_id é obrigatório.' });
+function httpError(status, message) {
+  const err = new Error(message);
+  err.status = status;
+  return err;
+}
 
-  try {
+/**
+ * Monta o relatório de anúncios de uma conta ML (mesmos dados da tela Anúncios).
+ * Reutilizado pela API externa (/api/v1/marketplaces/ml/anuncios).
+ * Erros de validação carregam `status` (400/404).
+ */
+async function buildAnunciosReport(store_id) {
+  if (!store_id) throw httpError(400, 'store_id é obrigatório.');
+
+  {
     const store = await storesRepo.getStoreCredentials(store_id);
-    if (!store) return res.status(404).json({ message: 'Loja não encontrada.' });
-    if (!store.access_token) return res.status(400).json({ message: 'Loja sem token de acesso.' });
-    if (!store.platform_user_id) return res.status(400).json({ message: 'ID do vendedor não encontrado.' });
+    if (!store) throw httpError(404, 'Loja não encontrada.');
+    if (!store.access_token) throw httpError(400, 'Loja sem token de acesso.');
+    if (!store.platform_user_id) throw httpError(400, 'ID do vendedor não encontrado.');
 
     const userId  = store.platform_user_id;
     let   token   = await getValidMlToken(store);  // refresh if expired/close to expiry
@@ -39,7 +49,7 @@ router.get('/', async (req, res) => {
       }
     }
     if (allIds.length === 0) {
-      return res.json({ store_id: storeId, store_name: store.name, total: 0, items: [] });
+      return { store_id: storeId, store_name: store.name, total: 0, items: [] };
     }
 
     // ── 2. Parallel fetch all data ───────────────────────────────────────────
@@ -188,8 +198,15 @@ router.get('/', async (req, res) => {
       console.error('[Anuncios] Snapshot save error:', err.message)
     );
 
-    return res.json({ store_id: storeId, store_name: store.name, total: items.length, items });
+    return { store_id: storeId, store_name: store.name, total: items.length, items };
+  }
+}
+
+router.get('/', async (req, res) => {
+  try {
+    return res.json(await buildAnunciosReport(req.query.store_id));
   } catch (error) {
+    if (error.status) return res.status(error.status).json({ message: error.message });
     console.error('[Anuncios] Error:', error);
     return res.status(500).json({ message: 'Erro ao buscar anúncios.' });
   }
@@ -989,3 +1006,4 @@ function mapListingType(typeId) {
 }
 
 module.exports = router;
+module.exports.buildAnunciosReport = buildAnunciosReport;

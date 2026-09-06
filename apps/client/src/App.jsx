@@ -92,6 +92,7 @@ import ChannelsFees from "./components/ChannelsFees";
 import Valuation from "./components/Valuation";
 import Simulator from "./components/Simulator";
 import AccessProfiles from "./components/AccessProfiles";
+import ApiSettings from "./components/ApiSettings";
 import ShopeeValidator from "./components/ShopeeValidator";
 import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import RevenueDetailDrawer from "./components/RevenueDetailDrawer";
@@ -622,6 +623,10 @@ const App = () => {
           view: "access-profiles"
         },
         {
+          label: "API externa",
+          view: "api-settings"
+        },
+        {
           label: "Conexão Sisplan",
           view: "sisplan-settings"
         },
@@ -1116,6 +1121,10 @@ const App = () => {
 
         {activeView === "access-profiles" && isAdmin && (
           <AccessProfiles />
+        )}
+
+        {activeView === "api-settings" && isAdmin && (
+          <ApiSettings />
         )}
 
         {activeView === "cost-opening" && canView("custo-preco") && (
